@@ -21,9 +21,21 @@ $ProgressPreference    = 'SilentlyContinue'
 function Log($m, $c = 'White') { Write-Host $m -ForegroundColor $c }
 
 # --- Auth: the deploymentScripts container runs as the assigned user identity ----------
-# Az cmdlets pick up that identity automatically; fetch data-plane tokens from it.
+# The script service calls Connect-AzAccount -Identity before this runs, so Az cmdlets pick
+# up the Fabric-plane identity automatically. Az.Accounts 5.x (Az 14+) returns the token as a
+# SecureString; earlier versions return a plain string. Normalize both so the pinned
+# azPowerShellVersion can move without breaking auth.
+function Get-PlainToken($resourceUrl) {
+  $t = (Get-AzAccessToken -ResourceUrl $resourceUrl -AsSecureString -ErrorAction SilentlyContinue).Token
+  if (-not $t) { $t = (Get-AzAccessToken -ResourceUrl $resourceUrl).Token }
+  if ($t -is [System.Security.SecureString]) {
+    return [System.Net.NetworkCredential]::new('', $t).Password
+  }
+  return $t
+}
+
 $fabricBase = 'https://api.fabric.microsoft.com/v1'
-$fabricToken = (Get-AzAccessToken -ResourceUrl 'https://api.fabric.microsoft.com').Token
+$fabricToken = Get-PlainToken 'https://api.fabric.microsoft.com'
 $H = @{ Authorization = "Bearer $fabricToken"; 'Content-Type' = 'application/json' }
 
 function FGet($path) { Invoke-RestMethod -Uri "$fabricBase/$path" -Headers $H }
@@ -50,15 +62,24 @@ function FPost($path, $body) {
 }
 
 # --- Workspace (reuse by name, else create) + capacity assignment ----------------------
+# Per the Fabric Create Workspace REST API, capacityId can be supplied directly in the
+# create body (https://learn.microsoft.com/rest/api/fabric/core/workspaces/create-workspace);
+# we also keep an explicit assignToCapacity call to cover the reuse-existing-workspace path.
 $wsName = $env:FABRIC_WORKSPACE
 Log "workspace: $wsName" Cyan
-$ws = (FGet 'workspaces').value | Where-Object { $_.displayName -eq $wsName } | Select-Object -First 1
-if (-not $ws) { $ws = FPost 'workspaces' @{ displayName = $wsName } }
-$wsId = $ws.id
+# Accept a full capacity resource id or a bare GUID (the API wants the GUID).
+$capGuid = ''
 if ($env:FABRIC_CAPACITY_ID) {
-  # Accept a full capacity resource id or a bare GUID.
-  $capId = $env:FABRIC_CAPACITY_ID
-  if ($capId -match '/capacities/') { $capGuid = ($capId -split '/')[-1] } else { $capGuid = $capId }
+  $capGuid = if ($env:FABRIC_CAPACITY_ID -match '/capacities/') { ($env:FABRIC_CAPACITY_ID -split '/')[-1] } else { $env:FABRIC_CAPACITY_ID }
+}
+$ws = (FGet 'workspaces').value | Where-Object { $_.displayName -eq $wsName } | Select-Object -First 1
+if (-not $ws) {
+  $createBody = @{ displayName = $wsName }
+  if ($capGuid) { $createBody.capacityId = $capGuid }
+  $ws = FPost 'workspaces' $createBody
+}
+$wsId = $ws.id
+if ($capGuid) {
   try { FPost "workspaces/$wsId/assignToCapacity" @{ capacityId = $capGuid } | Out-Null; Log "  capacity assigned" Green }
   catch { Log "  capacity assign warning: $($_.Exception.Message)" Yellow }
 }
@@ -111,7 +132,7 @@ if ($env:CONNECTION_ID) {
 # --- Apply the hazard-geometry / geo_point_in_polygon KQL ------------------------------
 $kqlMsg = 'not-provided'
 if ($env:HAZARD_KQL) {
-  $kustoToken = (Get-AzAccessToken -ResourceUrl $kustoUri).Token
+  $kustoToken = Get-PlainToken $kustoUri
   $mgmt = "$kustoUri/v1/rest/mgmt"
   # PS 5.1/7 ConvertTo-Json emits raw non-ASCII which Kusto's strict JSON reader rejects;
   # fold any stray non-ASCII so a smart quote can't corrupt the request body.
