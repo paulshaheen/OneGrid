@@ -100,7 +100,17 @@
                 {
                   "label": "OneGrid Fabric plane (OneLake + hazard join)",
                   "value": "fabricPlane",
-                  "description": "Prepares the seam for OneGrid's Microsoft Fabric plane: a user-assigned identity and a Storage Blob Data Reader grant on the sample storage, plus deployment outputs consumed by the OneGrid deploy (deploy-onegrid-on-pcp.ps1). The Fabric workspace, OneLake shortcut to model-outputs, and the geo_point_in_polygon hazard join are provisioned by that script (Fabric is not ARM-deployable). Requires sample storage and an existing Fabric capacity."
+                  "description": "Provisions OneGrid's Microsoft Fabric operational plane in-template: a Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join + composite-risk tables, and (when a connection id is supplied) a OneLake shortcut to the model-outputs container. Runs OneGrid deploy.ps1 headless from the deployment as a user-assigned identity. Requires sample storage and an existing Fabric capacity."
+                },
+                {
+                  "label": "OneGrid web app (AI Foundry + chat/report)",
+                  "value": "oneGridApp",
+                  "description": "Stands up the OneGrid web application into this resource group: the AI Foundry account (reused from the AI agent when selected) and the chat/report Container App (built from source via ACR). Requires the OneGrid Fabric plane. The Fabric-plane identity is granted Owner on THIS resource group so the provisioner can create the resources and assign the app's data-plane roles."
+                },
+                {
+                  "label": "OneGrid historical data seed (large)",
+                  "value": "oneGridData",
+                  "description": "Seeds the full OneGrid historical demo dataset into the lakehouse/eventhouse, cloud-seeded from the public release bundle (hundreds of MB, adds deployment time). Off by default. Requires the OneGrid Fabric plane."
                 }
               ]
             }
@@ -325,7 +335,7 @@
             "visible": "[contains(steps('components').selected, 'fabricPlane')]",
             "options": {
               "icon": "Info",
-              "text": "This deployment adds only the ARM seam for OneGrid: a user-assigned identity plus a Storage Blob Data Reader grant on the sample storage, and outputs (fabricPlaneConfig) for the OneGrid deploy. After the template completes, run deploy-onegrid-on-pcp.ps1 to create the Fabric workspace, the OneLake shortcut to model-outputs, and the geo_point_in_polygon hazard join. A Fabric workspace cannot be created without a capacity, so supply an existing Fabric capacity (F-SKU or Trial) below."
+              "text": "The OneGrid Fabric plane is provisioned in-template: during deployment, OneGrid deploy.ps1 runs headless as a user-assigned identity to create the Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join, and (with a connection id) the OneLake shortcut to model-outputs. Prerequisites: the Fabric tenant setting 'Service principals can create workspaces, connections, and deployment pipelines' must be ON, and the deployment identity must be an admin on the capacity below. A Fabric workspace cannot be created without a capacity, so supply an existing Fabric capacity (F-SKU or Trial). If 'OneGrid web app' is also selected, the AI Foundry account and chat/report Container App are created in this resource group too."
             }
           },
           {
@@ -399,7 +409,9 @@
       "deployFabricPlane": "[contains(steps('components').selected, 'fabricPlane')]",
       "fabricCapacityId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricCapacityId, '')]",
       "fabricWorkspaceName": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricWorkspaceName, 'OneGrid')]",
-      "fabricConnectionId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricConnectionId, '')]"
+      "fabricConnectionId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricConnectionId, '')]",
+      "deployOneGridApp": "[contains(steps('components').selected, 'oneGridApp')]",
+      "deployOneGridData": "[contains(steps('components').selected, 'oneGridData')]"
     }
   }
 }

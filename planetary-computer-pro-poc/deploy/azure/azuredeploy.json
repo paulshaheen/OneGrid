@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "14749423981595165044"
+      "templateHash": "11618356249165978067"
     }
   },
   "parameters": {
@@ -202,11 +202,38 @@
       "metadata": {
         "description": "GUID of a Fabric cloud connection to the sample storage account. Needed only for the OneLake shortcut to the model-outputs container; leave blank to provision the Fabric plane (workspace, lakehouse, eventhouse, hazard KQL) and add the shortcut later."
       }
+    },
+    "deployOneGridApp": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Also stand up the OneGrid web application: the AI Foundry account (reused from the AI agent above when present) and the chat/report Container App, deployed into THIS resource group. Requires the OneGrid Fabric plane. The in-template provisioner runs OneGrid deploy.ps1 for the foundry/dataagent/chatagent phases; because this creates resources and role assignments, the Fabric-plane identity is granted Owner on this resource group."
+      }
+    },
+    "deployOneGridData": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Seed the full OneGrid historical demo dataset into the lakehouse/eventhouse (cloud-seeded from the public release bundle, ~hundreds of MB). Off by default to keep the deployment fast; enable for a fully populated demo."
+      }
+    },
+    "oneGridRepoUrl": {
+      "type": "string",
+      "defaultValue": "https://github.com/paulshaheen/OGE-OneGrid.git",
+      "metadata": {
+        "description": "Git repository the in-template provisioner clones OneGrid deploy.ps1 + accelerator content from."
+      }
+    },
+    "oneGridRef": {
+      "type": "string",
+      "defaultValue": "main",
+      "metadata": {
+        "description": "Git ref (branch/tag/commit) of the OneGrid repository to deploy."
+      }
     }
   },
   "variables": {
-    "$fxv#0": "// =====================================================================================\r\n// OneGrid × Planetary Computer Pro — hazard-geometry join plane (Eventhouse / KQL)\r\n// -------------------------------------------------------------------------------------\r\n// Additive to the OneGrid accelerator. This is the analytical seam between the two\r\n// products:\r\n//   * Planetary Computer Pro (PCP) is authoritative for STAC/tiling/imagery in its\r\n//     GeoCatalog. Aurora writes a THIN hazard geometry (storm_id, valid_time,\r\n//     wind_speed, polygon) to PCP's `model-outputs` blob container.\r\n//   * A OneLake shortcut (created by deploy.ps1 Phase-FabricPlane) points at that\r\n//     container so the hazard geometry is readable in Fabric WITHOUT copying imagery.\r\n//   * The join below runs entirely in Fabric: geo_point_in_polygon(asset_lon,\r\n//     asset_lat, hazard_polygon) crossed with each asset's condition, producing a\r\n//     composite risk = \"asset sits inside an active hazard polygon\" × \"asset condition\".\r\n//\r\n// GeoCatalog stays the map/imagery source; OneLake holds only this analytical copy.\r\n// Apply with the same `.execute database script` path used for schema.kql.\r\n// =====================================================================================\r\n\r\n// -------------------------------------------------------------------------------------\r\n// 1) Hazard geometry landing table — the thin polygon set Aurora publishes.\r\n//    `polygon` is a GeoJSON geometry object (Polygon or MultiPolygon) stored as dynamic.\r\n//    Populated either by (a) ingesting the shortcut'd model-outputs blob, or\r\n//    (b) the Eventstream dual-write alternative (same shape).\r\n// -------------------------------------------------------------------------------------\r\n.create-merge table HazardGeometry (\r\n    storm_id:string,\r\n    valid_time:datetime,\r\n    wind_speed:real,\r\n    polygon:dynamic,\r\n    source:string,\r\n    IngestedAt:datetime\r\n)\r\n\r\n.create-or-alter table HazardGeometry ingestion json mapping 'HazardGeometryMapping'\r\n```\r\n[\r\n  {\"column\":\"storm_id\",\"Properties\":{\"Path\":\"$.storm_id\"}},\r\n  {\"column\":\"valid_time\",\"Properties\":{\"Path\":\"$.valid_time\"}},\r\n  {\"column\":\"wind_speed\",\"Properties\":{\"Path\":\"$.wind_speed\"}},\r\n  {\"column\":\"polygon\",\"Properties\":{\"Path\":\"$.polygon\"}},\r\n  {\"column\":\"source\",\"Properties\":{\"Path\":\"$.source\"}},\r\n  {\"column\":\"IngestedAt\",\"Properties\":{\"Path\":\"$.valid_time\"}}\r\n]\r\n```\r\n\r\n// -------------------------------------------------------------------------------------\r\n// 2) Asset registry — the assets being risk-scored (asset_id, lat/lon, condition).\r\n//    Fed from the OneGrid semantic model / lakehouse asset registry (the authoritative\r\n//    Plant→Unit→Asset condition data). Created here so the join functions compile even\r\n//    before it is populated. condition_score is a normalized 0..1 severity where 1 =\r\n//    worst condition (most degraded).\r\n// -------------------------------------------------------------------------------------\r\n.create-merge table AssetRegistry (\r\n    asset_id:string,\r\n    asset_name:string,\r\n    plant:string,\r\n    unit:string,\r\n    asset_lat:real,\r\n    asset_lon:real,\r\n    condition_score:real,\r\n    updated_at:datetime\r\n)\r\n\r\n// -------------------------------------------------------------------------------------\r\n// 3) HazardCurrent() — the latest polygon per storm within a lookback window, so the\r\n//    join scores against the current forecast state rather than the whole history.\r\n// -------------------------------------------------------------------------------------\r\n.create-or-alter function with (docstring = \"Latest hazard polygon per storm within lookbackHours (default 24h).\", folder = \"OneGrid/Hazard\")\r\n    HazardCurrent(lookbackHours:real = 24) {\r\n    HazardGeometry\r\n    | where valid_time > ago(lookbackHours * 1h)\r\n    | summarize arg_max(valid_time, wind_speed, polygon, source) by storm_id\r\n}\r\n\r\n// -------------------------------------------------------------------------------------\r\n// 4) AssetHazardRisk() — THE JOIN. For every asset and every current hazard polygon,\r\n//    test whether the asset's point falls inside the polygon using geo_point_in_polygon.\r\n//    Returns one row per (asset, storm) that is inside a hazard polygon.\r\n// -------------------------------------------------------------------------------------\r\n.create-or-alter function with (docstring = \"Assets whose location falls inside a current hazard polygon (spatial join).\", folder = \"OneGrid/Hazard\")\r\n    AssetHazardRisk(lookbackHours:real = 24) {\r\n    let hazards = HazardCurrent(lookbackHours);\r\n    AssetRegistry\r\n    | where isnotnull(asset_lat) and isnotnull(asset_lon)\r\n    | extend _dummy = 1\r\n    | join kind=inner (hazards | extend _dummy = 1) on _dummy\r\n    | project-away _dummy, _dummy1\r\n    | where geo_point_in_polygon(asset_lon, asset_lat, polygon)\r\n    | project asset_id, asset_name, plant, unit, asset_lat, asset_lon,\r\n              condition_score, storm_id, valid_time, wind_speed\r\n}\r\n\r\n// -------------------------------------------------------------------------------------\r\n// 5) AssetCompositeRisk() — composite exposure = in-hazard × asset condition.\r\n//    composite_risk = normalized hazard intensity (wind_speed) × condition_score, so a\r\n//    degraded asset inside a strong storm ranks highest. Banded for the watchlist.\r\n//    windRef (default 70 m/s ~ Cat-5 reference) normalizes wind_speed to 0..1.\r\n// -------------------------------------------------------------------------------------\r\n.create-or-alter function with (docstring = \"Composite hazard×condition risk per exposed asset, banded LOW/MEDIUM/HIGH/CRITICAL.\", folder = \"OneGrid/Hazard\")\r\n    AssetCompositeRisk(lookbackHours:real = 24, windRef:real = 70) {\r\n    AssetHazardRisk(lookbackHours)\r\n    | extend hazard_intensity = todouble(min_of(wind_speed / windRef, 1.0))\r\n    | extend condition = todouble(coalesce(condition_score, 0.0))\r\n    | extend composite_risk = round(hazard_intensity * condition, 4)\r\n    | extend risk_band = case(\r\n        composite_risk >= 0.60, \"CRITICAL\",\r\n        composite_risk >= 0.35, \"HIGH\",\r\n        composite_risk >= 0.15, \"MEDIUM\",\r\n        \"LOW\")\r\n    | project asset_id, asset_name, plant, unit, storm_id, valid_time,\r\n              wind_speed, condition_score, hazard_intensity, composite_risk, risk_band\r\n    | order by composite_risk desc\r\n}\r\n\r\n// -------------------------------------------------------------------------------------\r\n// 6) Snapshot table + populate function — persist a point-in-time composite-risk table\r\n//    the report/semantic model and chat agent can read directly. Refresh by calling\r\n//    UpdateAssetCompositeRiskSnapshot() on a schedule (or from the pipeline) with:\r\n//        .set-or-append AssetCompositeRiskSnapshot <| AssetCompositeRisk()\r\n// -------------------------------------------------------------------------------------\r\n.create-merge table AssetCompositeRiskSnapshot (\r\n    snapshot_ts:datetime,\r\n    asset_id:string,\r\n    asset_name:string,\r\n    plant:string,\r\n    unit:string,\r\n    storm_id:string,\r\n    valid_time:datetime,\r\n    wind_speed:real,\r\n    condition_score:real,\r\n    hazard_intensity:real,\r\n    composite_risk:real,\r\n    risk_band:string\r\n)\r\n\r\n.create-or-alter function with (docstring = \"Rows to append into AssetCompositeRiskSnapshot for a scheduled refresh.\", folder = \"OneGrid/Hazard\")\r\n    AssetCompositeRiskForSnapshot(lookbackHours:real = 24, windRef:real = 70) {\r\n    AssetCompositeRisk(lookbackHours, windRef)\r\n    | extend snapshot_ts = now()\r\n    | project snapshot_ts, asset_id, asset_name, plant, unit, storm_id, valid_time,\r\n              wind_speed, condition_score, hazard_intensity, composite_risk, risk_band\r\n}\r\n",
-    "$fxv#1": "<#\r\n  OneGrid Fabric plane — runs INSIDE the ARM deployment (Microsoft.Resources/deploymentScripts).\r\n\r\n  Fabric workspaces, lakehouses, eventhouses, OneLake shortcuts and KQL are NOT ARM resource\r\n  types, so they cannot be expressed as Bicep resources. This script is the in-template\r\n  equivalent: it executes during the deployment (as the Fabric-plane user-assigned identity)\r\n  and provisions the plane over the Fabric REST + Kusto management APIs — the same calls the\r\n  standalone OneGrid deploy.ps1 makes, reduced to the additive PCP seam:\r\n\r\n    * Fabric workspace (created on the supplied capacity)\r\n    * Lakehouse (schema-enabled) + Eventhouse + KQL database\r\n    * OneLake shortcut to PCP's model-outputs blob container (when a connection id is supplied)\r\n    * The hazard-geometry table + geo_point_in_polygon join + composite-risk functions (KQL)\r\n\r\n  All inputs arrive as environment variables set by the Bicep deploymentScripts resource.\r\n  Outputs are surfaced back to the ARM deployment via $DeploymentScriptOutputs.\r\n#>\r\n$ErrorActionPreference = 'Stop'\r\n$ProgressPreference    = 'SilentlyContinue'\r\n\r\nfunction Log($m, $c = 'White') { Write-Host $m -ForegroundColor $c }\r\n\r\n# --- Auth: the deploymentScripts container runs as the assigned user identity ----------\r\n# The script service calls Connect-AzAccount -Identity before this runs, so Az cmdlets pick\r\n# up the Fabric-plane identity automatically. Az.Accounts 5.x (Az 14+) returns the token as a\r\n# SecureString; earlier versions return a plain string. Normalize both so the pinned\r\n# azPowerShellVersion can move without breaking auth.\r\nfunction Get-PlainToken($resourceUrl) {\r\n  $t = (Get-AzAccessToken -ResourceUrl $resourceUrl -AsSecureString -ErrorAction SilentlyContinue).Token\r\n  if (-not $t) { $t = (Get-AzAccessToken -ResourceUrl $resourceUrl).Token }\r\n  if ($t -is [System.Security.SecureString]) {\r\n    return [System.Net.NetworkCredential]::new('', $t).Password\r\n  }\r\n  return $t\r\n}\r\n\r\n$fabricBase = 'https://api.fabric.microsoft.com/v1'\r\n$fabricToken = Get-PlainToken 'https://api.fabric.microsoft.com'\r\n$H = @{ Authorization = \"Bearer $fabricToken\"; 'Content-Type' = 'application/json' }\r\n\r\nfunction FGet($path) { Invoke-RestMethod -Uri \"$fabricBase/$path\" -Headers $H }\r\n\r\n# Fabric item creates are often long-running (202 + Operation-Location). Post, then poll the\r\n# operation to completion and return the resulting resource.\r\nfunction FPost($path, $body) {\r\n  $json = ($body | ConvertTo-Json -Depth 25)\r\n  $resp = Invoke-WebRequest -Uri \"$fabricBase/$path\" -Method Post -Headers $H `\r\n            -Body ([Text.Encoding]::UTF8.GetBytes($json)) -UseBasicParsing\r\n  if ($resp.StatusCode -eq 202) {\r\n    $op = $resp.Headers['Operation-Location']; if (-not $op) { $op = $resp.Headers['Location'] }\r\n    for ($i = 0; $i -lt 60 -and $op; $i++) {\r\n      Start-Sleep -Seconds 5\r\n      $st = Invoke-RestMethod -Uri $op -Headers $H\r\n      if ($st.status -in @('Succeeded', 'Completed')) {\r\n        try { return Invoke-RestMethod -Uri \"$op/result\" -Headers $H } catch { return $st }\r\n      }\r\n      if ($st.status -in @('Failed', 'Cancelled', 'Deduped')) { throw \"Fabric op $($st.status): $($st.error.message)\" }\r\n    }\r\n  }\r\n  if ($resp.Content) { return ($resp.Content | ConvertFrom-Json) }\r\n  return $null\r\n}\r\n\r\n# --- Workspace (reuse by name, else create) + capacity assignment ----------------------\r\n# Per the Fabric Create Workspace REST API, capacityId can be supplied directly in the\r\n# create body (https://learn.microsoft.com/rest/api/fabric/core/workspaces/create-workspace);\r\n# we also keep an explicit assignToCapacity call to cover the reuse-existing-workspace path.\r\n$wsName = $env:FABRIC_WORKSPACE\r\nLog \"workspace: $wsName\" Cyan\r\n# Accept a full capacity resource id or a bare GUID (the API wants the GUID).\r\n$capGuid = ''\r\nif ($env:FABRIC_CAPACITY_ID) {\r\n  $capGuid = if ($env:FABRIC_CAPACITY_ID -match '/capacities/') { ($env:FABRIC_CAPACITY_ID -split '/')[-1] } else { $env:FABRIC_CAPACITY_ID }\r\n}\r\n$ws = (FGet 'workspaces').value | Where-Object { $_.displayName -eq $wsName } | Select-Object -First 1\r\nif (-not $ws) {\r\n  $createBody = @{ displayName = $wsName }\r\n  if ($capGuid) { $createBody.capacityId = $capGuid }\r\n  $ws = FPost 'workspaces' $createBody\r\n}\r\n$wsId = $ws.id\r\nif ($capGuid) {\r\n  try { FPost \"workspaces/$wsId/assignToCapacity\" @{ capacityId = $capGuid } | Out-Null; Log \"  capacity assigned\" Green }\r\n  catch { Log \"  capacity assign warning: $($_.Exception.Message)\" Yellow }\r\n}\r\nLog \"  workspaceId=$wsId\" Green\r\n\r\n# --- Lakehouse (schema-enabled) --------------------------------------------------------\r\n$lhName = $env:LAKEHOUSE_NAME\r\n$lh = (FGet \"workspaces/$wsId/lakehouses\").value | Where-Object { $_.displayName -eq $lhName } | Select-Object -First 1\r\nif (-not $lh) { $lh = FPost \"workspaces/$wsId/lakehouses\" @{ displayName = $lhName; creationPayload = @{ enableSchemas = $true } } }\r\n$lhId = $lh.id\r\nLog \"  lakehouseId=$lhId\" Green\r\n\r\n# --- Eventhouse + KQL database ---------------------------------------------------------\r\n$ehName = $env:EVENTHOUSE_NAME\r\n$eh = (FGet \"workspaces/$wsId/eventhouses\").value | Where-Object { $_.displayName -eq $ehName } | Select-Object -First 1\r\nif (-not $eh) { $eh = FPost \"workspaces/$wsId/eventhouses\" @{ displayName = $ehName } }\r\n$ehId = $eh.id\r\n$kdbName = $env:KQLDB_NAME\r\n$kdb = (FGet \"workspaces/$wsId/kqlDatabases\").value | Where-Object { $_.displayName -eq $kdbName } | Select-Object -First 1\r\nif (-not $kdb) {\r\n  $kdb = FPost \"workspaces/$wsId/kqlDatabases\" @{ displayName = $kdbName; creationPayload = @{ databaseType = 'ReadWrite'; parentEventhouseItemId = $ehId } }\r\n}\r\n$ehFull = FGet \"workspaces/$wsId/eventhouses/$ehId\"\r\n$kustoUri = $ehFull.properties.queryServiceUri\r\nLog \"  eventhouseId=$ehId kqlDb=$($kdb.id) kusto=$kustoUri\" Green\r\n\r\n# --- OneLake shortcut to PCP's model-outputs container ---------------------------------\r\n$shortcutMsg = 'skipped (no connection id)'\r\nif ($env:CONNECTION_ID) {\r\n  try {\r\n    $body = @{\r\n      path   = 'Files'\r\n      name   = $env:SHORTCUT_NAME\r\n      target = @{ type = 'AzureBlobStorage'; azureBlobStorage = @{\r\n          location     = $env:BLOB_ENDPOINT\r\n          subpath      = \"/$($env:MODEL_CONTAINER)\"\r\n          connectionId = $env:CONNECTION_ID } }\r\n    }\r\n    FPost \"workspaces/$wsId/items/$lhId/shortcuts\" $body | Out-Null\r\n    $shortcutMsg = \"created: $($env:SHORTCUT_NAME) -> $($env:MODEL_CONTAINER)\"\r\n    Log \"  shortcut $shortcutMsg\" Green\r\n  } catch {\r\n    $shortcutMsg = \"error: $($_.Exception.Message)\"\r\n    Log \"  shortcut $shortcutMsg\" Yellow\r\n  }\r\n} else {\r\n  Log \"  shortcut $shortcutMsg\" Yellow\r\n}\r\n\r\n# --- Apply the hazard-geometry / geo_point_in_polygon KQL ------------------------------\r\n$kqlMsg = 'not-provided'\r\nif ($env:HAZARD_KQL) {\r\n  $kustoToken = Get-PlainToken $kustoUri\r\n  $mgmt = \"$kustoUri/v1/rest/mgmt\"\r\n  # PS 5.1/7 ConvertTo-Json emits raw non-ASCII which Kusto's strict JSON reader rejects;\r\n  # fold any stray non-ASCII so a smart quote can't corrupt the request body.\r\n  $kql = [regex]::Replace($env:HAZARD_KQL, '[^\\x00-\\x7F]', '-')\r\n  $csl = \".execute database script with (ContinueOnErrors=true) <| \" + $kql\r\n  $reqBody = @{ db = $kdbName; csl = $csl } | ConvertTo-Json\r\n  $applied = $false; $lastErr = $null\r\n  for ($i = 1; $i -le 8; $i++) {\r\n    try {\r\n      Invoke-RestMethod -Uri $mgmt -Method Post -Body $reqBody `\r\n        -Headers @{ Authorization = \"Bearer $kustoToken\"; 'Content-Type' = 'application/json' } | Out-Null\r\n      $applied = $true; break\r\n    } catch { $lastErr = $_.Exception.Message; Start-Sleep -Seconds 20 }\r\n  }\r\n  $kqlMsg = if ($applied) { 'applied' } else { \"error: $lastErr\" }\r\n  Log \"  hazard KQL $kqlMsg\" ($(if ($applied) { 'Green' } else { 'Yellow' }))\r\n}\r\n\r\n# --- Surface results back to the ARM deployment ----------------------------------------\r\n$DeploymentScriptOutputs = @{\r\n  workspaceId  = $wsId\r\n  lakehouseId  = $lhId\r\n  eventhouseId = $ehId\r\n  kqlDatabase  = $kdbName\r\n  kustoUri     = $kustoUri\r\n  shortcut     = $shortcutMsg\r\n  hazardKql    = $kqlMsg\r\n}\r\nLog \"Fabric plane provisioning complete.\" Green\r\n",
+    "$fxv#0": "<#\r\n================================================================================\r\n OneGrid full-solution provisioner — runs INSIDE the ARM deployment\r\n (Microsoft.Resources/deploymentScripts, kind = AzurePowerShell).\r\n================================================================================\r\n The Fabric operational plane (workspace/lakehouse/eventhouse/KQL/eventstream/\r\n notebooks/pipeline/semantic model/report), the AI Foundry account, and the\r\n chat/web-app Container App are NOT ARM resource types. Instead of re-porting that\r\n logic, this script stands them up by running OneGrid's own battle-tested\r\n orchestrator (OGE-OneGrid/deploy.ps1) headless, under the deployment's\r\n user-assigned managed identity, wired to the PCP backend this template just built.\r\n\r\n It:\r\n   1. installs the toolchain the orchestrator needs (git + az CLI) if missing;\r\n   2. logs the az CLI in as the deployment identity (az login --identity);\r\n   3. clones the OneGrid repo (shallow, LFS skipped — data is cloud-seeded);\r\n   4. writes config.json from the ARM params + PCP outputs passed as env vars;\r\n   5. runs ./deploy.ps1 -Only <phases mapped from the selected components>;\r\n   6. returns the resulting workspace / app ids as deployment outputs.\r\n\r\n All inputs arrive as environment variables set by the Bicep deploymentScripts\r\n resource. This script is intentionally idempotent: deploy.ps1 reuses existing\r\n items by name, so re-running is safe.\r\n\r\n HONESTY: this path cannot be validated end-to-end without a live Azure + Fabric\r\n tenant. The first real deployment is the validation pass. Documented prereqs\r\n (Fabric tenant \"service principals can create workspaces\" setting, capacity\r\n admin, Managed Identity Operator on the identity) still apply.\r\n================================================================================\r\n#>\r\n$ErrorActionPreference = 'Stop'\r\nfunction Log($m, $c = 'Cyan') { Write-Host \"[$(Get-Date -f HH:mm:ss)] $m\" -ForegroundColor $c }\r\n\r\n# Force UTF-8 so the Python-based az CLI can print its success glyphs without dying.\r\n$env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'\r\ntry { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\r\n\r\n# --- 1. Toolchain: git + az CLI (the AzurePowerShell image has pwsh + Az modules) --\r\nfunction Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }\r\n\r\nif (-not (Have 'git')) {\r\n  Log 'installing git...'\r\n  & bash -c 'export DEBIAN_FRONTEND=noninteractive; (sudo apt-get update -y && sudo apt-get install -y git) 2>/dev/null || (apt-get update -y && apt-get install -y git)'\r\n}\r\nif (-not (Have 'az')) {\r\n  Log 'installing az CLI...'\r\n  & bash -c 'curl -sL https://aka.ms/InstallAzureCLIDeb | (sudo bash 2>/dev/null || bash)'\r\n}\r\nif (-not (Have 'git')) { throw 'git is required but could not be installed in the deployment container.' }\r\nif (-not (Have 'az'))  { throw 'az CLI is required but could not be installed in the deployment container.' }\r\n\r\n# --- 2. Log the az CLI in as the deployment identity ------------------------------\r\n# The script service already ran Connect-AzAccount -Identity for Az PowerShell, but\r\n# deploy.ps1 shells out to the az CLI, which needs its own login.\r\nLog 'az login --identity...'\r\nif ($env:IDENTITY_CLIENT_ID) {\r\n  & az login --identity --username $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors | Out-Null\r\n} else {\r\n  & az login --identity --allow-no-subscriptions --only-show-errors | Out-Null\r\n}\r\nif ($env:SUBSCRIPTION_ID) { & az account set --subscription $env:SUBSCRIPTION_ID --only-show-errors 2>$null | Out-Null }\r\n\r\n# --- 3. Clone the OneGrid orchestrator + accelerator content ----------------------\r\n$repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OGE-OneGrid.git' }\r\n$ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }\r\n$work = Join-Path ([IO.Path]::GetTempPath()) 'onegrid'\r\nif (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\nLog \"cloning $repo ($ref)...\"\r\n$env:GIT_LFS_SKIP_SMUDGE = '1'   # data is cloud-seeded from the release bundle, not LFS\r\n& git clone --depth 1 --branch $ref $repo $work\r\nif (-not (Test-Path (Join-Path $work 'deploy.ps1'))) { throw \"clone did not produce deploy.ps1 at $work\" }\r\n\r\n# --- 4. Compose config.json from ARM params + PCP outputs -------------------------\r\n$rg = $env:TARGET_RESOURCE_GROUP\r\n$reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure OpenAI, reuse it\r\n$cfg = [ordered]@{\r\n  subscriptionId = $env:SUBSCRIPTION_ID\r\n  location       = $env:LOCATION\r\n  fabric = [ordered]@{\r\n    capacityId      = $env:FABRIC_CAPACITY_ID\r\n    workspaceName   = $(if ($env:FABRIC_WORKSPACE) { $env:FABRIC_WORKSPACE } else { 'OneGrid' })\r\n    lakehouseName   = 'lh_poc'\r\n    eventhouseName  = 'pi-realtime-eventhouse'\r\n    kqlDatabaseName = 'pi-realtime-db'\r\n    factWindowDays  = 30\r\n    siteCount       = 8\r\n  }\r\n  data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/onegrid-data.zip' }\r\n  telemetry  = [ordered]@{ enabled = $false }\r\n  reuseExistingFoundry = $reuseFoundry\r\n  pcp = [ordered]@{\r\n    storageAccountName    = $env:PCP_STORAGE_ACCOUNT_NAME\r\n    storageAccountId      = $env:PCP_STORAGE_ACCOUNT_ID\r\n    blobEndpoint          = $env:PCP_BLOB_ENDPOINT\r\n    modelOutputsContainer = $(if ($env:PCP_MODEL_CONTAINER) { $env:PCP_MODEL_CONTAINER } else { 'model-outputs' })\r\n    shortcutName          = 'pcp_model_outputs'\r\n    connectionId          = $env:FABRIC_CONNECTION_ID\r\n    openAiEndpoint        = $env:PCP_OPENAI_ENDPOINT\r\n    openAiAccountId       = $env:PCP_OPENAI_ACCOUNT_ID\r\n    geoCatalogUri         = $env:PCP_GEOCATALOG_URI\r\n  }\r\n  foundry = [ordered]@{\r\n    resourceGroup = $rg\r\n    accountName   = \"$($env:NAME_PREFIX)-foundry\"\r\n    defaultModel  = 'gpt-4o'\r\n    models        = @(\r\n      [ordered]@{ deployment = 'gpt-4o'; model = 'gpt-4o'; version = '2024-11-20'; format = 'OpenAI'; capacity = 100 }\r\n    )\r\n  }\r\n  chatAgent = [ordered]@{\r\n    resourceGroup   = $rg\r\n    appName         = \"$($env:NAME_PREFIX)-onegrid-app\"\r\n    environmentName = \"$($env:NAME_PREFIX)-onegrid-app-env\"\r\n  }\r\n  governance = [ordered]@{ enabled = $false }\r\n}\r\n$cfgPath = Join-Path $work 'config.json'\r\n[IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))\r\nLog \"config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName))\"\r\n\r\n# --- 5. Run the orchestrator for the selected phases ------------------------------\r\n$phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })\r\nLog \"running deploy.ps1 -Only $($phases -join ',')\"\r\nPush-Location $work\r\ntry {\r\n  if ($phases.Count -gt 0) {\r\n    & pwsh -NoProfile -File ./deploy.ps1 -ConfigPath ./config.json -Only $phases\r\n  } else {\r\n    & pwsh -NoProfile -File ./deploy.ps1 -ConfigPath ./config.json\r\n  }\r\n  $deployExit = $LASTEXITCODE\r\n} finally { Pop-Location }\r\nLog \"deploy.ps1 exit=$deployExit\"\r\n\r\n# --- 6. Surface the resulting ids as deployment outputs ---------------------------\r\n$state = @{}\r\n$statePath = Join-Path $work 'last-deploy-state.json'\r\nif (Test-Path $statePath) {\r\n  try { $state = Get-Content $statePath -Raw | ConvertFrom-Json } catch {}\r\n}\r\n$DeploymentScriptOutputs = @{\r\n  phases      = ($phases -join ',')\r\n  deployExit  = $deployExit\r\n  workspaceId = $state.WorkspaceId\r\n  lakehouseId = $state.LakehouseId\r\n  kqlDatabase = $state.KqlDbId\r\n  kustoUri    = $state.KustoUri\r\n  appUrl      = $state.AppUrl\r\n  foundryEndpoint = $state.FoundryEndpoint\r\n}\r\n\r\n# deploy.ps1 records non-fatal phase issues but exits non-zero if any occurred.\r\n# Surface that as a script failure so the deployment reflects it, but only after\r\n# outputs are set so the partial state is still visible.\r\nif ($deployExit -and $deployExit -ne 0) {\r\n  throw \"deploy.ps1 finished with issues (exit $deployExit). See container logs for the per-phase summary.\"\r\n}\r\n",
     "namePrefix": "pcpro",
     "effectiveGeoCatalogName": "[if(empty(parameters('geoCatalogName')), toLower(format('pcpro{0}', uniqueString(resourceGroup().id))), parameters('geoCatalogName'))]",
     "appServicePlanName": "[format('{0}-plan-{1}', variables('namePrefix'), variables('amlSuffix'))]",
@@ -244,7 +271,21 @@
     "auroraJobUsesAcr": "[and(variables('deployAuroraJob'), or(empty(parameters('auroraJobImage')), contains(parameters('auroraJobImage'), '.azurecr.io')))]",
     "auroraJobRegistryServer": "[if(empty(parameters('auroraJobImage')), format('{0}.azurecr.io', variables('auroraAcrName')), if(contains(parameters('auroraJobImage'), '.azurecr.io'), split(parameters('auroraJobImage'), '/')[0], ''))]",
     "deployFabricPlaneEffective": "[and(parameters('deployFabricPlane'), parameters('deploySampleStorage'))]",
-    "fabricPlaneIdentityName": "[format('{0}-fabricplane-identity', variables('namePrefix'))]"
+    "fabricPlaneIdentityName": "[format('{0}-fabricplane-identity', variables('namePrefix'))]",
+    "deployOneGridAppEffective": "[and(variables('deployFabricPlaneEffective'), parameters('deployOneGridApp'))]",
+    "ownerRoleId": "8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+    "ogPhasesBase": [
+      "workspace",
+      "core",
+      "fabricplane",
+      "artifacts",
+      "semantic",
+      "oge",
+      "governance",
+      "permissions"
+    ],
+    "ogPhases": "[concat(variables('ogPhasesBase'), if(parameters('deployOneGridData'), createArray('data'), createArray()), if(parameters('deployOneGridApp'), createArray('foundry', 'dataagent', 'chatagent'), createArray()))]",
+    "ogPhasesCsv": "[join(variables('ogPhases'), ',')]"
   },
   "imports": {
     "microsoftGraphV1": {
@@ -405,11 +446,25 @@
         "sampleStorage"
       ]
     },
+    "fabricPlaneRgOwner": {
+      "condition": "[variables('deployOneGridAppEffective')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(resourceGroup().id, variables('fabricPlaneIdentityName'), variables('ownerRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('ownerRoleId'))]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference('fabricPlaneIdentity').principalId, '')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "fabricPlaneIdentity"
+      ]
+    },
     "fabricPlaneScript": {
       "condition": "[variables('deployFabricPlaneEffective')]",
       "type": "Microsoft.Resources/deploymentScripts",
       "apiVersion": "2023-08-01",
-      "name": "[format('{0}-fabricplane-provision', variables('namePrefix'))]",
+      "name": "[format('{0}-onegrid-provision', variables('namePrefix'))]",
       "location": "[parameters('location')]",
       "kind": "AzurePowerShell",
       "identity": {
@@ -421,9 +476,41 @@
       "properties": {
         "azPowerShellVersion": "11.5",
         "retentionInterval": "P1D",
-        "timeout": "PT45M",
+        "timeout": "PT3H",
         "cleanupPreference": "OnSuccess",
         "environmentVariables": [
+          {
+            "name": "SUBSCRIPTION_ID",
+            "value": "[subscription().subscriptionId]"
+          },
+          {
+            "name": "LOCATION",
+            "value": "[parameters('location')]"
+          },
+          {
+            "name": "TARGET_RESOURCE_GROUP",
+            "value": "[resourceGroup().name]"
+          },
+          {
+            "name": "NAME_PREFIX",
+            "value": "[variables('namePrefix')]"
+          },
+          {
+            "name": "IDENTITY_CLIENT_ID",
+            "value": "[if(variables('deployFabricPlaneEffective'), reference('fabricPlaneIdentity').clientId, '')]"
+          },
+          {
+            "name": "ONEGRID_REPO",
+            "value": "[parameters('oneGridRepoUrl')]"
+          },
+          {
+            "name": "ONEGRID_REF",
+            "value": "[parameters('oneGridRef')]"
+          },
+          {
+            "name": "ONEGRID_PHASES",
+            "value": "[variables('ogPhasesCsv')]"
+          },
           {
             "name": "FABRIC_CAPACITY_ID",
             "value": "[parameters('fabricCapacityId')]"
@@ -433,44 +520,47 @@
             "value": "[parameters('fabricWorkspaceName')]"
           },
           {
-            "name": "LAKEHOUSE_NAME",
-            "value": "OneGridLakehouse"
-          },
-          {
-            "name": "EVENTHOUSE_NAME",
-            "value": "OneGridEventhouse"
-          },
-          {
-            "name": "KQLDB_NAME",
-            "value": "OneGridDB"
-          },
-          {
-            "name": "BLOB_ENDPOINT",
-            "value": "[if(variables('deployFabricPlaneEffective'), reference('sampleStorage').primaryEndpoints.blob, '')]"
-          },
-          {
-            "name": "MODEL_CONTAINER",
-            "value": "[variables('modelOutputsContainerName')]"
-          },
-          {
-            "name": "SHORTCUT_NAME",
-            "value": "pcp_model_outputs"
-          },
-          {
-            "name": "CONNECTION_ID",
+            "name": "FABRIC_CONNECTION_ID",
             "value": "[parameters('fabricConnectionId')]"
           },
           {
-            "name": "HAZARD_KQL",
-            "value": "[variables('$fxv#0')]"
+            "name": "PCP_STORAGE_ACCOUNT_NAME",
+            "value": "[variables('sampleStorageName')]"
+          },
+          {
+            "name": "PCP_STORAGE_ACCOUNT_ID",
+            "value": "[if(variables('deployFabricPlaneEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '')]"
+          },
+          {
+            "name": "PCP_BLOB_ENDPOINT",
+            "value": "[if(variables('deployFabricPlaneEffective'), reference('sampleStorage').primaryEndpoints.blob, '')]"
+          },
+          {
+            "name": "PCP_MODEL_CONTAINER",
+            "value": "[variables('modelOutputsContainerName')]"
+          },
+          {
+            "name": "PCP_OPENAI_ENDPOINT",
+            "value": "[if(parameters('deployAiAgent'), reference('openAi').endpoint, '')]"
+          },
+          {
+            "name": "PCP_OPENAI_ACCOUNT_ID",
+            "value": "[if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '')]"
+          },
+          {
+            "name": "PCP_GEOCATALOG_URI",
+            "value": "[reference('geoCatalog').catalogUri]"
           }
         ],
-        "scriptContent": "[variables('$fxv#1')]"
+        "scriptContent": "[variables('$fxv#0')]"
       },
       "dependsOn": [
         "fabricPlaneBlobReaderRole",
         "fabricPlaneIdentity",
+        "fabricPlaneRgOwner",
+        "geoCatalog",
         "modelOutputsContainer",
+        "openAi",
         "sampleStorage"
       ]
     },
@@ -1163,6 +1253,27 @@
         "description": "The Fabric plane is provisioned in-template. If no fabricConnectionId was supplied, create a Fabric cloud connection to the sample storage account and re-deploy with fabricConnectionId set to add the OneLake shortcut to model-outputs."
       },
       "value": "[if(variables('deployFabricPlaneEffective'), if(empty(parameters('fabricConnectionId')), 'provisioned (set fabricConnectionId to add the OneLake shortcut)', 'provisioned (shortcut included)'), 'not-applicable')]"
+    },
+    "oneGridAppEnabled": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether the OneGrid web app (AI Foundry + chat/report Container App) was provisioned in this resource group."
+      },
+      "value": "[variables('deployOneGridAppEffective')]"
+    },
+    "oneGridPhases": {
+      "type": "string",
+      "metadata": {
+        "description": "OneGrid deploy.ps1 phases the in-template provisioner ran (mapped from the selected components)."
+      },
+      "value": "[if(variables('deployFabricPlaneEffective'), variables('ogPhasesCsv'), 'not-deployed')]"
+    },
+    "oneGridAppUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Public URL of the OneGrid chat/report web app (from the in-template provisioner). Empty until the container app finishes its first build."
+      },
+      "value": "[if(variables('deployOneGridAppEffective'), string(reference('fabricPlaneScript').outputs.appUrl), 'not-deployed')]"
     }
   }
 }

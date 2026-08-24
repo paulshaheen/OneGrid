@@ -112,6 +112,18 @@ param fabricWorkspaceName string = 'OneGrid'
 @description('GUID of a Fabric cloud connection to the sample storage account. Needed only for the OneLake shortcut to the model-outputs container; leave blank to provision the Fabric plane (workspace, lakehouse, eventhouse, hazard KQL) and add the shortcut later.')
 param fabricConnectionId string = ''
 
+@description('Also stand up the OneGrid web application: the AI Foundry account (reused from the AI agent above when present) and the chat/report Container App, deployed into THIS resource group. Requires the OneGrid Fabric plane. The in-template provisioner runs OneGrid deploy.ps1 for the foundry/dataagent/chatagent phases; because this creates resources and role assignments, the Fabric-plane identity is granted Owner on this resource group.')
+param deployOneGridApp bool = false
+
+@description('Seed the full OneGrid historical demo dataset into the lakehouse/eventhouse (cloud-seeded from the public release bundle, ~hundreds of MB). Off by default to keep the deployment fast; enable for a fully populated demo.')
+param deployOneGridData bool = false
+
+@description('Git repository the in-template provisioner clones OneGrid deploy.ps1 + accelerator content from.')
+param oneGridRepoUrl string = 'https://github.com/paulshaheen/OGE-OneGrid.git'
+
+@description('Git ref (branch/tag/commit) of the OneGrid repository to deploy.')
+param oneGridRef string = 'main'
+
 // ------------------------------------------------------------------------------------
 // Variables
 // ------------------------------------------------------------------------------------
@@ -197,6 +209,18 @@ var auroraJobRegistryServer = empty(auroraJobImage) ? '${auroraAcrName}.azurecr.
 // container the OneLake shortcut targets), so it only engages when that is present.
 var deployFabricPlaneEffective = deployFabricPlane && deploySampleStorage
 var fabricPlaneIdentityName = '${namePrefix}-fabricplane-identity'
+// The OneGrid web app (Foundry + Container App) rides on top of the Fabric plane.
+var deployOneGridAppEffective = deployFabricPlaneEffective && deployOneGridApp
+// Owner — the OneGrid provisioner creates resources AND Azure role assignments
+// (grants the chat-app identity Storage Blob Data Reader / Cognitive Services User),
+// which Contributor cannot do. Scoped to THIS resource group only.
+var ownerRoleId = '8e3af657-a8ff-443c-a75c-2fe8c4bcb635'
+// Phases handed to OneGrid deploy.ps1 -Only, mapped from the selected components.
+// Base = the operational Fabric plane; +data seeds the historical demo dataset;
+// +foundry/dataagent/chatagent stand up the AI + chat/report web app.
+var ogPhasesBase = [ 'workspace', 'core', 'fabricplane', 'artifacts', 'semantic', 'oge', 'governance', 'permissions' ]
+var ogPhases = concat(ogPhasesBase, deployOneGridData ? [ 'data' ] : [], deployOneGridApp ? [ 'foundry', 'dataagent', 'chatagent' ] : [])
+var ogPhasesCsv = join(ogPhases, ',')
 
 // ------------------------------------------------------------------------------------
 // Core resource: the Planetary Computer Pro GeoCatalog
@@ -333,14 +357,28 @@ resource fabricPlaneBlobReaderRole 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
-// In-template provisioning of the Fabric plane. Fabric workspaces/lakehouses/eventhouses/
-// shortcuts/KQL are not ARM resource types, so we run the Fabric REST calls as a
-// deploymentScript (Azure PowerShell) during the deployment, under the Fabric-plane
-// identity. This is what makes the plane deploy alongside the other components instead of
-// requiring a separate manual script run. The hazard-geometry / geo_point_in_polygon KQL
-// is embedded from the OneGrid repo at build time.
+// When the OneGrid web app is included, the provisioner also creates the Foundry account
+// and the chat/report Container App IN THIS RESOURCE GROUP and assigns data-plane roles to
+// the app's identity. That requires resource-creation AND role-assignment rights, so the
+// Fabric-plane identity is granted Owner scoped to this resource group only.
+resource fabricPlaneRgOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
+  name: guid(resourceGroup().id, fabricPlaneIdentityName, ownerRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', ownerRoleId)
+    principalId: deployOneGridAppEffective ? fabricPlaneIdentity.properties.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// In-template provisioning of the whole OneGrid solution. Fabric workspaces/lakehouses/
+// eventhouses/KQL, the AI Foundry account, and the chat/report Container App are not ARM
+// resource types, so we run OneGrid's own orchestrator (deploy.ps1) headless as a
+// deploymentScript (Azure PowerShell image → pwsh; git + az CLI installed at runtime),
+// under the Fabric-plane identity. The selected components map to deploy.ps1 -Only phases
+// (ogPhasesCsv). This is what makes the solution stand up alongside the PCP backend from
+// the single Deploy button instead of a separate manual script run.
 resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (deployFabricPlaneEffective) {
-  name: '${namePrefix}-fabricplane-provision'
+  name: '${namePrefix}-onegrid-provision'
   location: location
   kind: 'AzurePowerShell'
   identity: {
@@ -352,24 +390,33 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
   properties: {
     azPowerShellVersion: '11.5'
     retentionInterval: 'P1D'
-    timeout: 'PT45M'
+    timeout: 'PT3H'
     cleanupPreference: 'OnSuccess'
     environmentVariables: [
+      { name: 'SUBSCRIPTION_ID', value: subscription().subscriptionId }
+      { name: 'LOCATION', value: location }
+      { name: 'TARGET_RESOURCE_GROUP', value: resourceGroup().name }
+      { name: 'NAME_PREFIX', value: namePrefix }
+      { name: 'IDENTITY_CLIENT_ID', value: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.clientId : '' }
+      { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
+      { name: 'ONEGRID_REF', value: oneGridRef }
+      { name: 'ONEGRID_PHASES', value: ogPhasesCsv }
       { name: 'FABRIC_CAPACITY_ID', value: fabricCapacityId }
       { name: 'FABRIC_WORKSPACE', value: fabricWorkspaceName }
-      { name: 'LAKEHOUSE_NAME', value: 'OneGridLakehouse' }
-      { name: 'EVENTHOUSE_NAME', value: 'OneGridEventhouse' }
-      { name: 'KQLDB_NAME', value: 'OneGridDB' }
-      { name: 'BLOB_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.blob : '' }
-      { name: 'MODEL_CONTAINER', value: modelOutputsContainerName }
-      { name: 'SHORTCUT_NAME', value: 'pcp_model_outputs' }
-      { name: 'CONNECTION_ID', value: fabricConnectionId }
-      { name: 'HAZARD_KQL', value: loadTextContent('fabric/hazard-geo.kql') }
+      { name: 'FABRIC_CONNECTION_ID', value: fabricConnectionId }
+      { name: 'PCP_STORAGE_ACCOUNT_NAME', value: sampleStorageName }
+      { name: 'PCP_STORAGE_ACCOUNT_ID', value: deployFabricPlaneEffective ? sampleStorage.id : '' }
+      { name: 'PCP_BLOB_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.blob : '' }
+      { name: 'PCP_MODEL_CONTAINER', value: modelOutputsContainerName }
+      { name: 'PCP_OPENAI_ENDPOINT', value: deployAiAgent ? openAi.properties.endpoint : '' }
+      { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
+      { name: 'PCP_GEOCATALOG_URI', value: geoCatalog.properties.catalogUri }
     ]
-    scriptContent: loadTextContent('scripts/fabricplane-provision.ps1')
+    scriptContent: loadTextContent('scripts/onegrid-solution-provision.ps1')
   }
   dependsOn: [
     fabricPlaneBlobReaderRole
+    fabricPlaneRgOwner
     modelOutputsContainer
   ]
 }
@@ -906,3 +953,14 @@ output fabricPlaneConfig object = deployFabricPlaneEffective ? {
 } : {}
 @description('The Fabric plane is provisioned in-template. If no fabricConnectionId was supplied, create a Fabric cloud connection to the sample storage account and re-deploy with fabricConnectionId set to add the OneLake shortcut to model-outputs.')
 output fabricPlaneCommand string = deployFabricPlaneEffective ? (empty(fabricConnectionId) ? 'provisioned (set fabricConnectionId to add the OneLake shortcut)' : 'provisioned (shortcut included)') : 'not-applicable'
+
+// ------------------------------------------------------------------------------------
+// OneGrid solution outputs (the full-in-button path). These reflect exactly which OneGrid
+// deploy.ps1 phases ran and, when the web app was included, where to reach it.
+// ------------------------------------------------------------------------------------
+@description('Whether the OneGrid web app (AI Foundry + chat/report Container App) was provisioned in this resource group.')
+output oneGridAppEnabled bool = deployOneGridAppEffective
+@description('OneGrid deploy.ps1 phases the in-template provisioner ran (mapped from the selected components).')
+output oneGridPhases string = deployFabricPlaneEffective ? ogPhasesCsv : 'not-deployed'
+@description('Public URL of the OneGrid chat/report web app (from the in-template provisioner). Empty until the container app finishes its first build.')
+output oneGridAppUrl string = deployOneGridAppEffective ? string(fabricPlaneScript.properties.outputs.appUrl) : 'not-deployed'
