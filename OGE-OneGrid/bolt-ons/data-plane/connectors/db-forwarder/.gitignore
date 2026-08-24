@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────
+# DbFabricForwarder — .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+/publish-output/
+*.dll
+*.pdb
+
+# Editors
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Local secret / generated config (never commit)
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+appsettings.generated.json
+secrets.json
+
+# Runtime data generated on the host (never commit)
+# sources.json is the REAL source list + connection wiring — commit sources.sample.json instead
+sources.json
+*.db
+*.db-wal
+*.db-shm
+queue.db*
+watermark.db*
+logs/
+*.log
+
+# Packaging / distribution artifacts
+*.zip
+
+# OS cruft
+Thumbs.db
+.DS_Store

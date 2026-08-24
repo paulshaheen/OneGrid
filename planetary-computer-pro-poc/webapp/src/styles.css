@@ -1,0 +1,282 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system — enterprise operations command center.
+ * Dark is the primary surface; light mode is a full peer theme.
+ * All colors are oklch tokens. Never hardcode colors in components.
+ */
+
+@theme inline {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-panel: var(--panel);
+  --color-grid: var(--grid);
+
+  --color-risk-normal: var(--risk-normal);
+  --color-risk-monitor: var(--risk-monitor);
+  --color-risk-elevated: var(--risk-elevated);
+  --color-risk-high: var(--risk-high);
+  --color-risk-critical: var(--risk-critical);
+
+  --color-ocean: var(--ocean);
+  --color-land: var(--land);
+  --color-storm: var(--storm);
+  --color-cone: var(--cone);
+  --color-rain: var(--rain);
+  --color-flood: var(--flood);
+  --color-ocean-deep: var(--ocean-deep);
+  --color-shelf: var(--shelf);
+  --color-shelf-line: var(--shelf-line);
+  --color-shoreline: var(--shoreline);
+  --color-grid-label: var(--grid-label);
+  --color-place: var(--place);
+  --color-water-label: var(--water-label);
+  --color-region-label: var(--region-label);
+  --color-track: var(--track);
+  --color-cat-td: var(--cat-td);
+  --color-cat-ts: var(--cat-ts);
+  --color-cat1: var(--cat1);
+  --color-cat2: var(--cat2);
+  --color-cat3: var(--cat3);
+  --color-cat4: var(--cat4);
+  --color-cat5: var(--cat5);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.375rem;
+
+  --background: oklch(0.975 0.004 240);
+  --foreground: oklch(0.22 0.02 250);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 250);
+  --primary: oklch(0.53 0.16 250);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.94 0.008 245);
+  --secondary-foreground: oklch(0.3 0.02 250);
+  --muted: oklch(0.945 0.006 245);
+  --muted-foreground: oklch(0.5 0.02 250);
+  --accent: oklch(0.93 0.02 245);
+  --accent-foreground: oklch(0.28 0.03 250);
+  --destructive: oklch(0.55 0.21 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.89 0.008 245);
+  --input: oklch(0.89 0.008 245);
+  --ring: oklch(0.6 0.13 250);
+
+  --surface: oklch(0.985 0.003 245);
+  --surface-raised: oklch(1 0 0);
+  --panel: oklch(0.965 0.005 245);
+  --grid: oklch(0.9 0.008 245);
+
+  --risk-normal: oklch(0.62 0.03 240);
+  --risk-monitor: oklch(0.62 0.13 220);
+  --risk-elevated: oklch(0.72 0.15 85);
+  --risk-high: oklch(0.64 0.19 45);
+  --risk-critical: oklch(0.55 0.22 22);
+
+  --ocean: oklch(0.9 0.03 235);
+  --land: oklch(0.93 0.012 120);
+  --storm: oklch(0.55 0.2 20);
+  --cone: oklch(0.65 0.1 250);
+  --rain: oklch(0.62 0.13 200);
+  --flood: oklch(0.6 0.12 265);
+  --ocean-deep: oklch(0.86 0.04 240);
+  --shelf: oklch(0.93 0.025 225);
+  --shelf-line: oklch(0.7 0.05 235);
+  --shoreline: oklch(0.72 0.03 150);
+  --grid-label: oklch(0.55 0.02 245);
+  --place: oklch(0.42 0.02 245);
+  --water-label: oklch(0.6 0.05 235);
+  --region-label: oklch(0.55 0.03 140);
+  --track: oklch(0.45 0.02 250);
+  --cat-td: oklch(0.72 0.06 240);
+  --cat-ts: oklch(0.75 0.13 150);
+  --cat1: oklch(0.82 0.14 95);
+  --cat2: oklch(0.78 0.16 70);
+  --cat3: oklch(0.68 0.19 45);
+  --cat4: oklch(0.6 0.21 25);
+  --cat5: oklch(0.52 0.22 5);
+
+  --chart-1: oklch(0.55 0.16 250);
+  --chart-2: oklch(0.63 0.14 200);
+  --chart-3: oklch(0.7 0.15 85);
+  --chart-4: oklch(0.62 0.19 40);
+  --chart-5: oklch(0.55 0.21 22);
+
+  --sidebar: oklch(0.97 0.004 245);
+  --sidebar-foreground: oklch(0.28 0.02 250);
+  --sidebar-primary: oklch(0.53 0.16 250);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.93 0.01 245);
+  --sidebar-accent-foreground: oklch(0.25 0.02 250);
+  --sidebar-border: oklch(0.89 0.008 245);
+  --sidebar-ring: oklch(0.6 0.13 250);
+}
+
+.dark {
+  --background: oklch(0.17 0.012 250);
+  --foreground: oklch(0.93 0.008 245);
+  --card: oklch(0.205 0.014 250);
+  --card-foreground: oklch(0.93 0.008 245);
+  --popover: oklch(0.22 0.015 250);
+  --popover-foreground: oklch(0.93 0.008 245);
+  --primary: oklch(0.68 0.14 240);
+  --primary-foreground: oklch(0.16 0.015 250);
+  --secondary: oklch(0.26 0.015 250);
+  --secondary-foreground: oklch(0.92 0.008 245);
+  --muted: oklch(0.25 0.014 250);
+  --muted-foreground: oklch(0.68 0.014 245);
+  --accent: oklch(0.29 0.02 250);
+  --accent-foreground: oklch(0.95 0.006 245);
+  --destructive: oklch(0.6 0.2 24);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.3 0.016 250);
+  --input: oklch(0.3 0.016 250);
+  --ring: oklch(0.62 0.13 240);
+
+  --surface: oklch(0.19 0.013 250);
+  --surface-raised: oklch(0.235 0.015 250);
+  --panel: oklch(0.185 0.013 250);
+  --grid: oklch(0.28 0.016 250);
+
+  --risk-normal: oklch(0.6 0.02 245);
+  --risk-monitor: oklch(0.68 0.13 220);
+  --risk-elevated: oklch(0.79 0.15 85);
+  --risk-high: oklch(0.72 0.18 48);
+  --risk-critical: oklch(0.65 0.21 24);
+
+  --ocean: oklch(0.24 0.035 245);
+  --land: oklch(0.28 0.018 150);
+  --storm: oklch(0.68 0.19 22);
+  --cone: oklch(0.7 0.11 250);
+  --rain: oklch(0.66 0.13 200);
+  --flood: oklch(0.64 0.13 268);
+  --ocean-deep: oklch(0.19 0.032 248);
+  --shelf: oklch(0.3 0.045 235);
+  --shelf-line: oklch(0.5 0.05 230);
+  --shoreline: oklch(0.45 0.03 150);
+  --grid-label: oklch(0.58 0.02 245);
+  --place: oklch(0.75 0.015 245);
+  --water-label: oklch(0.55 0.04 235);
+  --region-label: oklch(0.62 0.03 145);
+  --track: oklch(0.92 0.01 250);
+  --cat-td: oklch(0.7 0.06 240);
+  --cat-ts: oklch(0.78 0.14 150);
+  --cat1: oklch(0.87 0.15 95);
+  --cat2: oklch(0.82 0.16 70);
+  --cat3: oklch(0.74 0.19 45);
+  --cat4: oklch(0.67 0.21 25);
+  --cat5: oklch(0.6 0.23 8);
+
+  --chart-1: oklch(0.68 0.14 245);
+  --chart-2: oklch(0.7 0.13 195);
+  --chart-3: oklch(0.79 0.15 85);
+  --chart-4: oklch(0.72 0.18 45);
+  --chart-5: oklch(0.65 0.21 24);
+
+  --sidebar: oklch(0.185 0.013 250);
+  --sidebar-foreground: oklch(0.9 0.008 245);
+  --sidebar-primary: oklch(0.68 0.14 240);
+  --sidebar-primary-foreground: oklch(0.16 0.015 250);
+  --sidebar-accent: oklch(0.26 0.016 250);
+  --sidebar-accent-foreground: oklch(0.95 0.006 245);
+  --sidebar-border: oklch(0.3 0.016 250);
+  --sidebar-ring: oklch(0.62 0.13 240);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    font-feature-settings: "cv05", "ss01", "tnum";
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@utility label-xs {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  font-weight: 500;
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility panel {
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}

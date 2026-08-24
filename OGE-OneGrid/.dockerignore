@@ -1,0 +1,19 @@
+.git/
+**/node_modules/
+report-app/dist/
+data/
+fabric/
+PowerBI/
+infra/
+tools/
+session-state/
+docs-site/
+deploy-ui/
+**/*.log
+**/*.md
+# Local dev-only connection fallback — must NOT ship in the image so a
+# misconfigured deploy fails safe instead of querying a stale/foreign tenant.
+report-app/server/target.json
+# Local deploy state / config (never needed inside the image).
+last-deploy-state.json
+config.json

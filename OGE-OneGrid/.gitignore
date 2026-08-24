@@ -1,0 +1,30 @@
+# Local/secret config — never commit
+config.json
+last-deploy-state.json
+governance-manifest.json
+report-app/server/governance-snapshots.json
+*.env
+
+# OS / tooling
+.DS_Store
+node_modules/
+__pycache__/
+*.pyc
+
+# Deploy scratch
+*.zip
+
+_tables_small.txt
+_tables_big.txt
+
+_deploy_*.log
+_gen-*.py
+
+
+# packaging output (tools/package-*.ps1)
+/dist/
+
+# .NET build output (db-forwarder bolt-on)
+bin/
+obj/
+*.user

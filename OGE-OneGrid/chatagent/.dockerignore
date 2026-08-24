@@ -1,0 +1,12 @@
+node_modules
+.env
+*.zip
+app
+__pycache__
+*.pyc
+.git
+infra
+*.md
+_test*.js
+_quicktest.js
+_testbody.json

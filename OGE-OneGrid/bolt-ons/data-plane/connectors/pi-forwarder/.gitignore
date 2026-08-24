@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────
+# PIFabricForwarder — .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+# NOTE: do not add a bare "publish/" rule — on case-insensitive filesystems it
+# also matches the source "Publish/" folder. Default `dotnet publish` output
+# lives under bin/ (already ignored). Ignore an explicit output dir instead:
+/publish-output/
+*.dll
+*.pdb
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET user secrets are stored outside the repo (see README), but ignore any
+# local secret/environment override files just in case:
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+appsettings.generated.json
+secrets.json
+
+# Runtime data generated on the host (never commit)
+# tags.json is the REAL tag list — commit tags.sample.json instead
+tags.json
+*.db
+*.db-wal
+*.db-shm
+queue.db*
+logs/
+*.log
+
+# Packaging / distribution artifacts
+*.zip
+
+# OS cruft
+Thumbs.db
+.DS_Store

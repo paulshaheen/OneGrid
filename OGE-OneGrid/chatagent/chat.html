@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OneGrid Analyst</title>
+<script type="text/javascript">(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);})(window,document,"clarity","script","y4gf8o3yki");</script>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2354C36A'/%3E%3Cstop offset='0.5' stop-color='%2312A8A0'/%3E%3Cstop offset='1' stop-color='%231488C9'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='url(%23g)'/%3E%3Ctext x='16' y='22' font-family='Segoe UI,Arial' font-size='15' font-weight='700' text-anchor='middle' fill='white'%3EOG%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  --red:#C8102E; --red-dark:#A20D25; --gold:#FFB81C; --gold-dark:#b8860b;
+  --bg:#eef0f3; --surface:#ffffff; --surface-2:#f7f8fa;
+  --border:#e2e5ea; --text:#1b1f24; --muted:#6b7280; --accent:#C8102E; --green:#3fb950;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); display:flex; justify-content:center; }
+.app { width:100%; max-width:820px; height:100vh; display:flex; flex-direction:column; background:var(--surface); box-shadow:0 0 40px rgba(0,0,0,0.10); border-left:1px solid var(--border); border-right:1px solid var(--border); }
+header { padding:14px 20px; display:flex; align-items:center; gap:12px; background:var(--surface); border-top:3px solid var(--red); border-bottom:1px solid var(--border); }
+header .logo { height:36px; flex-shrink:0; display:flex; align-items:center; }
+header .logo img { height:34px; width:auto; display:block; }
+header .logo-mark { height:34px; width:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; letter-spacing:-0.5px; color:#fff; background:linear-gradient(135deg,#54C36A,#12A8A0,#1488C9); }
+header .brand { display:flex; flex-direction:column; line-height:1.15; }
+header h1 { font-size:17px; font-weight:700; letter-spacing:-0.2px; }
+header .tagline { font-size:11px; color:var(--muted); font-weight:500; }
+header .tagline .fabric-ico { vertical-align:middle; margin:0 4px; }
+header .badge { font-size:11px; font-weight:600; background:rgba(200,16,46,0.08); color:var(--red); padding:5px 11px; border-radius:20px; display:flex; align-items:center; gap:6px; }
+header .header-right { margin-left:auto; display:flex; align-items:center; gap:9px; }
+.persona-pill { font-size:11px; font-weight:600; color:var(--red); background:rgba(200,16,46,0.08); border:1px solid rgba(200,16,46,0.18); padding:4px 10px; border-radius:20px; cursor:pointer; transition:background 0.15s; }
+.persona-pill:hover { background:rgba(200,16,46,0.15); }
+.context-pill { font-size:11px; font-weight:600; color:#0c6b60; background:rgba(14,157,157,0.10); border:1px solid rgba(14,157,157,0.24); padding:4px 10px; border-radius:20px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-flex; align-items:center; }
+.context-pill::before { content:''; width:6px; height:6px; border-radius:50%; background:#0e9d9d; margin-right:6px; flex-shrink:0; }
+.settings-btn, .icon-btn { background:transparent; border:1px solid var(--border); color:#6b7280; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.15s; padding:0; }
+.settings-btn:hover, .icon-btn:hover { color:var(--red); border-color:var(--red); }
+.modal-overlay { position:fixed; inset:0; background:rgba(17,20,24,0.45); display:none; align-items:center; justify-content:center; z-index:50; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--surface); width:min(460px,92vw); border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,0.3); overflow:hidden; }
+.modal-head { display:flex; align-items:center; justify-content:space-between; padding:15px 20px; border-top:3px solid var(--red); border-bottom:1px solid var(--border); }
+.modal-head h2 { font-size:16px; font-weight:700; }
+.modal-close { background:transparent; border:none; font-size:26px; line-height:1; color:var(--muted); cursor:pointer; padding:0 2px; }
+.modal-close:hover { color:var(--text); }
+.modal-body { padding:4px 2px; }
+.setting { padding:16px 20px; }
+.setting label { display:block; font-size:13px; font-weight:600; margin-bottom:8px; }
+.setting select { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:14px; background:var(--surface); color:var(--text); outline:none; cursor:pointer; }
+.setting select:focus { border-color:var(--red); box-shadow:0 0 0 3px rgba(200,16,46,0.10); }
+.setting-desc { margin-top:10px; font-size:12px; color:var(--muted); line-height:1.5; }
+header .badge::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 0 2px rgba(63,185,80,0.20); }
+.chat-container { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; background:var(--surface-2); }
+.message { max-width:88%; padding:11px 15px; border-radius:14px; font-size:14px; line-height:1.6; }
+.message.user { align-self:flex-end; background:var(--red); color:#fff; border-bottom-right-radius:4px; }
+.message.assistant { align-self:flex-start; background:var(--surface); border:1px solid var(--border); border-bottom-left-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.04); }
+.message.assistant pre { background:#1b1f24; color:#e6edf3; border-radius:8px; padding:10px; overflow-x:auto; margin:8px 0; font-size:12px; }
+.message.assistant code { font-family:'Cascadia Code','Consolas',monospace; font-size:12px; }
+.message.assistant pre code { color:#e6edf3; }
+.message.assistant table { border-collapse:collapse; margin:8px 0; font-size:12px; width:100%; }
+.message.assistant th { background:var(--surface-2); padding:6px 8px; text-align:left; border-bottom:2px solid var(--gold); }
+.message.assistant td { padding:5px 8px; border-bottom:1px solid var(--border); }
+.message.assistant thead th { font-weight:600; color:#374151; }
+.message.assistant tbody tr:nth-child(even) { background:var(--surface-2); }
+.message.assistant h3, .message.assistant h4 { margin:14px 0 8px; font-weight:700; letter-spacing:-0.2px; }
+.message.assistant h3 { font-size:14px; }
+.message.assistant h4 { font-size:13px; color:#374151; }
+.message.assistant > :first-child { margin-top:0; }
+.message.assistant p { margin:0 0 8px; }
+.message.assistant p:last-child { margin-bottom:0; }
+.message.assistant ul, .message.assistant ol { margin:6px 0 10px; padding-left:20px; }
+.message.assistant li { margin:3px 0; }
+.message.assistant hr { border:none; border-top:1px solid var(--border); margin:12px 0; }
+.message.assistant blockquote { margin:8px 0; padding:6px 12px; border-left:3px solid var(--gold); background:var(--surface-2); border-radius:4px; color:#374151; }
+.message.assistant a { color:var(--red); text-decoration:none; }
+.message.assistant a:hover { text-decoration:underline; }
+.sev { display:inline-block; font-size:10px; font-weight:700; letter-spacing:0.4px; padding:2px 9px; border-radius:20px; vertical-align:middle; }
+.sev.sev-critical { background:#C8102E; color:#fff; }
+.sev.sev-high { background:#E8630A; color:#fff; }
+.sev.sev-medium { background:#FFB81C; color:#3a2d00; }
+.sev.sev-low { background:#e5e7eb; color:#374151; }
+.message.assistant h3.sev-head { display:flex; align-items:center; gap:8px; font-size:12px; margin:16px 0 8px; }
+.message.assistant ol.cards, .message.assistant ul.cards { list-style:none; padding-left:0; margin:8px 0 12px; display:flex; flex-direction:column; gap:8px; }
+.message.assistant ol.cards>li, .message.assistant ul.cards>li { background:var(--surface-2); border:1px solid var(--border); border-left:3px solid #9ca3af; border-radius:8px; padding:9px 12px; margin:0; font-size:13px; line-height:1.65; }
+.message.assistant li.sev-critical { border-left-color:#C8102E; }
+.message.assistant li.sev-high { border-left-color:#E8630A; }
+.message.assistant li.sev-medium { border-left-color:#FFB81C; }
+.message.assistant li.sev-low { border-left-color:#9ca3af; }
+.message.assistant .cards li strong { color:#6b7280; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.3px; }
+.message .meta { font-size:11px; color:var(--muted); margin-top:8px; }
+.message.assistant .chart { margin:12px 0; padding:12px 12px 8px; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+.message.assistant .chart-title { font-size:12px; font-weight:700; color:#374151; margin-bottom:4px; }
+.message.assistant .chart-svg { width:100%; height:auto; display:block; }
+.message.assistant .chart .grid { stroke:#eceef1; stroke-width:1; }
+.message.assistant .chart .axis { stroke:#c7ccd3; stroke-width:1; }
+.message.assistant .chart .ytick { fill:#8a929c; font-size:9px; text-anchor:end; }
+.message.assistant .chart .xtick { fill:#8a929c; font-size:9px; text-anchor:middle; }
+.message.assistant .chart .axis-label { fill:#6b7280; font-size:10px; text-anchor:middle; }
+.message.assistant .chart-legend { display:flex; flex-wrap:wrap; gap:12px; margin-top:6px; font-size:11px; color:#374151; }
+.message.assistant .chart-leg { display:inline-flex; align-items:center; gap:5px; }
+.message.assistant .chart-leg .sw { width:10px; height:10px; border-radius:2px; display:inline-block; }
+.message.assistant .chart-empty { color:var(--muted); font-size:12px; }
+.message.assistant .chart-panel { margin-bottom:2px; }
+.message.assistant .chart-panel + .chart-panel { border-top:1px dashed var(--border); padding-top:6px; }
+.message.assistant .chart-panel .chart-legend { margin:2px 0 1px; }
+.message .meta .query-badge { display:inline-block; background:rgba(200,16,46,0.08); color:var(--red); padding:1px 6px; border-radius:4px; margin:2px; }
+.typing { align-self:flex-start; color:var(--muted); font-size:13px; padding:8px 15px; }
+.typing::after { content:'...'; animation:dots 1.5s infinite; }
+@keyframes dots { 0%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+.suggestions { display:flex; flex-wrap:wrap; gap:8px; padding:12px 20px; background:var(--surface-2); border-top:1px solid var(--border); }
+.suggestions button { background:var(--surface); border:1px solid var(--border); color:#374151; padding:7px 13px; border-radius:18px; font-size:12px; cursor:pointer; transition:all 0.15s; }
+.suggestions button:hover { color:var(--red); border-color:var(--red); background:rgba(200,16,46,0.04); }
+.suggestions button.followup::before { content:'\21B3'; margin-right:6px; color:var(--red); font-weight:700; }
+.input-bar { padding:12px 20px; border-top:1px solid var(--border); background:var(--surface); display:flex; gap:10px; align-items:center; }
+.input-bar input { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 15px; color:var(--text); font-size:14px; outline:none; transition:border 0.15s, box-shadow 0.15s; }
+.input-bar input:focus { border-color:var(--red); box-shadow:0 0 0 3px rgba(200,16,46,0.10); }
+.input-bar button#sendBtn { background:var(--red); color:#fff; border:none; border-radius:10px; padding:12px 20px; font-size:14px; font-weight:600; cursor:pointer; transition:background 0.15s; }
+.input-bar button#sendBtn:hover { background:var(--red-dark); }
+.input-bar button#sendBtn:disabled { opacity:0.45; cursor:not-allowed; }
+.input-bar .export-btn { background:transparent; border:1px solid var(--border); color:var(--muted); font-size:12px; padding:10px 12px; border-radius:10px; cursor:pointer; transition:all 0.15s; }
+.input-bar .export-btn:hover { border-color:var(--gold); color:var(--gold-dark); }
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+    <span class="logo">
+        <span class="logo-mark" aria-label="OneGrid">OG</span>
+    </span>
+    <div class="brand">
+        <h1>OneGrid Analyst</h1>
+        <span class="tagline">Plant Intelligence &middot; Powered by<svg class="fabric-ico" viewBox="0 0 32 32" width="14" height="14" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Microsoft Fabric"><defs><linearGradient id="msf" x1="6" y1="4" x2="26" y2="28" gradientUnits="userSpaceOnUse"><stop stop-color="#54C36A"/><stop offset="0.55" stop-color="#12A8A0"/><stop offset="1" stop-color="#1488C9"/></linearGradient></defs><rect x="4" y="10" width="12" height="12" rx="3" transform="rotate(45 10 16)" fill="#2FB2B2" opacity="0.92"/><rect x="13" y="4" width="12" height="12" rx="3" transform="rotate(45 19 10)" fill="#57C06A" opacity="0.9"/><rect x="12" y="12" width="12" height="12" rx="3" transform="rotate(45 18 18)" fill="url(#msf)"/></svg>Microsoft Fabric</span>
+    </div>
+    <div class="header-right">
+        <span class="persona-pill" id="personaPill" onclick="openSettings()" title="Change response mode">Analyst</span>
+        <span class="context-pill" id="contextPill" title="Current focus (auto-detected)">General</span>
+        <span class="badge">Connected</span>
+        <button class="icon-btn" id="newChatBtn" onclick="newContext()" title="Start a new discussion" aria-label="New discussion">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
+        </button>
+        <button class="settings-btn" id="settingsBtn" onclick="openSettings()" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+    </div>
+</header>
+
+<div class="chat-container" id="chat">
+    <div class="message assistant">
+        <p>I'm <strong>OneGrid Analyst</strong>, your plant data assistant. I can query PI sensor data, AIMM work requests, SmartSignal advisories, and ML predictions in real time. Ask me about equipment health, anomalies, or root causes.</p>
+        <p style="margin-top:8px;color:var(--muted);font-size:12px;">I'll automatically query the right data sources, filter to running periods, and cross-reference maintenance records.</p>
+    </div>
+</div>
+
+<div class="suggestions" id="suggestions">
+    <button onclick="askQuestion(this.textContent)">What's the current status of RV3?</button>
+    <button onclick="askQuestion(this.textContent)">Show me recent AIMM work requests for Riverton Unit 3</button>
+    <button onclick="askQuestion(this.textContent)">Is there anything causing high back pressure on RV3?</button>
+    <button onclick="askQuestion(this.textContent)">Compare RV3 bearing vibrations between last run and current</button>
+    <button onclick="askQuestion(this.textContent)">What does the watchlist say about RV3 Steam Turbine?</button>
+</div>
+
+<div class="input-bar">
+    <input type="text" id="input" placeholder="Ask about plant data, equipment health, or anomalies..." onkeydown="if(event.key==='Enter')sendMessage()">
+    <button id="sendBtn" onclick="sendMessage()">Send</button>
+    <button class="export-btn" onclick="exportPdf()">📄 PDF</button>
+</div>
+</div>
+
+<div class="modal-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
+        <div class="modal-head">
+            <h2>Settings</h2>
+            <button class="modal-close" onclick="closeSettings()" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="setting">
+                <label for="personaSelect">Response persona</label>
+                <select id="personaSelect" onchange="setPersona(this.value)">
+                    <option value="executive">Executive &mdash; short status blurbs</option>
+                    <option value="analyst">Analyst &mdash; trends &amp; patterns</option>
+                    <option value="maintenance">Maintenance &mdash; specific fixes</option>
+                </select>
+                <p class="setting-desc" id="personaDesc"></p>
+            </div>
+            <div class="setting">
+                <label for="modelSelect">AI model</label>
+                <select id="modelSelect" onchange="setModel(this.value)">
+                    <option value="">Server default</option>
+                </select>
+                <p class="setting-desc" id="modelDesc">Choose which Copilot model answers. The list reflects the models your account can access.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+let history = [];
+
+const PERSONA_DESC = {
+    executive: 'Concise status blurbs — headline health, risk level, and impact. Minimal technical detail.',
+    analyst: 'Trend-focused — patterns over time, baseline comparisons, and charts with quantified change.',
+    maintenance: 'Fix-focused — specific equipment/tags at fault, AIMM work requests, and concrete repair steps.'
+};
+let currentPersona = localStorage.getItem('ea_persona') || 'analyst';
+if (currentPersona === 'mechanic') { currentPersona = 'maintenance'; localStorage.setItem('ea_persona', currentPersona); }
+function applyPersonaUI() {
+    const sel = document.getElementById('personaSelect');
+    if (sel) sel.value = currentPersona;
+    const pill = document.getElementById('personaPill');
+    if (pill) pill.textContent = currentPersona.charAt(0).toUpperCase() + currentPersona.slice(1);
+    const desc = document.getElementById('personaDesc');
+    if (desc) desc.textContent = PERSONA_DESC[currentPersona] || '';
+}
+function setPersona(v) { currentPersona = v; localStorage.setItem('ea_persona', v); applyPersonaUI(); }
+
+// ── Model selector ──────────────────────────────────────────────────────
+let currentModel = localStorage.getItem('ea_model') || '';
+let modelsLoaded = false;
+function setModel(v) { currentModel = v; localStorage.setItem('ea_model', v); }
+async function loadModels() {
+    if (modelsLoaded) return;
+    try {
+        const resp = await fetch(API_BASE + '/api/models');
+        const data = await resp.json();
+        const sel = document.getElementById('modelSelect');
+        if (!sel) return;
+        const def = data.default ? ' (default)' : '';
+        let html = '<option value="">Server default' + (data.default ? ' — ' + escapeHtml(data.default) : '') + '</option>';
+        (data.models || []).forEach(m => {
+            const label = m.vendor ? (m.name + ' — ' + m.vendor) : m.name;
+            html += '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(label) + '</option>';
+        });
+        sel.innerHTML = html;
+        // Restore saved choice if still available
+        if (currentModel && (data.models || []).some(m => m.id === currentModel)) {
+            sel.value = currentModel;
+        } else {
+            currentModel = '';
+            sel.value = '';
+        }
+        const desc = document.getElementById('modelDesc');
+        if (desc && data.error) desc.textContent = 'Could not load model list (' + data.error.slice(0, 60) + '). Using server default.';
+        modelsLoaded = true;
+    } catch (e) {
+        const desc = document.getElementById('modelDesc');
+        if (desc) desc.textContent = 'Could not load model list. Using server default.';
+    }
+}
+function openSettings() { document.getElementById('settingsOverlay').classList.add('open'); applyPersonaUI(); loadModels(); }
+function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSettings(); });
+applyPersonaUI();
+
+const INTRO_HTML = chat.innerHTML;
+const suggestionsEl = document.getElementById('suggestions');
+const INITIAL_SUGGESTIONS = suggestionsEl.innerHTML;
+function showFollowups(arr) {
+    if (!arr || !arr.length) { suggestionsEl.style.display = 'none'; return; }
+    suggestionsEl.innerHTML = arr.slice(0, 3).map(s => `<button class="followup" onclick="askQuestion(this.textContent)">${escapeHtml(s)}</button>`).join('');
+    suggestionsEl.style.display = 'flex';
+}
+let currentContext = '';
+function updateContextPill(focus) {
+    currentContext = (focus || '').trim();
+    const pill = document.getElementById('contextPill');
+    if (pill) pill.textContent = currentContext || 'General';
+    if (pill) pill.title = currentContext ? ('Current focus: ' + currentContext) : 'No specific focus';
+}
+function newContext() {
+    history = [];
+    chat.innerHTML = INTRO_HTML;
+    suggestionsEl.innerHTML = INITIAL_SUGGESTIONS;
+    suggestionsEl.style.display = 'flex';
+    updateContextPill('');
+    sendBtn.disabled = false;
+    input.value = '';
+    input.focus();
+}
+
+function askQuestion(text) {
+    input.value = text;
+    sendMessage();
+}
+
+function addMessage(role, content, meta) {
+    const div = document.createElement('div');
+    div.className = `message ${role}`;
+    if (role === 'assistant') {
+        div.innerHTML = formatMarkdown(content);
+        if (meta && Array.isArray(meta.charts)) {
+            meta.charts.forEach(spec => div.appendChild(renderLineChart(spec)));
+        }
+        if (meta && meta.queries && meta.queries.length > 0) {
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'meta';
+            metaDiv.innerHTML = `${meta.toolCalls || 0} queries: ` +
+                meta.queries.map(q => `<span class="query-badge">${q.type}${q.table ? ' ' + q.table : ''}: ${q.error ? 'error' : (q.rows || 0) + ' rows'}</span>`).join(' ');
+            div.appendChild(metaDiv);
+        }
+    } else {
+        div.textContent = content;
+    }
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+const SEVERITY = { CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'medium', LOW: 'low' };
+
+function inlineMd(s) {
+    s = s.replace(/`([^`]+)`/g, (m, c) => `<code>${c}</code>`);
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s"']+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    s = s.replace(/\b(CRITICAL|HIGH|MEDIUM|LOW)\b/g, (m) => `<span class="sev sev-${SEVERITY[m]}">${m}</span>`);
+    return s;
+}
+
+// Markdown → styled HTML. Severity headings become badges; their items become color-coded cards.
+function formatMarkdown(md) {
+    const codeBlocks = [];
+    md = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+        codeBlocks.push(escapeHtml(code.replace(/\n$/, '')));
+        return `\u0000CODE${codeBlocks.length - 1}\u0000`;
+    });
+    md = escapeHtml(md);
+
+    const lines = md.split('\n');
+    let html = '', listType = null, curLi = null, inTable = false, tableRows = [], curSev = '', para = [];
+    const flushPara = () => { if (para.length) { html += `<p>${inlineMd(para.join(' '))}</p>`; para = []; } };
+    const pushLi = () => { if (curLi != null) { html += `<li${curSev ? ` class="sev-${curSev}"` : ''}>${curLi}</li>`; curLi = null; } };
+    const flushList = () => { pushLi(); if (listType) { html += `</${listType}>`; listType = null; } };
+    const flushTable = () => {
+        if (inTable && tableRows.length) {
+            const [head, ...body] = tableRows;
+            html += '<table><thead><tr>' + head.map(c => `<th>${inlineMd(c)}</th>`).join('') + '</tr></thead><tbody>';
+            html += body.map(r => '<tr>' + r.map(c => `<td>${inlineMd(c)}</td>`).join('') + '</tr>').join('');
+            html += '</tbody></table>';
+        }
+        inTable = false; tableRows = [];
+    };
+
+    for (const raw of lines) {
+        const line = raw.replace(/\s+$/, '');
+        if (/^\s*\|(.+)\|\s*$/.test(line)) {
+            flushPara(); flushList();
+            const cells = line.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+            if (cells.every(c => /^:?-{2,}:?$/.test(c) || c === '')) { inTable = true; continue; }
+            inTable = true; tableRows.push(cells); continue;
+        } else if (inTable) { flushTable(); }
+
+        if (!line.trim()) { flushPara(); pushLi(); continue; }
+        if (/^\u0000CODE\d+\u0000$/.test(line.trim())) { flushPara(); flushList(); html += line.trim(); continue; }
+        if (listType && curLi != null && /^\s{2,}\S/.test(raw)) { curLi += '<br>' + inlineMd(line.trim()); continue; }
+
+        const h = line.match(/^(#{1,6})\s+(.*)$/);
+        if (h) {
+            flushPara(); flushList();
+            const txt = h[2].replace(/:\s*$/, '');
+            const sevKey = (txt.match(/\b(CRITICAL|HIGH|MEDIUM|LOW)\b/) || [])[1];
+            if (sevKey) {
+                curSev = SEVERITY[sevKey];
+                const rest = inlineMd(txt.replace(sevKey, '').replace(/^[\s:–-]+|[\s:–-]+$/g, ''));
+                html += `<h3 class="sev-head"><span class="sev sev-${curSev}">${sevKey}</span>${rest ? ' ' + rest : ''}</h3>`;
+            } else {
+                curSev = '';
+                const tag = h[1].length <= 2 ? 'h3' : 'h4';
+                html += `<${tag}>${inlineMd(txt)}</${tag}>`;
+            }
+            continue;
+        }
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { flushPara(); flushList(); html += '<hr>'; continue; }
+        const bq = line.match(/^>\s?(.*)$/);
+        if (bq) { flushPara(); flushList(); html += `<blockquote>${inlineMd(bq[1])}</blockquote>`; continue; }
+
+        const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+        const ul = line.match(/^\s*[-*]\s+(.*)$/);
+        if (ol || ul) {
+            flushPara();
+            const want = ol ? 'ol' : 'ul';
+            if (listType && listType !== want) flushList();
+            if (!listType) { listType = want; html += `<${want} class="cards${curSev ? ` sev-${curSev}` : ''}">`; }
+            pushLi();
+            curLi = inlineMd(ol ? ol[1] : ul[1]);
+            continue;
+        }
+
+        flushList();
+        para.push(line.trim());
+    }
+    flushPara(); flushList(); flushTable();
+    html = html.replace(/\u0000CODE(\d+)\u0000/g, (m, i) => `<pre><code>${codeBlocks[+i]}</code></pre>`);
+    return html;
+}
+
+// Self-contained SVG line chart with small multiples: series are grouped by unit
+// (scale fallback) so mixed-unit metrics get their own stacked panel + y-axis.
+function fmtNum(v) { const a = Math.abs(v); if (a >= 1000) return v.toFixed(0); if (a >= 10) return v.toFixed(1); if (a >= 1) return v.toFixed(2); return v.toFixed(3); }
+function groupSeries(series) {
+    const haveUnits = series.some(s => s.unit && String(s.unit).trim());
+    if (haveUnits) {
+        const map = new Map();
+        series.forEach(s => { const u = (s.unit && String(s.unit).trim()) || '\u2014'; if (!map.has(u)) map.set(u, []); map.get(u).push(s); });
+        return [...map.entries()].map(([unit, ss]) => ({ unit: unit === '\u2014' ? '' : unit, series: ss }));
+    }
+    const RATIO = 6;
+    const mag = s => { const v = s.data.filter(x => x != null && isFinite(x)).map(Math.abs); return v.length ? Math.max(...v) : 0; };
+    const items = series.map(s => ({ s, m: mag(s) || 1e-9 })).sort((a, b) => b.m - a.m);
+    const groups = [];
+    items.forEach(({ s, m }) => {
+        const g = groups.find(gr => Math.max(gr.mMax, m) / Math.min(gr.mMin, m) <= RATIO);
+        if (g) { g.series.push(s); g.mMax = Math.max(g.mMax, m); g.mMin = Math.min(g.mMin, m); }
+        else groups.push({ unit: '', series: [s], mMax: m, mMin: m });
+    });
+    return groups.map(g => ({ unit: '', series: g.series }));
+}
+function renderPanelSvg(labels, seriesArr, unitLabel, showX, H) {
+    const W = 560, padL = 48, padR = 14, padT = 10, padB = showX ? 34 : 12;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    let yMin = Infinity, yMax = -Infinity;
+    seriesArr.forEach(s => s.data.forEach(v => { if (v != null && isFinite(v)) { if (v < yMin) yMin = v; if (v > yMax) yMax = v; } }));
+    if (!isFinite(yMin)) { yMin = 0; yMax = 1; }
+    if (yMin === yMax) { yMin -= 1; yMax += 1; }
+    const hr = (yMax - yMin) * 0.08; yMin -= hr; yMax += hr;
+    const N = labels.length;
+    const xAt = i => padL + (N === 1 ? plotW / 2 : i * plotW / (N - 1));
+    const yAt = v => padT + plotH * (1 - (v - yMin) / (yMax - yMin));
+    let grid = '';
+    const ticks = 3;
+    for (let t = 0; t <= ticks; t++) {
+        const val = yMin + (yMax - yMin) * t / ticks, y = yAt(val);
+        grid += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" class="grid"/>`;
+        grid += `<text x="${padL - 6}" y="${(y + 3).toFixed(1)}" class="ytick">${fmtNum(val)}</text>`;
+    }
+    let xticks = '';
+    if (showX) {
+        const step = Math.max(1, Math.ceil(N / 7));
+        for (let i = 0; i < N; i += step) xticks += `<text x="${xAt(i).toFixed(1)}" y="${H - padB + 16}" class="xtick">${escapeHtml(String(labels[i]))}</text>`;
+    }
+    let paths = '', dots = '';
+    seriesArr.forEach(s => {
+        const col = s._color; let d = '', pen = false;
+        s.data.forEach((v, i) => {
+            if (v == null || !isFinite(v)) { pen = false; return; }
+            const x = xAt(i), y = yAt(v);
+            d += (pen ? ' L' : ' M') + x.toFixed(1) + ' ' + y.toFixed(1); pen = true;
+            if (N <= 24) dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="${col}"/>`;
+        });
+        paths += `<path d="${d.trim()}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    });
+    const axes = `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + plotH}" class="axis"/><line x1="${padL}" y1="${padT + plotH}" x2="${W - padR}" y2="${padT + plotH}" class="axis"/>`;
+    const yl = unitLabel ? `<text x="13" y="${padT + plotH / 2}" class="axis-label" transform="rotate(-90 13 ${padT + plotH / 2})">${escapeHtml(unitLabel)}</text>` : '';
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" class="chart-svg">${grid}${axes}${yl}${paths}${dots}${xticks}</svg>`;
+}
+function renderLineChart(spec) {
+    const wrap = document.createElement('div');
+    wrap.className = 'chart';
+    const labels = spec.labels || [];
+    const allSeries = (spec.series || []).filter(s => s.data && s.data.some(v => v != null && isFinite(v)));
+    if (!labels.length || !allSeries.length) {
+        wrap.innerHTML = `<div class="chart-title">${escapeHtml(spec.title || 'Chart')}</div><div class="chart-empty">No data to plot.</div>`;
+        return wrap;
+    }
+    const colors = ['#C8102E', '#0E9D9D', '#E8630A', '#1488C9', '#6A4C93', '#3FB950', '#B8860B', '#0B7285'];
+    allSeries.forEach((s, i) => s._color = colors[i % colors.length]);
+    const groups = groupSeries(allSeries);
+    const multi = groups.length > 1;
+    let html = `<div class="chart-title">${escapeHtml(spec.title || 'Trend')}</div>`;
+    groups.forEach((g, gi) => {
+        const showX = gi === groups.length - 1;
+        const unitLabel = g.unit || (multi ? '' : spec.yLabel) || '';
+        const legend = g.series.map(s => `<span class="chart-leg"><span class="sw" style="background:${s._color}"></span>${escapeHtml(s.name)}</span>`).join('');
+        html += `<div class="chart-panel"><div class="chart-legend">${legend}</div>${renderPanelSvg(labels, g.series, unitLabel, showX, multi ? 152 : 240)}</div>`;
+    });
+    wrap.innerHTML = html;
+    return wrap;
+}
+
+const API_BASE = ''; // same-origin (served by server.js locally and in Azure)
+
+async function sendMessage() {
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    sendBtn.disabled = true;
+    document.getElementById('suggestions').style.display = 'none';
+
+    addMessage('user', msg);
+    history.push({role: 'user', content: msg});
+
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'typing';
+    statusDiv.textContent = '🧠 Thinking...';
+    chat.appendChild(statusDiv);
+    chat.scrollTop = chat.scrollHeight;
+
+    try {
+        const resp = await fetch(API_BASE + '/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: msg, history: history.slice(-10), persona: currentPersona, model: currentModel})
+        });
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalResult = null;
+
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, {stream: true});
+
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'status') {
+                    statusDiv.textContent = data.status;
+                    chat.scrollTop = chat.scrollHeight;
+                } else if (data.type === 'done') {
+                    finalResult = data;
+                }
+            }
+        }
+
+        statusDiv.remove();
+        if (finalResult) {
+            addMessage('assistant', finalResult.reply, finalResult);
+            history.push({role: 'assistant', content: finalResult.reply});
+            if (finalResult.focus) updateContextPill(finalResult.focus);
+            showFollowups(finalResult.suggestions || []);
+        }
+    } catch (err) {
+        statusDiv.remove();
+        addMessage('assistant', `Error: ${err.message}. Make sure the server is running (node server.js).`);
+    }
+    sendBtn.disabled = false;
+    input.focus();
+}
+
+async function exportPdf() {
+    alert('PDF export: Coming soon. The conversation will be formatted as a professional report.');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,324 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "Deploy a Microsoft Planetary Computer Pro **GeoCatalog** plus optional components: the **web app** on an Azure App Service (Linux, Node), sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, and the Microsoft Aurora weather model on a GPU Foundry endpoint. The GeoCatalog is always deployed; choose the rest. [Learn more](https://github.com/Balunywa/planetary-computer-pro-poc).",
+        "location": {
+          "label": "Region",
+          "toolTip": "GeoCatalog is available in these regions during Preview.",
+          "resourceTypes": [
+            "Microsoft.Orbital/geoCatalogs"
+          ],
+          "allowedValues": [
+            "eastus",
+            "northcentralus",
+            "westeurope",
+            "canadacentral",
+            "uksouth"
+          ]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "geoCatalogName",
+        "type": "Microsoft.Common.TextBox",
+        "label": "GeoCatalog name",
+        "defaultValue": "",
+        "toolTip": "Lowercase letters and numbers, 3-24 characters. Leave blank to auto-generate a unique name.",
+        "constraints": {
+          "required": false,
+          "regex": "^[a-z0-9]{3,24}$",
+          "validationMessage": "3-24 lowercase letters or numbers."
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "components",
+        "label": "Components",
+        "elements": [
+          {
+            "name": "geoCatalogInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "The GeoCatalog is always deployed. Select any additional components below, then configure them on the following tabs."
+            }
+          },
+          {
+            "name": "selected",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Optional components to deploy",
+            "toolTip": "Select one or more components. Use Select all for the complete environment.",
+            "multiselect": true,
+            "selectAll": true,
+            "defaultValue": [
+              {
+                "value": "sampleStorage"
+              },
+              {
+                "value": "aiAgent"
+              },
+              {
+                "value": "webApp"
+              }
+            ],
+            "constraints": {
+              "required": false,
+              "allowedValues": [
+                {
+                  "label": "Sample storage + ingestion identity",
+                  "value": "sampleStorage",
+                  "description": "Storage account and managed identity for the bring-your-own-data ingestion path."
+                },
+                {
+                  "label": "Web app (Azure App Service, Node)",
+                  "value": "webApp",
+                  "description": "The Planetary Computer Pro web app on an Azure App Service (Linux, Node). Its managed identity is granted GeoCatalog / storage / Foundry data-plane roles; sign-in uses your Microsoft Entra identity. Application code is published separately with CI/CD or `az webapp up`. Configure it on the Web app tab."
+                },
+                {
+                  "label": "AI agent (Azure OpenAI / Foundry)",
+                  "value": "aiAgent",
+                  "description": "Azure OpenAI account + GPT deployment for agentic / reasoning GeoAI scenarios."
+                },
+                {
+                  "label": "Aurora weather model (GPU Foundry endpoint)",
+                  "value": "auroraModel",
+                  "description": "Foundry (Azure ML) workspace + GPU managed-compute endpoint for the Microsoft Aurora model. Requires A100 GPU quota + marketplace terms."
+                },
+                {
+                  "label": "Aurora scheduled forecast job (Container Apps)",
+                  "value": "auroraSchedule",
+                  "description": "Azure Container Apps Job that runs the Aurora forecast pipeline every 6 hours and publishes weather-events.json, keeping the map live without manual runs. Requires the Aurora weather model + sample storage, plus a prebuilt pipeline image."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "webAppConfig",
+        "label": "Web app",
+        "elements": [
+          {
+            "name": "webAppNotSelected",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[not(contains(steps('components').selected, 'webApp'))]",
+            "options": {
+              "icon": "Info",
+              "text": "The web app is not selected. These settings are ignored."
+            }
+          },
+          {
+            "name": "webAppInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[contains(steps('components').selected, 'webApp')]",
+            "options": {
+              "icon": "Info",
+              "text": "An Azure App Service (Linux, Node) is created configured for the web app. Publish application code afterwards with 'az webapp up' from the webapp/ folder (or CI/CD) - Oryx runs npm install + npm run build and starts 'node server.mjs'. Sign-in uses Microsoft Entra: leave 'Register the sign-in app automatically' on and the deployment creates the app registration for you (you need rights to register apps). Turn it off to supply your own Entra IDs below."
+            }
+          },
+          {
+            "name": "autoRegisterEntraApp",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Register the sign-in app automatically",
+            "defaultValue": true,
+            "toolTip": "Create the Microsoft Entra SPA app registration during deployment and wire its client ID into the web app. Requires you (the person deploying) to have rights to register apps (Application Administrator or Application.ReadWrite.All). Turn off to enter an existing app registration's IDs below.",
+            "visible": "[contains(steps('components').selected, 'webApp')]"
+          },
+          {
+            "name": "appServiceSku",
+            "type": "Microsoft.Common.DropDown",
+            "label": "App Service plan SKU",
+            "defaultValue": "B1 (Basic)",
+            "toolTip": "Compute tier for the App Service plan hosting the web app.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "F1 (Free)", "value": "F1" },
+                { "label": "B1 (Basic)", "value": "B1" },
+                { "label": "P0v3 (Premium)", "value": "P0v3" },
+                { "label": "P1v3 (Premium)", "value": "P1v3" }
+              ],
+              "required": false
+            },
+            "visible": "[contains(steps('components').selected, 'webApp')]"
+          },
+          {
+            "name": "entraTenantId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Entra tenant ID (optional)",
+            "defaultValue": "",
+            "toolTip": "Directory (tenant) ID for MSAL sign-in. Public identifier (not a secret). Leave blank to use the tenant you deploy into.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a GUID, e.g. 00000000-0000-0000-0000-000000000000, or leave blank."
+            },
+            "visible": "[and(contains(steps('components').selected, 'webApp'), not(steps('webAppConfig').autoRegisterEntraApp))]"
+          },
+          {
+            "name": "entraClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Entra client (application) ID (optional)",
+            "defaultValue": "",
+            "toolTip": "Application (client) ID of the SPA app registration used for MSAL sign-in. Public identifier (not a secret). Required when automatic registration is turned off.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a GUID, e.g. 00000000-0000-0000-0000-000000000000, or leave blank."
+            },
+            "visible": "[and(contains(steps('components').selected, 'webApp'), not(steps('webAppConfig').autoRegisterEntraApp))]"
+          }
+        ]
+      },
+      {
+        "name": "aiConfig",
+        "label": "AI",
+        "elements": [
+          {
+            "name": "aiRequired",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[and(not(contains(steps('components').selected, 'aiAgent')), not(contains(steps('components').selected, 'auroraModel')))]",
+            "options": {
+              "icon": "Info",
+              "text": "No AI components are selected. These settings are ignored."
+            }
+          },
+          {
+            "name": "aiAgentSection",
+            "type": "Microsoft.Common.Section",
+            "label": "AI agent (Azure OpenAI / Foundry)",
+            "visible": "[contains(steps('components').selected, 'aiAgent')]",
+            "elements": [
+              {
+                "name": "openAiDeploymentName",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Model deployment name",
+                "defaultValue": "gpt-5-mini",
+                "toolTip": "Name of the Azure OpenAI model deployment.",
+                "constraints": {
+                  "required": true,
+                  "regex": "^[a-zA-Z0-9._-]{2,64}$",
+                  "validationMessage": "Use 2-64 characters: letters, numbers, dot, dash or underscore."
+                }
+              }
+            ]
+          },
+          {
+            "name": "auroraSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Aurora weather model (GPU)",
+            "visible": "[contains(steps('components').selected, 'auroraModel')]",
+            "elements": [
+              {
+                "name": "auroraInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Warning",
+                  "text": "Aurora runs on a GPU managed-compute endpoint (Standard_NC24ads_A100_v4). The Foundry workspace + endpoint always deploy; the GPU model only deploys when you supply a model asset ID and have A100 quota + accepted marketplace terms."
+                }
+              },
+              {
+                "name": "auroraInstanceType",
+                "type": "Microsoft.Common.TextBox",
+                "label": "GPU instance type",
+                "defaultValue": "Standard_NC24ads_A100_v4",
+                "toolTip": "GPU VM size for the Aurora managed-compute deployment. You must have quota for it in the selected region.",
+                "constraints": {
+                  "required": true,
+                  "regex": "^[A-Za-z0-9_]{4,64}$",
+                  "validationMessage": "Enter a valid VM size, e.g. Standard_NC24ads_A100_v4."
+                }
+              },
+              {
+                "name": "auroraModelAssetId",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Aurora model asset ID (optional)",
+                "defaultValue": "",
+                "toolTip": "Registry model asset. The official storm-impact app uses azureml://registries/azureml/models/Aurora/versions/4. Leave blank to provision the workspace + endpoint only and deploy the model from the portal.",
+                "constraints": {
+                  "required": false
+                }
+              }
+            ]
+          },
+          {
+            "name": "auroraScheduleSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Aurora scheduled forecast job (Container Apps)",
+            "visible": "[contains(steps('components').selected, 'auroraSchedule')]",
+            "elements": [
+              {
+                "name": "auroraScheduleInfo",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": true,
+                "options": {
+                  "icon": "Info",
+                  "text": "Runs the Aurora pipeline as a scheduled Container Apps Job so the map stays live without manual runs. The template provisions a dedicated Azure Container Registry and grants the job pull access automatically — you don't manage a registry. It needs the Aurora weather model (the GPU endpoint) and sample storage selected too. After deploying, build the image into the registry once (the exact command is in the deployment outputs, auroraImageBuildCommand): az acr build -r <registry> -t aurora-pipeline:latest aurora."
+                }
+              },
+              {
+                "name": "auroraScheduleDepsWarning",
+                "type": "Microsoft.Common.InfoBox",
+                "visible": "[or(not(contains(steps('components').selected, 'auroraModel')), not(contains(steps('components').selected, 'sampleStorage')))]",
+                "options": {
+                  "icon": "Warning",
+                  "text": "Also select 'Aurora weather model' and 'Sample storage' above — the scheduled job calls the GPU endpoint and publishes to the sample storage account, so it will not deploy without them."
+                }
+              },
+              {
+                "name": "auroraJobImage",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Custom pipeline image (optional override)",
+                "defaultValue": "",
+                "toolTip": "Leave blank to use the Azure Container Registry this template provisions. Set this only to bring your own prebuilt image, e.g. myregistry.azurecr.io/aurora-pipeline:latest.",
+                "constraints": {
+                  "required": false,
+                  "regex": "^$|^[a-zA-Z0-9]([a-zA-Z0-9._/-]*[a-zA-Z0-9])?(:[a-zA-Z0-9._-]+)?$",
+                  "validationMessage": "Enter an image reference like myregistry.azurecr.io/aurora-pipeline:latest, or leave blank to use the provisioned registry."
+                }
+              },
+              {
+                "name": "auroraJobCron",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Schedule (cron, UTC)",
+                "defaultValue": "0 1,7,13,19 * * *",
+                "toolTip": "Cron expression (UTC) for the forecast cadence. The default runs ~1 h after each synoptic cycle (00/06/12/18 UTC) to allow for input-data latency.",
+                "constraints": {
+                  "required": true,
+                  "regex": "^[0-9*,/ -]{9,}$",
+                  "validationMessage": "Enter a 5-field cron expression, e.g. 0 1,7,13,19 * * *."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "geoCatalogName": "[basics('geoCatalogName')]",
+      "deploySampleStorage": "[contains(steps('components').selected, 'sampleStorage')]",
+      "deployWebApp": "[contains(steps('components').selected, 'webApp')]",
+      "appServiceSku": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').appServiceSku, 'B1')]",
+      "entraTenantId": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').entraTenantId, '')]",
+      "entraClientId": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').entraClientId, '')]",
+      "autoRegisterEntraApp": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').autoRegisterEntraApp, false)]",
+      "deployAiAgent": "[contains(steps('components').selected, 'aiAgent')]",
+      "deployAuroraModel": "[contains(steps('components').selected, 'auroraModel')]",
+      "openAiDeploymentName": "[if(contains(steps('components').selected, 'aiAgent'), steps('aiConfig').aiAgentSection.openAiDeploymentName, 'gpt-5-mini')]",
+      "auroraInstanceType": "[if(contains(steps('components').selected, 'auroraModel'), steps('aiConfig').auroraSection.auroraInstanceType, 'Standard_NC24ads_A100_v4')]",
+      "auroraModelAssetId": "[if(contains(steps('components').selected, 'auroraModel'), steps('aiConfig').auroraSection.auroraModelAssetId, '')]",
+      "deployAuroraSchedule": "[contains(steps('components').selected, 'auroraSchedule')]",
+      "auroraJobImage": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobImage, '')]",
+      "auroraJobCron": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobCron, '0 1,7,13,19 * * *')]"
+    }
+  }
+}

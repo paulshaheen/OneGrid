@@ -1,0 +1,20 @@
+[
+  {
+    "tag": "PLANT1:EXAMPLE_TAG_01.PV",
+    "webId": "REPLACE-ME-WITH-PI-WEBID",
+    "plant": "PLANT1",
+    "mode": "Channel"
+  },
+  {
+    "tag": "PLANT1:EXAMPLE_TAG_02.PV",
+    "webId": "REPLACE-ME-WITH-PI-WEBID",
+    "plant": "PLANT1",
+    "mode": "Poll"
+  },
+  {
+    "tag": "PLANT1:EXAMPLE_LAB_VALUE.AG",
+    "webId": "REPLACE-ME-WITH-PI-WEBID",
+    "plant": "PLANT1",
+    "mode": "Skip"
+  }
+]

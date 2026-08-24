@@ -1,0 +1,67 @@
+[
+  {
+    "name": "PLANT1_SQL_HIST",
+    "provider": "SqlServer",
+    "connectionName": "PLANT1_SQL",
+    "pollIntervalSeconds": 15,
+    "watermarkColumn": "sample_ts",
+    "watermarkType": "DateTime",
+    "initialWatermark": "2026-01-01T00:00:00Z",
+    "overlapSeconds": 2,
+    "shape": "Narrow",
+    "plant": "PLANT1",
+    "source": "sql",
+    "query": "SELECT tag_name, sample_ts, value, quality, plant FROM dbo.tag_history WHERE sample_ts > @watermark ORDER BY sample_ts",
+    "map": {
+      "tag": "tag_name",
+      "ts": "sample_ts",
+      "value": "value",
+      "quality": "quality",
+      "plant": "plant",
+      "webId": "tag_name"
+    }
+  },
+  {
+    "name": "PLANT2_ORACLE_HIST",
+    "provider": "Oracle",
+    "connectionName": "PLANT2_ORACLE",
+    "pollIntervalSeconds": 30,
+    "watermarkColumn": "SEQ_NO",
+    "watermarkType": "Long",
+    "initialWatermark": "0",
+    "shape": "Narrow",
+    "plant": "PLANT2",
+    "source": "oracle",
+    "query": "SELECT TAG_NAME, SAMPLE_TS, VALUE, PLANT, SEQ_NO FROM HIST.TAG_SAMPLES WHERE SEQ_NO > :watermark ORDER BY SEQ_NO FETCH FIRST 5000 ROWS ONLY",
+    "map": {
+      "tag": "TAG_NAME",
+      "ts": "SAMPLE_TS",
+      "value": "VALUE",
+      "plant": "PLANT",
+      "webId": "TAG_NAME"
+    }
+  },
+  {
+    "name": "PLANT3_SQL_WIDE",
+    "provider": "SqlServer",
+    "connectionName": "PLANT3_SQL",
+    "pollIntervalSeconds": 20,
+    "watermarkColumn": "reading_ts",
+    "watermarkType": "DateTime",
+    "initialWatermark": "2026-01-01T00:00:00Z",
+    "overlapSeconds": 2,
+    "shape": "Wide",
+    "plant": "PLANT3",
+    "source": "sql",
+    "query": "SELECT asset_id, reading_ts, bearing_temp, vibration, oil_pressure FROM dbo.asset_current WHERE reading_ts > @watermark ORDER BY reading_ts",
+    "map": {
+      "ts": "reading_ts",
+      "plant": "asset_id"
+    },
+    "measures": [
+      { "column": "bearing_temp",  "tag": "BEARING_TEMP",  "webId": "PLANT3:BEARING_TEMP" },
+      { "column": "vibration",     "tag": "VIBRATION",     "webId": "PLANT3:VIBRATION" },
+      { "column": "oil_pressure",  "tag": "OIL_PRESSURE",  "webId": "PLANT3:OIL_PRESSURE" }
+    ]
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "name": "pi-fabric-chat-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PI-to-Fabric chat agent — Node HTTP server + chat UI over Fabric Eventhouse (KQL) and Power BI (DAX), reasoning via GitHub Copilot.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

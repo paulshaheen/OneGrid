@@ -1,0 +1,77 @@
+{
+  "//": "Copy to config.json and fill in. All resources are created fresh in YOUR tenant.",
+
+  "subscriptionId": "",
+  "location": "eastus2",
+
+  "fabric": {
+    "//capacityId": "REQUIRED. Existing Fabric capacity resource id or capacity GUID. A workspace cannot be created without a capacity (F-SKU or Trial).",
+    "capacityId": "",
+    "workspaceName": "OneGrid",
+    "lakehouseName": "lh_poc",
+    "eventhouseName": "pi-realtime-eventhouse",
+    "kqlDatabaseName": "pi-realtime-db",
+    "factWindowDays": 30,
+    "//siteCount": "OPTIONAL. Number of extra synthetic sites to fan out from the reference site after data load (0 = single reference site only). Each new site is healthy/stable; capped at the built-in site catalog (12).",
+    "siteCount": 8
+  },
+
+  "//data": "OPTIONAL. Where the lightweight wizard seeds the demo data from when no local data/ bundle is present. Pulled cloud-to-cloud into OneLake. Defaults to the public release asset below.",
+  "data": {
+    "bundleUrl": "https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/onegrid-data.zip"
+  },
+
+  "//telemetry": "OPTIONAL. On deploy, the wizard reports a one-time install event (tenant, signed-in user, subscription, region, workspace name, wizard version, outcome) to Microsoft OGE's Application Insights so the team can see adoption. DEFAULT ON. Set enabled=false to opt out (or uncheck the box in the wizard, or set env ONEGRID_TELEMETRY=0). Set connectionString to send to your own App Insights instead.",
+  "telemetry": {
+    "enabled": true
+  },
+
+  "//fixedIdentity": "OPTIONAL. A service principal (with a client secret) used as the Import semantic model's data-source identity so it can refresh from the Lakehouse SQL endpoint. If provided, deploy binds a connection + refreshes automatically; otherwise do it manually (see README).",
+  "fixedIdentity": {
+    "tenantId": "",
+    "clientId": "",
+    "clientSecret": ""
+  },
+
+  "foundry": {
+    "resourceGroup": "rg-onegrid-solution",
+    "accountName": "onegrid-foundry",
+    "defaultModel": "gpt-4o",
+    "//models": "Deployment name | catalog model | version | format | capacity",
+    "models": [
+      { "deployment": "gpt-4o",           "model": "gpt-4o",     "version": "2024-11-20", "format": "OpenAI", "capacity": 100 },
+      { "deployment": "gpt-4.1",          "model": "gpt-4.1",    "version": "2025-04-14", "format": "OpenAI", "capacity": 100 },
+      { "deployment": "gpt-5-mini",       "model": "gpt-5-mini", "version": "2025-08-07", "format": "OpenAI", "capacity": 150 }
+    ]
+  },
+
+  "chatAgent": {
+    "resourceGroup": "rg-onegrid-solution",
+    "appName": "onegrid-app",
+    "environmentName": "onegrid-app-env"
+  },
+
+  "//governance": "OPTIONAL. The OneLake security / data-governance plane. When enabled, the 'governance' phase provisions OneLake data-access roles on the lakehouse (table/row/column scoped) mapped to the persona Entra security groups below, and the app surfaces a read-only /governance review plane that inventories 'who can access what'. Fabric/OneLake remain the authoritative enforcement layer; the review plane is inventory + explanation only. Supply object IDs of EXISTING Entra security groups (never distribution lists). Leave a group blank to skip its role. No secrets belong in this block.",
+  "governance": {
+    "enabled": false,
+    "//mode": "demo = provision illustrative persona roles + sample RLS/CLS; inventory = only stand up the review plane over whatever roles already exist (no role writes).",
+    "mode": "demo",
+    "//groups": "Object IDs of existing Entra security groups. These become the members of the OneLake data-access roles and the app's persona/reviewer authorization.",
+    "groups": {
+      "executivesObjectId": "",
+      "controlRoomObjectId": "",
+      "maintenanceObjectId": "",
+      "ontologyReadersObjectId": "",
+      "reviewersObjectId": "",
+      "platformAdminsObjectId": ""
+    },
+    "//leastPrivilegeApp": "When true, the permissions phase grants the container-app identity least privilege (Power BI workspace Viewer + semantic-model Build) instead of workspace Member, so the runtime identity cannot bypass model RLS or write to the workspace. Default false preserves the original Member grant.",
+    "leastPrivilegeApp": false,
+    "//autoCreateGroups": "Demo mode only. When true (default), the governance phase auto-creates the persona Entra security groups (OneGrid-Executives, -ControlRoom, -Maintenance, -OntologyReaders) for any group left blank above and adds the deploying user, so the OneLake roles are demonstrable out of the box. Requires directory rights to create groups; if unavailable, the phase falls back to seeding the signed-in user directly as a role member. Set false to only use the explicit object ids above.",
+    "autoCreateGroups": true,
+    "//sqlEndpointUserIdentityMode": "When true, the governance phase attempts to switch the Lakehouse SQL analytics endpoint to user-identity mode so SQL queries enforce OneLake roles per-user (required to demonstrate row/column security through the SQL endpoint).",
+    "sqlEndpointUserIdentityMode": true,
+    "//reviewRetentionDays": "How long access snapshots are retained by the review plane.",
+    "reviewRetentionDays": 365
+  }
+}

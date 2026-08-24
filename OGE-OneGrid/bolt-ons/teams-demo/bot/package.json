@@ -1,0 +1,15 @@
+{
+  "name": "onegrid-teams-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Microsoft Teams demo bot for OneGrid — proxies the deployed OneGrid assistant into Teams via the Microsoft 365 Agents SDK.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "@microsoft/agents-hosting": "^1.7.2",
+    "@microsoft/agents-hosting-express": "^1.7.2"
+  }
+}

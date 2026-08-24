@@ -1,0 +1,28 @@
+# Aurora Foundry client and initial-condition tooling.
+microsoft-aurora>=1.5.0
+torch>=2.2
+numpy>=1.26
+xarray>=2024.3
+netCDF4>=1.6
+
+# Aurora's own tropical-cyclone Tracker depends on these.
+scipy>=1.11
+pandas>=2.1
+
+# HRES T0 initial conditions from the public WeatherBench2 archive (no credentials),
+# plus Aurora's static variables from HuggingFace.
+fsspec>=2024.3
+gcsfs>=2024.3
+zarr>=2.17
+huggingface_hub>=0.23
+
+# ERA5 initial conditions via the Copernicus Climate Data Store (optional path).
+cdsapi>=0.7
+
+# HRES / GRIB initial conditions (operational path).
+cfgrib>=0.9.11
+eccodes>=1.7
+
+# Publishing to the model-outputs container.
+azure-identity>=1.16
+azure-storage-blob>=12.20

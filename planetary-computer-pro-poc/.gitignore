@@ -1,0 +1,36 @@
+# Azure / Bicep
+*.azuredownload.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local secrets / params
+*.parameters.local.json
+.env
+
+# Node / web app (webapp + pcp-web-sample)
+node_modules/
+dist/
+dist-ssr/
+.output/
+.nitro/
+.vinxi/
+.tanstack/
+.wrangler/
+.dev.vars
+*.local
+.env.local
+.env.*.local
+*.log
+npm-debug.log*

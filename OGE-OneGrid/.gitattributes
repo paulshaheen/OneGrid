@@ -1,0 +1,9 @@
+# Git LFS — bundle the historical data as binary parquet in the repo.
+# These live in data/ and are copied into the new Lakehouse/Eventhouse by deploy.ps1.
+*.parquet filter=lfs diff=lfs merge=lfs -text
+*.parquet.gz filter=lfs diff=lfs merge=lfs -text
+data/** filter=lfs diff=lfs merge=lfs -text
+
+# Keep text files (README placeholders, manifests) out of LFS.
+data/**/README.txt !filter !diff !merge text
+data/**/_manifest.json !filter !diff !merge text

@@ -1,0 +1,28 @@
+# .NET build artifacts for all data-plane projects (core + connectors)
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Local secret/environment overrides + generated config (never commit)
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.local.json
+appsettings.generated.json
+sources.generated.json
+secrets.json
+
+# Runtime data generated on the host
+tags.json
+sources.json
+*.db
+*.db-wal
+*.db-shm
+queue.db*
+logs/
+*.log

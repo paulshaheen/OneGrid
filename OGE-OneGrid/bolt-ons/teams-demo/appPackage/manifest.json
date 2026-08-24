@@ -1,0 +1,47 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "__BOT_APP_ID__",
+  "developer": {
+    "name": "Ironhart Energy",
+    "websiteUrl": "https://red-grass-0423adb0f.7.azurestaticapps.net",
+    "privacyUrl": "https://red-grass-0423adb0f.7.azurestaticapps.net/contact.html",
+    "termsOfUseUrl": "https://red-grass-0423adb0f.7.azurestaticapps.net/contact.html"
+  },
+  "name": {
+    "short": "OneGrid Assistant",
+    "full": "OneGrid Operations Assistant"
+  },
+  "description": {
+    "short": "Ask OneGrid about fleet health, risk and predictions in Teams.",
+    "full": "Chat with the OneGrid assistant from Microsoft Teams. Ask about live fleet health, asset risk, anomalies, work orders and predictions — grounded entirely in your Microsoft Fabric workspace. Switch to the Fabric Data Agent with /ontology."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#0B5FFF",
+  "bots": [
+    {
+      "botId": "__BOT_APP_ID__",
+      "scopes": ["personal", "team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupChat"],
+          "commands": [
+            { "title": "/assistant", "description": "Use the tool-calling assistant (KQL/DAX over Fabric)" },
+            { "title": "/ontology", "description": "Ask the Fabric Data Agent (semantic-model grounded)" },
+            { "title": "/help", "description": "Show what OneGrid can answer" }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": [
+    "onegrid-app-75033e-chat.niceisland-20053c21.eastus2.azurecontainerapps.io"
+  ]
+}
