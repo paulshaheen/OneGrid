@@ -96,6 +96,11 @@
                   "label": "Aurora scheduled forecast job (Container Apps)",
                   "value": "auroraSchedule",
                   "description": "Azure Container Apps Job that runs the Aurora forecast pipeline every 6 hours and publishes weather-events.json, keeping the map live without manual runs. Requires the Aurora weather model + sample storage, plus a prebuilt pipeline image."
+                },
+                {
+                  "label": "OneGrid Fabric plane (OneLake + hazard join)",
+                  "value": "fabricPlane",
+                  "description": "Prepares the seam for OneGrid's Microsoft Fabric plane: a user-assigned identity and a Storage Blob Data Reader grant on the sample storage, plus deployment outputs consumed by the OneGrid deploy (deploy-onegrid-on-pcp.ps1). The Fabric workspace, OneLake shortcut to model-outputs, and the geo_point_in_polygon hazard join are provisioned by that script (Fabric is not ARM-deployable). Requires sample storage and an existing Fabric capacity."
                 }
               ]
             }
@@ -300,6 +305,65 @@
             ]
           }
         ]
+      },
+      {
+        "name": "fabricConfig",
+        "label": "Fabric plane",
+        "elements": [
+          {
+            "name": "fabricNotSelected",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[not(contains(steps('components').selected, 'fabricPlane'))]",
+            "options": {
+              "icon": "Info",
+              "text": "The OneGrid Fabric plane is not selected. These settings are ignored."
+            }
+          },
+          {
+            "name": "fabricInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[contains(steps('components').selected, 'fabricPlane')]",
+            "options": {
+              "icon": "Info",
+              "text": "This deployment adds only the ARM seam for OneGrid: a user-assigned identity plus a Storage Blob Data Reader grant on the sample storage, and outputs (fabricPlaneConfig) for the OneGrid deploy. After the template completes, run deploy-onegrid-on-pcp.ps1 to create the Fabric workspace, the OneLake shortcut to model-outputs, and the geo_point_in_polygon hazard join. A Fabric workspace cannot be created without a capacity, so supply an existing Fabric capacity (F-SKU or Trial) below."
+            }
+          },
+          {
+            "name": "fabricDepsWarning",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(contains(steps('components').selected, 'sampleStorage')))]",
+            "options": {
+              "icon": "Warning",
+              "text": "Also select 'Sample storage + ingestion identity' above. The Fabric plane reads the model-outputs container in that storage account, so the seam will not deploy without it."
+            }
+          },
+          {
+            "name": "fabricCapacityId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Fabric capacity (resource ID or GUID)",
+            "defaultValue": "",
+            "toolTip": "An existing Microsoft Fabric capacity (F-SKU or Trial). Paste the capacity resource ID (/subscriptions/.../providers/Microsoft.Fabric/capacities/<name>) or its GUID. Required when the Fabric plane is selected.",
+            "constraints": {
+              "required": "[contains(steps('components').selected, 'fabricPlane')]",
+              "regex": "^$|^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|/subscriptions/.+/providers/Microsoft\\.Fabric/capacities/.+)$",
+              "validationMessage": "Enter a Fabric capacity GUID or its full resource ID."
+            },
+            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+          },
+          {
+            "name": "fabricWorkspaceName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Fabric workspace name",
+            "defaultValue": "OneGrid",
+            "toolTip": "Name for the Microsoft Fabric workspace that the OneGrid deploy will create on the capacity above.",
+            "constraints": {
+              "required": false,
+              "regex": "^[A-Za-z0-9 _-]{1,64}$",
+              "validationMessage": "Use 1-64 characters: letters, numbers, space, dash or underscore."
+            },
+            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+          }
+        ]
       }
     ],
     "outputs": {
@@ -318,7 +382,10 @@
       "auroraModelAssetId": "[if(contains(steps('components').selected, 'auroraModel'), steps('aiConfig').auroraSection.auroraModelAssetId, '')]",
       "deployAuroraSchedule": "[contains(steps('components').selected, 'auroraSchedule')]",
       "auroraJobImage": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobImage, '')]",
-      "auroraJobCron": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobCron, '0 1,7,13,19 * * *')]"
+      "auroraJobCron": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobCron, '0 1,7,13,19 * * *')]",
+      "deployFabricPlane": "[contains(steps('components').selected, 'fabricPlane')]",
+      "fabricCapacityId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricCapacityId, '')]",
+      "fabricWorkspaceName": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricWorkspaceName, 'OneGrid')]"
     }
   }
 }
