@@ -364,7 +364,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
       { name: 'MODEL_CONTAINER', value: modelOutputsContainerName }
       { name: 'SHORTCUT_NAME', value: 'pcp_model_outputs' }
       { name: 'CONNECTION_ID', value: fabricConnectionId }
-      { name: 'HAZARD_KQL', value: loadTextContent('../../../OGE-OneGrid/fabric/eventhouse/hazard-geo.kql') }
+      { name: 'HAZARD_KQL', value: loadTextContent('fabric/hazard-geo.kql') }
     ]
     scriptContent: loadTextContent('scripts/fabricplane-provision.ps1')
   }

@@ -1,0 +1,142 @@
+// =====================================================================================
+// OneGrid × Planetary Computer Pro — hazard-geometry join plane (Eventhouse / KQL)
+// -------------------------------------------------------------------------------------
+// Additive to the OneGrid accelerator. This is the analytical seam between the two
+// products:
+//   * Planetary Computer Pro (PCP) is authoritative for STAC/tiling/imagery in its
+//     GeoCatalog. Aurora writes a THIN hazard geometry (storm_id, valid_time,
+//     wind_speed, polygon) to PCP's `model-outputs` blob container.
+//   * A OneLake shortcut (created by deploy.ps1 Phase-FabricPlane) points at that
+//     container so the hazard geometry is readable in Fabric WITHOUT copying imagery.
+//   * The join below runs entirely in Fabric: geo_point_in_polygon(asset_lon,
+//     asset_lat, hazard_polygon) crossed with each asset's condition, producing a
+//     composite risk = "asset sits inside an active hazard polygon" × "asset condition".
+//
+// GeoCatalog stays the map/imagery source; OneLake holds only this analytical copy.
+// Apply with the same `.execute database script` path used for schema.kql.
+// =====================================================================================
+
+// -------------------------------------------------------------------------------------
+// 1) Hazard geometry landing table — the thin polygon set Aurora publishes.
+//    `polygon` is a GeoJSON geometry object (Polygon or MultiPolygon) stored as dynamic.
+//    Populated either by (a) ingesting the shortcut'd model-outputs blob, or
+//    (b) the Eventstream dual-write alternative (same shape).
+// -------------------------------------------------------------------------------------
+.create-merge table HazardGeometry (
+    storm_id:string,
+    valid_time:datetime,
+    wind_speed:real,
+    polygon:dynamic,
+    source:string,
+    IngestedAt:datetime
+)
+
+.create-or-alter table HazardGeometry ingestion json mapping 'HazardGeometryMapping'
+```
+[
+  {"column":"storm_id","Properties":{"Path":"$.storm_id"}},
+  {"column":"valid_time","Properties":{"Path":"$.valid_time"}},
+  {"column":"wind_speed","Properties":{"Path":"$.wind_speed"}},
+  {"column":"polygon","Properties":{"Path":"$.polygon"}},
+  {"column":"source","Properties":{"Path":"$.source"}},
+  {"column":"IngestedAt","Properties":{"Path":"$.valid_time"}}
+]
+```
+
+// -------------------------------------------------------------------------------------
+// 2) Asset registry — the assets being risk-scored (asset_id, lat/lon, condition).
+//    Fed from the OneGrid semantic model / lakehouse asset registry (the authoritative
+//    Plant→Unit→Asset condition data). Created here so the join functions compile even
+//    before it is populated. condition_score is a normalized 0..1 severity where 1 =
+//    worst condition (most degraded).
+// -------------------------------------------------------------------------------------
+.create-merge table AssetRegistry (
+    asset_id:string,
+    asset_name:string,
+    plant:string,
+    unit:string,
+    asset_lat:real,
+    asset_lon:real,
+    condition_score:real,
+    updated_at:datetime
+)
+
+// -------------------------------------------------------------------------------------
+// 3) HazardCurrent() — the latest polygon per storm within a lookback window, so the
+//    join scores against the current forecast state rather than the whole history.
+// -------------------------------------------------------------------------------------
+.create-or-alter function with (docstring = "Latest hazard polygon per storm within lookbackHours (default 24h).", folder = "OneGrid/Hazard")
+    HazardCurrent(lookbackHours:real = 24) {
+    HazardGeometry
+    | where valid_time > ago(lookbackHours * 1h)
+    | summarize arg_max(valid_time, wind_speed, polygon, source) by storm_id
+}
+
+// -------------------------------------------------------------------------------------
+// 4) AssetHazardRisk() — THE JOIN. For every asset and every current hazard polygon,
+//    test whether the asset's point falls inside the polygon using geo_point_in_polygon.
+//    Returns one row per (asset, storm) that is inside a hazard polygon.
+// -------------------------------------------------------------------------------------
+.create-or-alter function with (docstring = "Assets whose location falls inside a current hazard polygon (spatial join).", folder = "OneGrid/Hazard")
+    AssetHazardRisk(lookbackHours:real = 24) {
+    let hazards = HazardCurrent(lookbackHours);
+    AssetRegistry
+    | where isnotnull(asset_lat) and isnotnull(asset_lon)
+    | extend _dummy = 1
+    | join kind=inner (hazards | extend _dummy = 1) on _dummy
+    | project-away _dummy, _dummy1
+    | where geo_point_in_polygon(asset_lon, asset_lat, polygon)
+    | project asset_id, asset_name, plant, unit, asset_lat, asset_lon,
+              condition_score, storm_id, valid_time, wind_speed
+}
+
+// -------------------------------------------------------------------------------------
+// 5) AssetCompositeRisk() — composite exposure = in-hazard × asset condition.
+//    composite_risk = normalized hazard intensity (wind_speed) × condition_score, so a
+//    degraded asset inside a strong storm ranks highest. Banded for the watchlist.
+//    windRef (default 70 m/s ~ Cat-5 reference) normalizes wind_speed to 0..1.
+// -------------------------------------------------------------------------------------
+.create-or-alter function with (docstring = "Composite hazard×condition risk per exposed asset, banded LOW/MEDIUM/HIGH/CRITICAL.", folder = "OneGrid/Hazard")
+    AssetCompositeRisk(lookbackHours:real = 24, windRef:real = 70) {
+    AssetHazardRisk(lookbackHours)
+    | extend hazard_intensity = todouble(min_of(wind_speed / windRef, 1.0))
+    | extend condition = todouble(coalesce(condition_score, 0.0))
+    | extend composite_risk = round(hazard_intensity * condition, 4)
+    | extend risk_band = case(
+        composite_risk >= 0.60, "CRITICAL",
+        composite_risk >= 0.35, "HIGH",
+        composite_risk >= 0.15, "MEDIUM",
+        "LOW")
+    | project asset_id, asset_name, plant, unit, storm_id, valid_time,
+              wind_speed, condition_score, hazard_intensity, composite_risk, risk_band
+    | order by composite_risk desc
+}
+
+// -------------------------------------------------------------------------------------
+// 6) Snapshot table + populate function — persist a point-in-time composite-risk table
+//    the report/semantic model and chat agent can read directly. Refresh by calling
+//    UpdateAssetCompositeRiskSnapshot() on a schedule (or from the pipeline) with:
+//        .set-or-append AssetCompositeRiskSnapshot <| AssetCompositeRisk()
+// -------------------------------------------------------------------------------------
+.create-merge table AssetCompositeRiskSnapshot (
+    snapshot_ts:datetime,
+    asset_id:string,
+    asset_name:string,
+    plant:string,
+    unit:string,
+    storm_id:string,
+    valid_time:datetime,
+    wind_speed:real,
+    condition_score:real,
+    hazard_intensity:real,
+    composite_risk:real,
+    risk_band:string
+)
+
+.create-or-alter function with (docstring = "Rows to append into AssetCompositeRiskSnapshot for a scheduled refresh.", folder = "OneGrid/Hazard")
+    AssetCompositeRiskForSnapshot(lookbackHours:real = 24, windRef:real = 70) {
+    AssetCompositeRisk(lookbackHours, windRef)
+    | extend snapshot_ts = now()
+    | project snapshot_ts, asset_id, asset_name, plant, unit, storm_id, valid_time,
+              wind_speed, condition_score, hazard_intensity, composite_risk, risk_band
+}
