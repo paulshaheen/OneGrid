@@ -362,6 +362,19 @@
               "validationMessage": "Use 1-64 characters: letters, numbers, space, dash or underscore."
             },
             "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+          },
+          {
+            "name": "fabricConnectionId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Fabric storage connection ID (optional)",
+            "defaultValue": "",
+            "toolTip": "GUID of a Fabric cloud connection to the sample storage account. Needed only for the OneLake shortcut to the model-outputs container. Leave blank to provision the workspace, lakehouse, eventhouse and hazard join now and add the shortcut later.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a connection GUID, e.g. 00000000-0000-0000-0000-000000000000, or leave blank."
+            },
+            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
           }
         ]
       }
@@ -385,7 +398,8 @@
       "auroraJobCron": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobCron, '0 1,7,13,19 * * *')]",
       "deployFabricPlane": "[contains(steps('components').selected, 'fabricPlane')]",
       "fabricCapacityId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricCapacityId, '')]",
-      "fabricWorkspaceName": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricWorkspaceName, 'OneGrid')]"
+      "fabricWorkspaceName": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricWorkspaceName, 'OneGrid')]",
+      "fabricConnectionId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricConnectionId, '')]"
     }
   }
 }

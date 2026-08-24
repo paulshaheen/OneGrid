@@ -100,7 +100,7 @@ param auroraJobCron string = '0 1,7,13,19 * * *'
 // This template stays the authoritative PCP backend; these params only add the seam:
 // a managed identity + storage read grant, and a ready-to-run OneGrid config as outputs.
 // ------------------------------------------------------------------------------------
-@description('Enable the OneGrid Fabric plane on top of this PCP backend: a OneLake shortcut to the model-outputs container, the geo_point_in_polygon hazard join, and composite-risk tables. Fabric is not ARM-provisionable, so this template emits a ready-to-run OneGrid config from its outputs and provisions the identity + storage read grant the plane needs; run the OneGrid deploy (wrapper/wizard) to complete it. Requires deploySampleStorage and an existing Microsoft Fabric capacity.')
+@description('Enable the OneGrid Fabric plane on top of this PCP backend: it provisions a Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join + composite-risk tables, and (when a connection id is supplied) a OneLake shortcut to the model-outputs container. Fabric is not an ARM resource type, so this runs as an in-template deploymentScript (Fabric REST) using the Fabric-plane identity. Requires deploySampleStorage and an existing Microsoft Fabric capacity.')
 param deployFabricPlane bool = false
 
 @description('Existing Microsoft Fabric capacity resource id or capacity GUID (F-SKU or Trial). Required when deployFabricPlane is true — a Fabric workspace cannot be created without one.')
@@ -108,6 +108,9 @@ param fabricCapacityId string = ''
 
 @description('Display name of the Fabric workspace the OneGrid plane provisions.')
 param fabricWorkspaceName string = 'OneGrid'
+
+@description('GUID of a Fabric cloud connection to the sample storage account. Needed only for the OneLake shortcut to the model-outputs container; leave blank to provision the Fabric plane (workspace, lakehouse, eventhouse, hazard KQL) and add the shortcut later.')
+param fabricConnectionId string = ''
 
 // ------------------------------------------------------------------------------------
 // Variables
@@ -328,6 +331,47 @@ resource fabricPlaneBlobReaderRole 'Microsoft.Authorization/roleAssignments@2022
     principalId: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : ''
     principalType: 'ServicePrincipal'
   }
+}
+
+// In-template provisioning of the Fabric plane. Fabric workspaces/lakehouses/eventhouses/
+// shortcuts/KQL are not ARM resource types, so we run the Fabric REST calls as a
+// deploymentScript (Azure PowerShell) during the deployment, under the Fabric-plane
+// identity. This is what makes the plane deploy alongside the other components instead of
+// requiring a separate manual script run. The hazard-geometry / geo_point_in_polygon KQL
+// is embedded from the OneGrid repo at build time.
+resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (deployFabricPlaneEffective) {
+  name: '${namePrefix}-fabricplane-provision'
+  location: location
+  kind: 'AzurePowerShell'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${fabricPlaneIdentity.id}': {}
+    }
+  }
+  properties: {
+    azPowerShellVersion: '11.5'
+    retentionInterval: 'P1D'
+    timeout: 'PT45M'
+    cleanupPreference: 'OnSuccess'
+    environmentVariables: [
+      { name: 'FABRIC_CAPACITY_ID', value: fabricCapacityId }
+      { name: 'FABRIC_WORKSPACE', value: fabricWorkspaceName }
+      { name: 'LAKEHOUSE_NAME', value: 'OneGridLakehouse' }
+      { name: 'EVENTHOUSE_NAME', value: 'OneGridEventhouse' }
+      { name: 'KQLDB_NAME', value: 'OneGridDB' }
+      { name: 'BLOB_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.blob : '' }
+      { name: 'MODEL_CONTAINER', value: modelOutputsContainerName }
+      { name: 'SHORTCUT_NAME', value: 'pcp_model_outputs' }
+      { name: 'CONNECTION_ID', value: fabricConnectionId }
+      { name: 'HAZARD_KQL', value: loadTextContent('../../../OGE-OneGrid/fabric/eventhouse/hazard-geo.kql') }
+    ]
+    scriptContent: loadTextContent('scripts/fabricplane-provision.ps1')
+  }
+  dependsOn: [
+    fabricPlaneBlobReaderRole
+    modelOutputsContainer
+  ]
 }
 
 // ------------------------------------------------------------------------------------
@@ -833,12 +877,14 @@ output entraRedirectUri string = deployWebApp ? 'https://${webAppHost}/auth/call
 // this deployment's real resources) plus the command to run it. Feed fabricPlaneConfig
 // into OneGrid's config.json (the wrapper deploy-onegrid-on-pcp.ps1 does this for you).
 // ------------------------------------------------------------------------------------
-@description('Whether the OneGrid Fabric plane seam was provisioned (identity + storage read grant). Complete the plane by running the OneGrid deploy with fabricPlaneConfig.')
+@description('Whether the OneGrid Fabric plane was provisioned (workspace, lakehouse, eventhouse, hazard KQL, and identity + storage read grant) in this deployment.')
 output fabricPlaneEnabled bool = deployFabricPlaneEffective
 @description('Principal (object) ID of the OneGrid Fabric-plane managed identity (has Storage Blob Data Reader on the sample storage account).')
 output fabricPlaneIdentityPrincipalId string = deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : 'not-deployed'
 @description('Existing Microsoft Fabric capacity id/GUID the OneGrid plane deploys onto (echoed from input).')
 output fabricPlaneCapacityId string = deployFabricPlaneEffective ? fabricCapacityId : 'not-deployed'
+@description('Result of the in-template Fabric provisioning: workspace/lakehouse/eventhouse ids, KQL apply status, and OneLake shortcut status.')
+output fabricPlaneProvisionResult object = deployFabricPlaneEffective ? fabricPlaneScript.properties.outputs : {}
 @description('Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut.')
 output fabricPlaneConfig object = deployFabricPlaneEffective ? {
   reuseExistingFoundry: deployAiAgent
@@ -858,5 +904,5 @@ output fabricPlaneConfig object = deployFabricPlaneEffective ? {
     geoCatalogUri: geoCatalog.properties.catalogUri
   }
 } : {}
-@description('Command to complete the Fabric plane: threads the deployment outputs into OneGrid config.json and runs its Fabric provisioning (workspace, core, fabricplane, ...).')
-output fabricPlaneCommand string = deployFabricPlaneEffective ? './deploy-onegrid-on-pcp.ps1 -ResourceGroup ${resourceGroup().name} -DeploymentName <thisDeploymentName>' : 'not-applicable'
+@description('The Fabric plane is provisioned in-template. If no fabricConnectionId was supplied, create a Fabric cloud connection to the sample storage account and re-deploy with fabricConnectionId set to add the OneLake shortcut to model-outputs.')
+output fabricPlaneCommand string = deployFabricPlaneEffective ? (empty(fabricConnectionId) ? 'provisioned (set fabricConnectionId to add the OneLake shortcut)' : 'provisioned (shortcut included)') : 'not-applicable'
