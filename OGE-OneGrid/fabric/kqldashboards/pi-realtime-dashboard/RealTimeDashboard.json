@@ -1,0 +1,264 @@
+{
+  "schema_version": 75,
+  "title": "pi-realtime-dashboard",
+  "autoRefresh": {
+    "enabled": true,
+    "defaultInterval": "10s",
+    "minInterval": "1s"
+  },
+  "changeDetection": {
+    "kind": "liveUpdates",
+    "minRefreshRate": "10s",
+    "fallbackRefreshRate": "30s"
+  },
+  "baseQueries": [],
+  "parameters": [],
+  "pages": [
+    {
+      "id": "c0ffee00-0000-0000-0000-000000000001",
+      "name": "Today's Critical Tags"
+    },
+    {
+      "id": "39439a23-bef6-4dde-97e1-5107bcb21745",
+      "name": "Overview"
+    }
+  ],
+  "dataSources": [
+    {
+      "id": "793f0ae3-ae0b-4761-a8c5-6117c283db51",
+      "name": "pi-realtime-db",
+      "kind": "kusto-trident",
+      "clusterUri": "https://trd-8a08ckb2duw406mvvg.z2.kusto.fabric.microsoft.com",
+      "database": "da213762-0780-4c20-aef2-04371f1a4d89",
+      "databaseArtifactId": "da213762-0780-4c20-aef2-04371f1a4d89",
+      "workspace": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "queries": [
+    {
+      "id": "8634a8f5-05ee-4f1a-a920-52443e74e708",
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "usedVariables": [],
+      "text": "PiEvents\n| where IngestedAt > ago(15m)\n| summarize Samples = count() by bin(IngestedAt, 10s)\n| render timechart"
+    },
+    {
+      "id": "a61ae084-e3d5-4a24-9a60-6055d01f6aca",
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "usedVariables": [],
+      "text": "PiEvents\n| where IngestedAt > ago(1m)\n| summarize Samples = count() by Plant\n| render columnchart"
+    },
+    {
+      "id": "d04ef3c1-ffbf-42f6-96f4-c336fcd25c2c",
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "usedVariables": [],
+      "text": "PiEvents\n| where IngestedAt > ago(2m)\n| summarize arg_max(Ts, Value, ValueType, Plant) by Tag\n| order by Tag asc"
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "let crit = datatable(Tag:string, Descriptor:string, Risk:real)[\n    \"RV2:TXSU2TS14.AG\",\"Tsi Turb Speed\",2855.7610,\n    \"RV2:FLZU2HLV51XFB.AG\",\"Heater Lvl Vv 51 X Feedback\",2135.7175,\n    \"RV2:FLZU2HLV51XD.AG\",\"Heater Lvl Vv 51 X Demand\",1854.9820,\n    \"RV3:FPSU3TS24E.AG\",\"3E Bfpp  Speed\",1792.9870,\n    \"RV3:TXSU3TS15A1.AG\",\"Unit 3 Turbine Speed\",965.1263\n];\nlet baseline = PiEvents\n| where Tag in (crit | project Tag) and not(Questionable) and Ts between (ago(14d) .. ago(1h))\n| summarize Expected=avg(toreal(Value)), Std=stdev(toreal(Value)) by Tag;\nPiEvents\n| where Tag in (crit | project Tag) and not(Questionable) and IngestedAt > ago(10m)\n| summarize arg_max(Ts, Value) by Tag\n| join kind=inner crit on Tag\n| join kind=leftouter baseline on Tag\n| extend Actual=round(toreal(Value),2), Expected=round(Expected,2)\n| extend Deviation=round(Actual-Expected,2), Sigma=iff(isnull(Std) or Std<=0,real(null),round((Actual-Expected)/Std,1))\n| project Priority=\"CRITICAL\", Descriptor, Tag, Actual, Expected, Deviation, Sigma, RiskZ=round(Risk,1), Updated=Ts\n| order by RiskZ desc",
+      "id": "c0ffee00-0000-0000-0000-000000000002",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "let crit = dynamic([\"RV2:TXSU2TS14.AG\",\"RV2:FLZU2HLV51XFB.AG\",\"RV2:FLZU2HLV51XD.AG\",\"RV3:FPSU3TS24E.AG\",\"RV3:TXSU3TS15A1.AG\"]);\nPiEvents\n| where Tag in (crit) and Ts > ago(1h)\n| summarize Value=avg(toreal(Value)) by bin(Ts, 1m), Tag\n| order by Ts asc",
+      "id": "c0ffee00-0000-0000-0000-000000000003",
+      "usedVariables": []
+    }
+  ],
+  "tiles": [
+    {
+      "id": "a78a0683-2a6b-4d4b-a1ae-2d6278993189",
+      "title": "Sample throughput (10s bins, last 15m)",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 12,
+        "height": 7
+      },
+      "pageId": "39439a23-bef6-4dde-97e1-5107bcb21745",
+      "visualType": "line",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "8634a8f5-05ee-4f1a-a920-52443e74e708"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "xColumn": null,
+        "xColumnTitle": "",
+        "yColumns": null,
+        "yColumnTitle": "",
+        "yAxisRight": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        }
+      }
+    },
+    {
+      "id": "1252f7a1-659e-4ca2-9f13-b4914b4ca010",
+      "title": "Samples per plant (last 1m)",
+      "layout": {
+        "x": 12,
+        "y": 0,
+        "width": 12,
+        "height": 7
+      },
+      "pageId": "39439a23-bef6-4dde-97e1-5107bcb21745",
+      "visualType": "column",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "a61ae084-e3d5-4a24-9a60-6055d01f6aca"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "xColumn": null,
+        "xColumnTitle": "",
+        "yColumns": null,
+        "yColumnTitle": "",
+        "yAxisRight": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        }
+      }
+    },
+    {
+      "id": "feb44131-8789-4aef-9ec0-4a6384e528e2",
+      "title": "Latest reading per tag (last 2m)",
+      "layout": {
+        "x": 0,
+        "y": 7,
+        "width": 24,
+        "height": 10
+      },
+      "pageId": "39439a23-bef6-4dde-97e1-5107bcb21745",
+      "visualType": "table",
+      "queryRef": {
+        "kind": "query",
+        "queryId": "d04ef3c1-ffbf-42f6-96f4-c336fcd25c2c"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": false,
+        "table__renderLinks": [],
+        "colorRules": [],
+        "colorRulesDisabled": true,
+        "crossFilterDisabled": false,
+        "drillthroughDisabled": false,
+        "crossFilter": [],
+        "drillthrough": [],
+        "selectedDataOnLoad": {
+          "all": false,
+          "limit": 10
+        }
+      }
+    },
+    {
+      "id": "c0ffee00-0000-0000-0000-000000000004",
+      "title": "Today's CRITICAL Tags - Actual vs Expected (Live)",
+      "visualType": "table",
+      "pageId": "c0ffee00-0000-0000-0000-000000000001",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 24,
+        "height": 13
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c0ffee00-0000-0000-0000-000000000002"
+      },
+      "visualOptions": {
+        "colorRulesDisabled": true,
+        "colorRules": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 100
+        }
+      }
+    },
+    {
+      "id": "c0ffee00-0000-0000-0000-000000000005",
+      "title": "Today's CRITICAL Tags - Live Trend (60 min)",
+      "visualType": "line",
+      "pageId": "c0ffee00-0000-0000-0000-000000000001",
+      "layout": {
+        "x": 0,
+        "y": 13,
+        "width": 24,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c0ffee00-0000-0000-0000-000000000003"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "xColumn": null,
+        "xColumnTitle": "",
+        "yColumns": null,
+        "yColumnTitle": "",
+        "yAxisRight": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        }
+      }
+    }
+  ],
+  "embeddedApps": []
+}

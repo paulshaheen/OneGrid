@@ -5,8 +5,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.44.1.10279",
-      "templateHash": "1117880511806742876"
+      "version": "0.46.1.21595",
+      "templateHash": "18434142693213405818"
     }
   },
   "parameters": {
@@ -174,6 +174,27 @@
       "metadata": {
         "description": "Cron schedule (UTC) for the Aurora forecast job. The default runs ~1 h after each synoptic cycle (00/06/12/18 UTC) to allow for input-data latency."
       }
+    },
+    "deployFabricPlane": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable the OneGrid Fabric plane on top of this PCP backend: a OneLake shortcut to the model-outputs container, the geo_point_in_polygon hazard join, and composite-risk tables. Fabric is not ARM-provisionable, so this template emits a ready-to-run OneGrid config from its outputs and provisions the identity + storage read grant the plane needs; run the OneGrid deploy (wrapper/wizard) to complete it. Requires deploySampleStorage and an existing Microsoft Fabric capacity."
+      }
+    },
+    "fabricCapacityId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Existing Microsoft Fabric capacity resource id or capacity GUID (F-SKU or Trial). Required when deployFabricPlane is true — a Fabric workspace cannot be created without one."
+      }
+    },
+    "fabricWorkspaceName": {
+      "type": "string",
+      "defaultValue": "OneGrid",
+      "metadata": {
+        "description": "Display name of the Fabric workspace the OneGrid plane provisions."
+      }
     }
   },
   "variables": {
@@ -212,7 +233,9 @@
     "deployAuroraJob": "[and(and(parameters('deployAuroraSchedule'), parameters('deployAuroraModel')), parameters('deploySampleStorage'))]",
     "auroraJobImageRef": "[if(not(empty(parameters('auroraJobImage'))), parameters('auroraJobImage'), format('{0}.azurecr.io/aurora-pipeline:{1}', variables('auroraAcrName'), parameters('auroraJobImageTag')))]",
     "auroraJobUsesAcr": "[and(variables('deployAuroraJob'), or(empty(parameters('auroraJobImage')), contains(parameters('auroraJobImage'), '.azurecr.io')))]",
-    "auroraJobRegistryServer": "[if(empty(parameters('auroraJobImage')), format('{0}.azurecr.io', variables('auroraAcrName')), if(contains(parameters('auroraJobImage'), '.azurecr.io'), split(parameters('auroraJobImage'), '/')[0], ''))]"
+    "auroraJobRegistryServer": "[if(empty(parameters('auroraJobImage')), format('{0}.azurecr.io', variables('auroraAcrName')), if(contains(parameters('auroraJobImage'), '.azurecr.io'), split(parameters('auroraJobImage'), '/')[0], ''))]",
+    "deployFabricPlaneEffective": "[and(parameters('deployFabricPlane'), parameters('deploySampleStorage'))]",
+    "fabricPlaneIdentityName": "[format('{0}-fabricplane-identity', variables('namePrefix'))]"
   },
   "imports": {
     "microsoftGraphV1": {
@@ -348,6 +371,29 @@
       "dependsOn": [
         "geoCatalog",
         "webApp"
+      ]
+    },
+    "fabricPlaneIdentity": {
+      "condition": "[variables('deployFabricPlaneEffective')]",
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[variables('fabricPlaneIdentityName')]",
+      "location": "[parameters('location')]"
+    },
+    "fabricPlaneBlobReaderRole": {
+      "condition": "[variables('deployFabricPlaneEffective')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('storageBlobDataReaderRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataReaderRoleId'))]",
+        "principalId": "[if(variables('deployFabricPlaneEffective'), reference('fabricPlaneIdentity').principalId, '')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "fabricPlaneIdentity",
+        "sampleStorage"
       ]
     },
     "openAi": {
@@ -997,6 +1043,41 @@
         "description": "SPA redirect URI the Entra app must trust. Auto-registered when entraAppAutoRegistered is true; add it manually otherwise."
       },
       "value": "[if(parameters('deployWebApp'), format('https://{0}/auth/callback', variables('webAppHost')), 'not-deployed')]"
+    },
+    "fabricPlaneEnabled": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether the OneGrid Fabric plane seam was provisioned (identity + storage read grant). Complete the plane by running the OneGrid deploy with fabricPlaneConfig."
+      },
+      "value": "[variables('deployFabricPlaneEffective')]"
+    },
+    "fabricPlaneIdentityPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Principal (object) ID of the OneGrid Fabric-plane managed identity (has Storage Blob Data Reader on the sample storage account)."
+      },
+      "value": "[if(variables('deployFabricPlaneEffective'), reference('fabricPlaneIdentity').principalId, 'not-deployed')]"
+    },
+    "fabricPlaneCapacityId": {
+      "type": "string",
+      "metadata": {
+        "description": "Existing Microsoft Fabric capacity id/GUID the OneGrid plane deploys onto (echoed from input)."
+      },
+      "value": "[if(variables('deployFabricPlaneEffective'), parameters('fabricCapacityId'), 'not-deployed')]"
+    },
+    "fabricPlaneConfig": {
+      "type": "object",
+      "metadata": {
+        "description": "Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut."
+      },
+      "value": "[if(variables('deployFabricPlaneEffective'), createObject('reuseExistingFoundry', parameters('deployAiAgent'), 'fabric', createObject('capacityId', parameters('fabricCapacityId'), 'workspaceName', parameters('fabricWorkspaceName')), 'pcp', createObject('storageAccountName', variables('sampleStorageName'), 'storageAccountId', resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'blobEndpoint', reference('sampleStorage').primaryEndpoints.blob, 'modelOutputsContainer', variables('modelOutputsContainerName'), 'shortcutName', 'pcp_model_outputs', 'connectionId', '', 'openAiEndpoint', if(parameters('deployAiAgent'), reference('openAi').endpoint, ''), 'openAiAccountId', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), ''), 'geoCatalogUri', reference('geoCatalog').catalogUri)), createObject())]"
+    },
+    "fabricPlaneCommand": {
+      "type": "string",
+      "metadata": {
+        "description": "Command to complete the Fabric plane: threads the deployment outputs into OneGrid config.json and runs its Fabric provisioning (workspace, core, fabricplane, ...)."
+      },
+      "value": "[if(variables('deployFabricPlaneEffective'), format('./deploy-onegrid-on-pcp.ps1 -ResourceGroup {0} -DeploymentName <thisDeploymentName>', resourceGroup().name), 'not-applicable')]"
     }
   }
 }

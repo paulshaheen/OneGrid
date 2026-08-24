@@ -94,6 +94,22 @@ param auroraJobImageTag string = 'latest'
 param auroraJobCron string = '0 1,7,13,19 * * *'
 
 // ------------------------------------------------------------------------------------
+// OneGrid Fabric plane (additive) — see deploy/onegrid section below.
+// Fabric (OneLake/Eventhouse/semantic model) is NOT provisionable by RG-scoped ARM, so
+// the actual Fabric provisioning runs post-deploy via OneGrid's deploy.ps1 (Fabric REST).
+// This template stays the authoritative PCP backend; these params only add the seam:
+// a managed identity + storage read grant, and a ready-to-run OneGrid config as outputs.
+// ------------------------------------------------------------------------------------
+@description('Enable the OneGrid Fabric plane on top of this PCP backend: a OneLake shortcut to the model-outputs container, the geo_point_in_polygon hazard join, and composite-risk tables. Fabric is not ARM-provisionable, so this template emits a ready-to-run OneGrid config from its outputs and provisions the identity + storage read grant the plane needs; run the OneGrid deploy (wrapper/wizard) to complete it. Requires deploySampleStorage and an existing Microsoft Fabric capacity.')
+param deployFabricPlane bool = false
+
+@description('Existing Microsoft Fabric capacity resource id or capacity GUID (F-SKU or Trial). Required when deployFabricPlane is true — a Fabric workspace cannot be created without one.')
+param fabricCapacityId string = ''
+
+@description('Display name of the Fabric workspace the OneGrid plane provisions.')
+param fabricWorkspaceName string = 'OneGrid'
+
+// ------------------------------------------------------------------------------------
 // Variables
 // ------------------------------------------------------------------------------------
 
@@ -173,6 +189,11 @@ var auroraJobImageRef = !empty(auroraJobImage) ? auroraJobImage : '${auroraAcrNa
 // (the auto-provisioned one, or an external *.azurecr.io the caller supplied).
 var auroraJobUsesAcr = deployAuroraJob && (empty(auroraJobImage) || contains(auroraJobImage, '.azurecr.io'))
 var auroraJobRegistryServer = empty(auroraJobImage) ? '${auroraAcrName}.azurecr.io' : (contains(auroraJobImage, '.azurecr.io') ? split(auroraJobImage, '/')[0] : '')
+
+// OneGrid Fabric plane (additive). The plane needs sample storage (for the model-outputs
+// container the OneLake shortcut targets), so it only engages when that is present.
+var deployFabricPlaneEffective = deployFabricPlane && deploySampleStorage
+var fabricPlaneIdentityName = '${namePrefix}-fabricplane-identity'
 
 // ------------------------------------------------------------------------------------
 // Core resource: the Planetary Computer Pro GeoCatalog
@@ -283,6 +304,28 @@ resource appGeoCatalogAdminRole 'Microsoft.Authorization/roleAssignments@2022-04
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', geoCatalogAdminRoleId)
     principalId: deployWebApp ? webApp.identity.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ------------------------------------------------------------------------------------
+// Optional: OneGrid Fabric-plane identity + read grant (additive seam)
+// A user-assigned managed identity for the OneGrid Fabric plane, granted Storage Blob
+// Data Reader on the sample storage account so the OneLake shortcut to the model-outputs
+// container (and anything reading Aurora's hazard geometry) resolves under a real
+// identity. PCP's own resources are unchanged; this only ADDS an identity + a read role.
+// ------------------------------------------------------------------------------------
+resource fabricPlaneIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (deployFabricPlaneEffective) {
+  name: fabricPlaneIdentityName
+  location: location
+}
+
+resource fabricPlaneBlobReaderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFabricPlaneEffective) {
+  name: guid(sampleStorage.id, fabricPlaneIdentityName, storageBlobDataReaderRoleId)
+  scope: sampleStorage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataReaderRoleId)
+    principalId: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : ''
     principalType: 'ServicePrincipal'
   }
 }
@@ -783,3 +826,37 @@ output entraTenantId string = effectiveEntraTenantId
 output entraAppAutoRegistered bool = registerEntraApp
 @description('SPA redirect URI the Entra app must trust. Auto-registered when entraAppAutoRegistered is true; add it manually otherwise.')
 output entraRedirectUri string = deployWebApp ? 'https://${webAppHost}/auth/callback' : 'not-deployed'
+
+// ------------------------------------------------------------------------------------
+// OneGrid Fabric-plane outputs (additive). Fabric can't be provisioned by ARM, so these
+// hand the Fabric plane everything it needs: the exact OneGrid `pcp` config (derived from
+// this deployment's real resources) plus the command to run it. Feed fabricPlaneConfig
+// into OneGrid's config.json (the wrapper deploy-onegrid-on-pcp.ps1 does this for you).
+// ------------------------------------------------------------------------------------
+@description('Whether the OneGrid Fabric plane seam was provisioned (identity + storage read grant). Complete the plane by running the OneGrid deploy with fabricPlaneConfig.')
+output fabricPlaneEnabled bool = deployFabricPlaneEffective
+@description('Principal (object) ID of the OneGrid Fabric-plane managed identity (has Storage Blob Data Reader on the sample storage account).')
+output fabricPlaneIdentityPrincipalId string = deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : 'not-deployed'
+@description('Existing Microsoft Fabric capacity id/GUID the OneGrid plane deploys onto (echoed from input).')
+output fabricPlaneCapacityId string = deployFabricPlaneEffective ? fabricCapacityId : 'not-deployed'
+@description('Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut.')
+output fabricPlaneConfig object = deployFabricPlaneEffective ? {
+  reuseExistingFoundry: deployAiAgent
+  fabric: {
+    capacityId: fabricCapacityId
+    workspaceName: fabricWorkspaceName
+  }
+  pcp: {
+    storageAccountName: sampleStorageName
+    storageAccountId: sampleStorage.id
+    blobEndpoint: sampleStorage.properties.primaryEndpoints.blob
+    modelOutputsContainer: modelOutputsContainerName
+    shortcutName: 'pcp_model_outputs'
+    connectionId: ''
+    openAiEndpoint: deployAiAgent ? openAi.properties.endpoint : ''
+    openAiAccountId: deployAiAgent ? openAi.id : ''
+    geoCatalogUri: geoCatalog.properties.catalogUri
+  }
+} : {}
+@description('Command to complete the Fabric plane: threads the deployment outputs into OneGrid config.json and runs its Fabric provisioning (workspace, core, fabricplane, ...).')
+output fabricPlaneCommand string = deployFabricPlaneEffective ? './deploy-onegrid-on-pcp.ps1 -ResourceGroup ${resourceGroup().name} -DeploymentName <thisDeploymentName>' : 'not-applicable'

@@ -1,0 +1,143 @@
+table fact_icare_measurement
+	lineageTag: c5096023-b445-4d8a-997d-54ada4aa4e8f
+	sourceLineageTag: [gold].[fact_icare_measurement]
+
+	column measurementId
+		dataType: string
+		lineageTag: 3da7f970-5009-4689-b44c-067c4bb13cd4
+		sourceLineageTag: measurementId
+		summarizeBy: none
+		sourceColumn: measurementId
+
+		annotation SummarizationSetBy = Automatic
+
+	column icare_id
+		dataType: string
+		lineageTag: 56635392-4bc3-45c1-9195-302f3e8f6bad
+		sourceLineageTag: icare_id
+		summarizeBy: none
+		sourceColumn: icare_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_name
+		dataType: string
+		lineageTag: 5beabe87-19b9-42f9-83aa-e877526a416a
+		sourceLineageTag: asset_name
+		summarizeBy: none
+		sourceColumn: asset_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column gds
+		dataType: string
+		lineageTag: 89fecb47-64b9-4735-9e47-fc20d342117e
+		sourceLineageTag: gds
+		summarizeBy: none
+		sourceColumn: gds
+
+		annotation SummarizationSetBy = Automatic
+
+	column acqend
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 9effa16a-6760-4b4d-b1be-f51d75280f52
+		sourceLineageTag: acqend
+		summarizeBy: none
+		sourceColumn: acqend
+
+		annotation SummarizationSetBy = Automatic
+
+	column date_key
+		dataType: int64
+		formatString: 0
+		lineageTag: 68bf1f59-d026-498f-8916-452d39b27b3e
+		sourceLineageTag: date_key
+		summarizeBy: sum
+		sourceColumn: date_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column value
+		dataType: double
+		lineageTag: 331e2d54-e13d-4f04-a5a7-6ab7d704fbed
+		sourceLineageTag: value
+		summarizeBy: sum
+		sourceColumn: value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column status
+		dataType: int64
+		formatString: 0
+		lineageTag: 3f779a86-15dc-4c4c-bdee-e9af0ccdf2cb
+		sourceLineageTag: status
+		summarizeBy: sum
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column res_type
+		dataType: string
+		lineageTag: 95b5e191-f41a-4f61-a80e-0ba21450f686
+		sourceLineageTag: res_type
+		summarizeBy: none
+		sourceColumn: res_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column global_type
+		dataType: string
+		lineageTag: 7eb9ccdd-51d3-4325-9a2f-09f09cfc6ea5
+		sourceLineageTag: global_type
+		summarizeBy: none
+		sourceColumn: global_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column analysis_status
+		dataType: string
+		lineageTag: b1096e61-0695-4ed2-b94f-0aa79c68b7b1
+		sourceLineageTag: analysis_status
+		summarizeBy: none
+		sourceColumn: analysis_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column technology
+		dataType: string
+		lineageTag: d0e0ae6e-0117-4ccc-aac5-825807adea02
+		sourceLineageTag: technology
+		summarizeBy: none
+		sourceColumn: technology
+
+		annotation SummarizationSetBy = Automatic
+
+	column analysis_measured_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: d2696530-ed92-4339-9096-6053a712a98b
+		sourceLineageTag: analysis_measured_date
+		summarizeBy: none
+		sourceColumn: analysis_measured_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_id
+		dataType: string
+		lineageTag: 37405b13-a66a-4f81-818c-efba7c6ca242
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_icare_measurement = entity
+		mode: directLake
+		source
+			entityName: fact_icare_measurement
+			schemaName: gold
+			expressionSource: 'DirectLake - lh_poc'
+

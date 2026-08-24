@@ -1,0 +1,19 @@
+{
+  "Id": "100001",
+  "Namespace": "usertypes",
+  "BaseEntityTypeId": "2",
+  "Name": "Plant",
+  "Properties": [
+    {
+      "ValueType": "String",
+      "Name": "DisplayName",
+      "Id": "9000000000000001"
+    },
+    {
+      "ValueType": "String",
+      "Name": "SiteCode",
+      "Id": "9000000000000002"
+    }
+  ],
+  "TimeseriesProperties": []
+}

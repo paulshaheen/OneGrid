@@ -1,0 +1,120 @@
+table root_cause
+	lineageTag: 2a241c9c-c058-415f-9c6d-6b4c9a1e34ba
+	sourceLineageTag: [ml].[root_cause]
+
+	column scoring_date
+		dataType: string
+		lineageTag: 7df964f3-ebfd-4f3b-b29a-c218dac6a6d6
+		sourceLineageTag: scoring_date
+		summarizeBy: none
+		sourceColumn: scoring_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_id
+		dataType: string
+		lineageTag: 93cab2a4-02ac-46f5-b08d-097756c8c1dc
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag
+		dataType: string
+		lineageTag: 86009335-aec7-4b90-ad5a-f3e78e011cf6
+		sourceLineageTag: tag
+		summarizeBy: none
+		sourceColumn: tag
+
+		annotation SummarizationSetBy = Automatic
+
+	column descriptor
+		dataType: string
+		lineageTag: d75b80eb-148b-41a6-b020-e5a10f17cb1b
+		sourceLineageTag: descriptor
+		summarizeBy: none
+		sourceColumn: descriptor
+
+		annotation SummarizationSetBy = Automatic
+
+	column priority
+		dataType: string
+		lineageTag: 57f2a595-f4d6-47ba-af21-580850866621
+		sourceLineageTag: priority
+		summarizeBy: none
+		sourceColumn: priority
+
+		annotation SummarizationSetBy = Automatic
+
+	column root_cause
+		dataType: string
+		lineageTag: ca9036c1-92ab-41f4-a566-d94762acd3bb
+		sourceLineageTag: root_cause
+		summarizeBy: none
+		sourceColumn: root_cause
+
+		annotation SummarizationSetBy = Automatic
+
+	column failure_mechanism
+		dataType: string
+		lineageTag: 9d9857df-f12a-454c-9c9a-d31928c8a80d
+		sourceLineageTag: failure_mechanism
+		summarizeBy: none
+		sourceColumn: failure_mechanism
+
+		annotation SummarizationSetBy = Automatic
+
+	column contributing_tags
+		dataType: string
+		lineageTag: 6c7a4d13-da89-486a-94af-1281ef589ca0
+		sourceLineageTag: contributing_tags
+		summarizeBy: none
+		sourceColumn: contributing_tags
+
+		annotation SummarizationSetBy = Automatic
+
+	column contributing_tag_names
+		dataType: string
+		lineageTag: 1ecd94b7-68df-4c78-bb2d-0e90ee8bee85
+		sourceLineageTag: contributing_tag_names
+		summarizeBy: none
+		sourceColumn: contributing_tag_names
+
+		annotation SummarizationSetBy = Automatic
+
+	column recommended_action
+		dataType: string
+		lineageTag: 421e8efe-fd7d-4de6-a861-1f55a80d3fe1
+		sourceLineageTag: recommended_action
+		summarizeBy: none
+		sourceColumn: recommended_action
+
+		annotation SummarizationSetBy = Automatic
+
+	column generated_at
+		dataType: string
+		lineageTag: 5e330cce-e628-4223-873b-73fe5a003dc6
+		sourceLineageTag: generated_at
+		summarizeBy: none
+		sourceColumn: generated_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column confidence
+		dataType: double
+		formatString: 0.00
+		lineageTag: a8bc87c1-36c5-4ea6-b338-9d70ee9a6250
+		sourceLineageTag: confidence
+		summarizeBy: sum
+		sourceColumn: confidence
+
+		annotation SummarizationSetBy = Automatic
+
+	partition root_cause = entity
+		mode: directLake
+		source
+			entityName: root_cause
+			schemaName: ml
+			expressionSource: 'DirectLake - lh_poc'
+

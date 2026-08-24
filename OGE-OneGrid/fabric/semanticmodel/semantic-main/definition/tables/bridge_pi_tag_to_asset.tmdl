@@ -1,0 +1,74 @@
+table bridge_pi_tag_to_asset
+	lineageTag: ba348c91-3178-4ae5-b310-bc4c25a1e002
+	sourceLineageTag: [gold].[bridge_pi_tag_to_asset]
+
+	column Tag
+		dataType: string
+		lineageTag: c9d71234-d521-4369-bfe3-c8f1af50db75
+		sourceLineageTag: Tag
+		summarizeBy: none
+		sourceColumn: Tag
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_id
+		dataType: string
+		lineageTag: 6aefc7af-df65-4302-a4a2-11bb5dfead8d
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag_role
+		dataType: string
+		lineageTag: 01ffdf41-dba6-44be-9a52-d6823de8679f
+		sourceLineageTag: tag_role
+		summarizeBy: none
+		sourceColumn: tag_role
+
+		annotation SummarizationSetBy = Automatic
+
+	column downtime_relevance
+		dataType: string
+		lineageTag: e1edd76b-7cd3-4f7f-b81d-5b97326af105
+		sourceLineageTag: downtime_relevance
+		summarizeBy: none
+		sourceColumn: downtime_relevance
+
+		annotation SummarizationSetBy = Automatic
+
+	column eng_units
+		dataType: string
+		lineageTag: 73c19d0e-169f-4634-be4c-1791bebf8caa
+		sourceLineageTag: eng_units
+		summarizeBy: none
+		sourceColumn: eng_units
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag_description
+		dataType: string
+		lineageTag: 70147e71-9a15-43c1-94b6-bd5b919d7d16
+		sourceLineageTag: tag_description
+		summarizeBy: none
+		sourceColumn: tag_description
+
+		annotation SummarizationSetBy = Automatic
+
+	column notes
+		dataType: string
+		lineageTag: cc5d292a-3c64-4282-a11d-25a07ce0bb20
+		sourceLineageTag: notes
+		summarizeBy: none
+		sourceColumn: notes
+
+		annotation SummarizationSetBy = Automatic
+
+	partition bridge_pi_tag_to_asset = entity
+		mode: directLake
+		source
+			entityName: bridge_pi_tag_to_asset
+			schemaName: gold
+			expressionSource: 'DirectLake - lh_poc'
+

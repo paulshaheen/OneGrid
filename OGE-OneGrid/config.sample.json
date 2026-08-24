@@ -33,6 +33,29 @@
     "clientSecret": ""
   },
 
+  "//pcp": "OPTIONAL. Planetary Computer Pro (PCP) integration — the additive hazard seam. When present, the 'fabricplane' phase creates a OneLake shortcut to PCP's model-outputs blob container and applies the geo_point_in_polygon join. Set reuseExistingFoundry:true to point the chat agent at PCP's Azure OpenAI (aiAgentEndpoint) instead of deploying a second Foundry account. All values come from PCP's azuredeploy.json outputs.",
+  "reuseExistingFoundry": false,
+  "pcp": {
+    "//storageAccountName": "PCP sampleStorage account name (from PCP output sampleStorageAccount).",
+    "storageAccountName": "",
+    "//storageAccountId": "Full resource id of PCP sampleStorage — used to grant the chat-app identity Storage Blob Data Reader.",
+    "storageAccountId": "",
+    "//blobEndpoint": "PCP sampleStorage blob endpoint, e.g. https://<acct>.blob.core.windows.net. Defaults from storageAccountName if blank.",
+    "blobEndpoint": "",
+    "//modelOutputsContainer": "Container Aurora writes the thin hazard geometry to. PCP default: model-outputs.",
+    "modelOutputsContainer": "model-outputs",
+    "//shortcutName": "Name of the OneLake shortcut created in the lakehouse.",
+    "shortcutName": "pcp_model_outputs",
+    "//connectionId": "REQUIRED for the shortcut. GUID of a Fabric cloud connection with credentials to PCP's storage account (create once in Fabric > Manage connections). Without it the KQL still applies but the shortcut is skipped.",
+    "connectionId": "",
+    "//openAiEndpoint": "PCP Azure OpenAI endpoint (from PCP output aiAgentEndpoint). Used as the chat agent's AZURE_AI_ENDPOINT when reuseExistingFoundry is true.",
+    "openAiEndpoint": "",
+    "//openAiAccountId": "Full resource id of PCP's openAi account — used to grant the chat-app identity Cognitive Services User.",
+    "openAiAccountId": "",
+    "//geoCatalogUri": "PCP GeoCatalog URI (from PCP output geoCatalogUri) — passed through for the map/imagery layer.",
+    "geoCatalogUri": ""
+  },
+
   "foundry": {
     "resourceGroup": "rg-onegrid-solution",
     "accountName": "onegrid-foundry",

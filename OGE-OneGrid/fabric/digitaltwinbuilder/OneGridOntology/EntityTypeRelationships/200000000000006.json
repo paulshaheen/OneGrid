@@ -1,0 +1,8 @@
+{
+  "Id": "200000000000006",
+  "Namespace": "usertypes",
+  "RelationshipCardinality": "OneToMany",
+  "Name": "hasOutage",
+  "FirstEntityTypeId": "100002",
+  "SecondEntityTypeId": "100007"
+}

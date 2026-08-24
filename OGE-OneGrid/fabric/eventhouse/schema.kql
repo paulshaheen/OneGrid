@@ -1,0 +1,336 @@
+.alter database policy retention @'{"SoftDeletePeriod":"365000.00:00:00","Recoverability":"Enabled"}'
+.alter database policy caching hotdata = time(365000.00:00:00) hotindex = time(365000.00:00:00)
+.alter-merge database policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter database policy ingestionbatching @'{"MaximumBatchingTimeSpan":"00:00:20","MaximumNumberOfItems":500,"MaximumRawDataSizeMB":300,"Origin":0}'
+.create-merge table PiEventsRaw (EventEnqueuedUtcTime:datetime, webId:string, tag:string, ts:datetime, value:dynamic, valueType:string, questionable:bool, substituted:bool, plant:string, source:string, host:string, _sourceType:string, measurementId:string, icare_id:string, asset_id:string, asset_name:string, gds:string, acqend:datetime, date_key:int, status:int, res_type:string, global_type:string, analysis_status:string, technology:string, analysis_measured_date:datetime, source_host:string, event_uid:string, GEN_SEQ_NO:string, UNIT_ID:string, UNIT_NAME:string, REAL_START_DT:datetime, REAL_END_DT:datetime, DURATION_HRS:real, EVENT_YEAR:int, EVENT_MONTH:int, EVENT_TYPE_CD:string, EVENT_TYPE_DESC:string, EVENT_CAUSE_CD:int, CAUSE_CODE_DESC:string, AVAIL_CAP_DURING:string, AVAIL_CAP_AFTER:int, DERATING:string) 
+.create-or-alter table PiEventsRaw ingestion json mapping 'PiEventsRawMapping'
+```
+[{"Properties":{"Path":"$.EventEnqueuedUtcTime"},"column":"EventEnqueuedUtcTime","datatype":""},{"Properties":{"Path":"$.webId"},"column":"webId","datatype":""},{"Properties":{"Path":"$.tag"},"column":"tag","datatype":""},{"Properties":{"Path":"$.ts"},"column":"ts","datatype":""},{"Properties":{"Path":"$.value"},"column":"value","datatype":""},{"Properties":{"Path":"$.valueType"},"column":"valueType","datatype":""},{"Properties":{"Path":"$.questionable"},"column":"questionable","datatype":""},{"Properties":{"Path":"$.substituted"},"column":"substituted","datatype":""},{"Properties":{"Path":"$.plant"},"column":"plant","datatype":""},{"Properties":{"Path":"$.source"},"column":"source","datatype":""},{"Properties":{"Path":"$.host"},"column":"host","datatype":""}]
+```
+.create-merge table PiEvents (Ts:datetime, WebId:string, Tag:string, Plant:string, Value:dynamic, ValueType:string, Questionable:bool, Substituted:bool, Source:string, Host:string, IngestedAt:datetime) 
+.create-merge table IcareEventsRaw (measurementId:string, icare_id:string, asset_id:string, asset_name:string, gds:string, acqend:datetime, date_key:int, value:real, status:int, res_type:string, global_type:string, analysis_status:string, technology:string, analysis_measured_date:datetime, source_host:string) 
+.create-or-alter table IcareEventsRaw ingestion json mapping 'IcareJsonMapping'
+```
+[{"Properties":{"Path":"$.measurementId"},"column":"measurementId","datatype":"string"},{"Properties":{"Path":"$.icare_id"},"column":"icare_id","datatype":"string"},{"Properties":{"Path":"$.asset_id"},"column":"asset_id","datatype":"string"},{"Properties":{"Path":"$.asset_name"},"column":"asset_name","datatype":"string"},{"Properties":{"Path":"$.gds"},"column":"gds","datatype":"string"},{"Properties":{"Path":"$.acqend"},"column":"acqend","datatype":"datetime"},{"Properties":{"Path":"$.date_key"},"column":"date_key","datatype":"int"},{"Properties":{"Path":"$.value"},"column":"value","datatype":"real"},{"Properties":{"Path":"$.status"},"column":"status","datatype":"int"},{"Properties":{"Path":"$.res_type"},"column":"res_type","datatype":"string"},{"Properties":{"Path":"$.global_type"},"column":"global_type","datatype":"string"},{"Properties":{"Path":"$.analysis_status"},"column":"analysis_status","datatype":"string"},{"Properties":{"Path":"$.technology"},"column":"technology","datatype":"string"},{"Properties":{"Path":"$.analysis_measured_date"},"column":"analysis_measured_date","datatype":"datetime"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"}]
+```
+.create-merge table IcareEvents (measurementId:string, icare_id:string, asset_id:string, asset_name:string, gds:string, acqend:datetime, date_key:int, value:real, status:int, res_type:string, global_type:string, analysis_status:string, technology:string, analysis_measured_date:datetime, IngestedAt:datetime) 
+.create-merge table GadsEventsRaw (event_uid:string, GEN_SEQ_NO:string, UNIT_ID:string, UNIT_NAME:string, plant:string, REAL_START_DT:datetime, REAL_END_DT:datetime, DURATION_HRS:real, EVENT_YEAR:int, EVENT_MONTH:int, EVENT_TYPE_CD:string, EVENT_TYPE_DESC:string, EVENT_CAUSE_CD:int, CAUSE_CODE_DESC:string, AVAIL_CAP_DURING:string, AVAIL_CAP_AFTER:int, DERATING:string, source_host:string) 
+.create-or-alter table GadsEventsRaw ingestion json mapping 'GadsJsonMapping'
+```
+[{"Properties":{"Path":"$.event_uid"},"column":"event_uid","datatype":"string"},{"Properties":{"Path":"$.GEN_SEQ_NO"},"column":"GEN_SEQ_NO","datatype":"string"},{"Properties":{"Path":"$.UNIT_ID"},"column":"UNIT_ID","datatype":"string"},{"Properties":{"Path":"$.UNIT_NAME"},"column":"UNIT_NAME","datatype":"string"},{"Properties":{"Path":"$.plant"},"column":"plant","datatype":"string"},{"Properties":{"Path":"$.REAL_START_DT"},"column":"REAL_START_DT","datatype":"datetime"},{"Properties":{"Path":"$.REAL_END_DT"},"column":"REAL_END_DT","datatype":"datetime"},{"Properties":{"Path":"$.DURATION_HRS"},"column":"DURATION_HRS","datatype":"real"},{"Properties":{"Path":"$.EVENT_YEAR"},"column":"EVENT_YEAR","datatype":"int"},{"Properties":{"Path":"$.EVENT_MONTH"},"column":"EVENT_MONTH","datatype":"int"},{"Properties":{"Path":"$.EVENT_TYPE_CD"},"column":"EVENT_TYPE_CD","datatype":"string"},{"Properties":{"Path":"$.EVENT_TYPE_DESC"},"column":"EVENT_TYPE_DESC","datatype":"string"},{"Properties":{"Path":"$.EVENT_CAUSE_CD"},"column":"EVENT_CAUSE_CD","datatype":"int"},{"Properties":{"Path":"$.CAUSE_CODE_DESC"},"column":"CAUSE_CODE_DESC","datatype":"string"},{"Properties":{"Path":"$.AVAIL_CAP_DURING"},"column":"AVAIL_CAP_DURING","datatype":"string"},{"Properties":{"Path":"$.AVAIL_CAP_AFTER"},"column":"AVAIL_CAP_AFTER","datatype":"int"},{"Properties":{"Path":"$.DERATING"},"column":"DERATING","datatype":"string"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"}]
+```
+.create-merge table GadsEvents (event_uid:string, GEN_SEQ_NO:string, UNIT_ID:string, UNIT_NAME:string, plant:string, REAL_START_DT:datetime, REAL_END_DT:datetime, DURATION_HRS:real, EVENT_YEAR:int, EVENT_MONTH:int, EVENT_TYPE_CD:string, EVENT_TYPE_DESC:string, EVENT_CAUSE_CD:int, CAUSE_CODE_DESC:string, AVAIL_CAP_DURING:string, AVAIL_CAP_AFTER:int, DERATING:string, IngestedAt:datetime) 
+.create-merge table PITagMetadata (Tag:string, Name:string, Descriptor:string, EngineeringUnits:string, Plant:string, PointClass:string, PointSource:string) 
+.create-merge table SmartSignalIncidentsRaw (incident_id:string, asset_id:string, asset_path:string, status:string, priority:int, message:string, tag_name:string, data_source_tag:string, tag_description:string, tag_unit:string, model_name:string, rule_name:string, first_occurred:datetime, last_occurred:datetime, occurrence_count:long, latest_actual:real, latest_estimate:real, latest_residual:real, snapshot_ts:datetime, source_host:string) 
+.create-or-alter table SmartSignalIncidentsRaw ingestion json mapping 'SmartSignalIncidentMapping'
+```
+[{"Properties":{"Path":"$.incident_id"},"column":"incident_id","datatype":"string"},{"Properties":{"Path":"$.asset_id"},"column":"asset_id","datatype":"string"},{"Properties":{"Path":"$.asset_path"},"column":"asset_path","datatype":"string"},{"Properties":{"Path":"$.status"},"column":"status","datatype":"string"},{"Properties":{"Path":"$.priority"},"column":"priority","datatype":"int"},{"Properties":{"Path":"$.message"},"column":"message","datatype":"string"},{"Properties":{"Path":"$.tag_name"},"column":"tag_name","datatype":"string"},{"Properties":{"Path":"$.data_source_tag"},"column":"data_source_tag","datatype":"string"},{"Properties":{"Path":"$.tag_description"},"column":"tag_description","datatype":"string"},{"Properties":{"Path":"$.tag_unit"},"column":"tag_unit","datatype":"string"},{"Properties":{"Path":"$.model_name"},"column":"model_name","datatype":"string"},{"Properties":{"Path":"$.rule_name"},"column":"rule_name","datatype":"string"},{"Properties":{"Path":"$.first_occurred"},"column":"first_occurred","datatype":"datetime"},{"Properties":{"Path":"$.last_occurred"},"column":"last_occurred","datatype":"datetime"},{"Properties":{"Path":"$.occurrence_count"},"column":"occurrence_count","datatype":"long"},{"Properties":{"Path":"$.latest_actual"},"column":"latest_actual","datatype":"real"},{"Properties":{"Path":"$.latest_estimate"},"column":"latest_estimate","datatype":"real"},{"Properties":{"Path":"$.latest_residual"},"column":"latest_residual","datatype":"real"},{"Properties":{"Path":"$.snapshot_ts"},"column":"snapshot_ts","datatype":"datetime"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"}]
+```
+.create-merge table SmartSignalIncidents (incident_id:string, asset_id:string, asset_path:string, status:string, priority:int, message:string, tag_name:string, data_source_tag:string, tag_description:string, tag_unit:string, model_name:string, rule_name:string, first_occurred:datetime, last_occurred:datetime, occurrence_count:long, latest_actual:real, latest_estimate:real, latest_residual:real, snapshot_ts:datetime, IngestedAt:datetime) 
+.create-merge table SmartSignalDiagnosticsRaw (incident_id:string, tag_role:string, tag_name:string, source_tag:string, actual_value:real, expected_value:real, measurement_unit:string, last_change:datetime, snapshot_ts:datetime, source_host:string) 
+.create-or-alter table SmartSignalDiagnosticsRaw ingestion json mapping 'SmartSignalDiagnosticMapping'
+```
+[{"Properties":{"Path":"$.incident_id"},"column":"incident_id","datatype":"string"},{"Properties":{"Path":"$.tag_role"},"column":"tag_role","datatype":"string"},{"Properties":{"Path":"$.tag_name"},"column":"tag_name","datatype":"string"},{"Properties":{"Path":"$.source_tag"},"column":"source_tag","datatype":"string"},{"Properties":{"Path":"$.actual_value"},"column":"actual_value","datatype":"real"},{"Properties":{"Path":"$.expected_value"},"column":"expected_value","datatype":"real"},{"Properties":{"Path":"$.measurement_unit"},"column":"measurement_unit","datatype":"string"},{"Properties":{"Path":"$.last_change"},"column":"last_change","datatype":"datetime"},{"Properties":{"Path":"$.snapshot_ts"},"column":"snapshot_ts","datatype":"datetime"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"}]
+```
+.create-merge table SmartSignalDiagnostics (incident_id:string, tag_role:string, tag_name:string, source_tag:string, actual_value:real, expected_value:real, measurement_unit:string, last_change:datetime, snapshot_ts:datetime, IngestedAt:datetime) 
+.create-merge table SmartSignalObservationsRaw (asset_id:string, asset_path:string, tag_name:string, tag_id:string, timestamp:datetime, actual_value:real, expected_value:real, residual:real, model_name:string, snapshot_ts:datetime, source_host:string) 
+.create-or-alter table SmartSignalObservationsRaw ingestion json mapping 'SmartSignalObservationMapping'
+```
+[{"Properties":{"Path":"$.asset_id"},"column":"asset_id","datatype":"string"},{"Properties":{"Path":"$.asset_path"},"column":"asset_path","datatype":"string"},{"Properties":{"Path":"$.tag_name"},"column":"tag_name","datatype":"string"},{"Properties":{"Path":"$.tag_id"},"column":"tag_id","datatype":"string"},{"Properties":{"Path":"$.timestamp"},"column":"timestamp","datatype":"datetime"},{"Properties":{"Path":"$.actual_value"},"column":"actual_value","datatype":"real"},{"Properties":{"Path":"$.expected_value"},"column":"expected_value","datatype":"real"},{"Properties":{"Path":"$.residual"},"column":"residual","datatype":"real"},{"Properties":{"Path":"$.model_name"},"column":"model_name","datatype":"string"},{"Properties":{"Path":"$.snapshot_ts"},"column":"snapshot_ts","datatype":"datetime"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"}]
+```
+.create-merge table SmartSignalObservations (asset_id:string, asset_path:string, tag_name:string, tag_id:string, timestamp:datetime, actual_value:real, expected_value:real, residual:real, model_name:string, snapshot_ts:datetime, IngestedAt:datetime) 
+.create-merge table CROWOutages (outage_id:string, revision:int, priority:string, status:string, ca:string, station:string, equip_type:string, equipment:string, unit:string, start_date:string, end_date:string, duration:string, duration_unit:string, from_to:string, is_oos:bool, derate_mw:int, asset_id:string, ingested_at:datetime) 
+.create-or-alter table CROWOutages ingestion json mapping 'CROWMapping'
+```
+[{"Properties":{"Path":"$.outage_id"},"column":"outage_id","datatype":""},{"Properties":{"Path":"$.revision"},"column":"revision","datatype":""},{"Properties":{"Path":"$.priority"},"column":"priority","datatype":""},{"Properties":{"Path":"$.status"},"column":"status","datatype":""},{"Properties":{"Path":"$.ca"},"column":"ca","datatype":""},{"Properties":{"Path":"$.station"},"column":"station","datatype":""},{"Properties":{"Path":"$.equip_type"},"column":"equip_type","datatype":""},{"Properties":{"Path":"$.equipment"},"column":"equipment","datatype":""},{"Properties":{"Path":"$.unit"},"column":"unit","datatype":""},{"Properties":{"Path":"$.start_date"},"column":"start_date","datatype":""},{"Properties":{"Path":"$.end_date"},"column":"end_date","datatype":""},{"Properties":{"Path":"$.duration"},"column":"duration","datatype":""},{"Properties":{"Path":"$.duration_unit"},"column":"duration_unit","datatype":""},{"Properties":{"Path":"$.from_to"},"column":"from_to","datatype":""},{"Properties":{"Path":"$.is_oos"},"column":"is_oos","datatype":""},{"Properties":{"Path":"$.derate_mw"},"column":"derate_mw","datatype":""},{"Properties":{"Path":"$.asset_id"},"column":"asset_id","datatype":""},{"Properties":{"Path":"$.ingested_at"},"column":"ingested_at","datatype":""}]
+```
+.create-merge table PCIOutagesRaw (outage_id:string, unit_name:string, unit_id:string, outage_type:string, status:string, start_date:string, end_date:string, duration_hrs:real, cause_code:string, cause_description:string, mw_capability:real, mw_reduction:real, description:string, miso_status:string, snapshot_ts:datetime, source_host:string, plant:string, priority:string, iso_id:string, action:string, modified_on:string, modified_by:string) 
+.create-or-alter table PCIOutagesRaw ingestion json mapping 'PCIOutageMapping'
+```
+[{"Properties":{"Path":"$.outage_id"},"column":"outage_id","datatype":"string"},{"Properties":{"Path":"$.unit_name"},"column":"unit_name","datatype":"string"},{"Properties":{"Path":"$.unit_id"},"column":"unit_id","datatype":"string"},{"Properties":{"Path":"$.outage_type"},"column":"outage_type","datatype":"string"},{"Properties":{"Path":"$.status"},"column":"status","datatype":"string"},{"Properties":{"Path":"$.start_date"},"column":"start_date","datatype":"string"},{"Properties":{"Path":"$.end_date"},"column":"end_date","datatype":"string"},{"Properties":{"Path":"$.duration_hrs"},"column":"duration_hrs","datatype":"real"},{"Properties":{"Path":"$.cause_code"},"column":"cause_code","datatype":"string"},{"Properties":{"Path":"$.cause_description"},"column":"cause_description","datatype":"string"},{"Properties":{"Path":"$.mw_capability"},"column":"mw_capability","datatype":"real"},{"Properties":{"Path":"$.mw_reduction"},"column":"mw_reduction","datatype":"real"},{"Properties":{"Path":"$.description"},"column":"description","datatype":"string"},{"Properties":{"Path":"$.miso_status"},"column":"miso_status","datatype":"string"},{"Properties":{"Path":"$.plant"},"column":"plant","datatype":"string"},{"Properties":{"Path":"$.priority"},"column":"priority","datatype":"string"},{"Properties":{"Path":"$.iso_id"},"column":"iso_id","datatype":"string"},{"Properties":{"Path":"$.action"},"column":"action","datatype":"string"},{"Properties":{"Path":"$.modified_on"},"column":"modified_on","datatype":"string"},{"Properties":{"Path":"$.modified_by"},"column":"modified_by","datatype":"string"},{"Properties":{"Path":"$.snapshot_ts"},"column":"snapshot_ts","datatype":"datetime"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"}]
+```
+.create-merge table AimmWorkRequestsRaw (wr_id:int, problem_descr:string, problem_location:string, location:string, wr_type:string, wr_type_code:string, wr_status:string, wr_status_id:string, site_code:string, site_name:string, priority:string, priority_code:string, priority_rank:int, planner:string, pm_identifier:int, pm_descr:string, pm_due_date:datetime, safety_related:string, environ_related:string, unit_status:string, unit_status_id:string, offline_status:string, offline_status_id:string, elec_hrs:real, mech_hrs:real, ic_hrs:real, other_hrs:real, total_hrs:real, estimate_hrs:real, obsrv_date:datetime, start_date:datetime, complete_date:datetime, condition:string, condition_code:string, entity_identity:int, entity_descr:string, parent_identity:int, parent_descr:string, create_date:datetime, update_date:datetime, source_host:string) 
+.create-or-alter table AimmWorkRequestsRaw ingestion json mapping 'AimmWorkRequestMapping'
+```
+[{"Properties":{"Path":"$.wr_id"},"column":"wr_id","datatype":"int"},{"Properties":{"Path":"$.problem_descr"},"column":"problem_descr","datatype":"string"},{"Properties":{"Path":"$.wr_status"},"column":"wr_status","datatype":"string"},{"Properties":{"Path":"$.site_code"},"column":"site_code","datatype":"string"},{"Properties":{"Path":"$.site_name"},"column":"site_name","datatype":"string"},{"Properties":{"Path":"$.priority"},"column":"priority","datatype":"string"},{"Properties":{"Path":"$.unit_status"},"column":"unit_status","datatype":"string"},{"Properties":{"Path":"$.offline_status"},"column":"offline_status","datatype":"string"},{"Properties":{"Path":"$.entity_descr"},"column":"entity_descr","datatype":"string"},{"Properties":{"Path":"$.parent_descr"},"column":"parent_descr","datatype":"string"},{"Properties":{"Path":"$.create_date"},"column":"create_date","datatype":"datetime"},{"Properties":{"Path":"$.update_date"},"column":"update_date","datatype":"datetime"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"},{"Properties":{"Path":"$.problem_location"},"column":"problem_location","datatype":"string"},{"Properties":{"Path":"$.location"},"column":"location","datatype":"string"},{"Properties":{"Path":"$.wr_type"},"column":"wr_type","datatype":"string"},{"Properties":{"Path":"$.wr_type_code"},"column":"wr_type_code","datatype":"string"},{"Properties":{"Path":"$.wr_status_id"},"column":"wr_status_id","datatype":"string"},{"Properties":{"Path":"$.priority_code"},"column":"priority_code","datatype":"string"},{"Properties":{"Path":"$.priority_rank"},"column":"priority_rank","datatype":"int"},{"Properties":{"Path":"$.planner"},"column":"planner","datatype":"string"},{"Properties":{"Path":"$.pm_identifier"},"column":"pm_identifier","datatype":"int"},{"Properties":{"Path":"$.pm_descr"},"column":"pm_descr","datatype":"string"},{"Properties":{"Path":"$.pm_due_date"},"column":"pm_due_date","datatype":"datetime"},{"Properties":{"Path":"$.safety_related"},"column":"safety_related","datatype":"string"},{"Properties":{"Path":"$.environ_related"},"column":"environ_related","datatype":"string"},{"Properties":{"Path":"$.unit_status_id"},"column":"unit_status_id","datatype":"string"},{"Properties":{"Path":"$.offline_status_id"},"column":"offline_status_id","datatype":"string"},{"Properties":{"Path":"$.elec_hrs"},"column":"elec_hrs","datatype":"real"},{"Properties":{"Path":"$.mech_hrs"},"column":"mech_hrs","datatype":"real"},{"Properties":{"Path":"$.ic_hrs"},"column":"ic_hrs","datatype":"real"},{"Properties":{"Path":"$.other_hrs"},"column":"other_hrs","datatype":"real"},{"Properties":{"Path":"$.total_hrs"},"column":"total_hrs","datatype":"real"},{"Properties":{"Path":"$.estimate_hrs"},"column":"estimate_hrs","datatype":"real"},{"Properties":{"Path":"$.obsrv_date"},"column":"obsrv_date","datatype":"datetime"},{"Properties":{"Path":"$.start_date"},"column":"start_date","datatype":"datetime"},{"Properties":{"Path":"$.complete_date"},"column":"complete_date","datatype":"datetime"},{"Properties":{"Path":"$.condition"},"column":"condition","datatype":"string"},{"Properties":{"Path":"$.condition_code"},"column":"condition_code","datatype":"string"},{"Properties":{"Path":"$.entity_identity"},"column":"entity_identity","datatype":"int"},{"Properties":{"Path":"$.parent_identity"},"column":"parent_identity","datatype":"int"}]
+```
+.create-merge table AimmWorkRequests (wr_id:int, problem_descr:string, problem_location:string, location:string, wr_type:string, wr_type_code:string, wr_status:string, wr_status_id:string, site_code:string, site_name:string, priority:string, priority_code:string, priority_rank:int, planner:string, pm_identifier:int, pm_descr:string, pm_due_date:datetime, safety_related:string, environ_related:string, unit_status:string, unit_status_id:string, offline_status:string, offline_status_id:string, elec_hrs:real, mech_hrs:real, ic_hrs:real, other_hrs:real, total_hrs:real, estimate_hrs:real, obsrv_date:datetime, start_date:datetime, complete_date:datetime, condition:string, condition_code:string, entity_identity:int, entity_descr:string, parent_identity:int, parent_descr:string, create_date:datetime, update_date:datetime, source_host:string, IngestedAt:datetime) 
+.create-merge table AimmEntityHierarchyRaw (hieroi:int, siteoi:int, mtnoi:int, entity_id:string, entity_descr:string, entity_type:string, bom_no:string, priority:string, department:string, level1_mtnoi:int, level2_mtnoi:int, level3_mtnoi:int, level4_mtnoi:int, level5_mtnoi:int, level6_mtnoi:int, level7_mtnoi:int, level8_mtnoi:int, update_date:datetime, source_host:string) 
+.create-or-alter table AimmEntityHierarchyRaw ingestion json mapping 'AimmEntityHierarchyMapping'
+```
+[{"Properties":{"Path":"$.hieroi"},"column":"hieroi","datatype":"int"},{"Properties":{"Path":"$.siteoi"},"column":"siteoi","datatype":"int"},{"Properties":{"Path":"$.mtnoi"},"column":"mtnoi","datatype":"int"},{"Properties":{"Path":"$.entity_id"},"column":"entity_id","datatype":"string"},{"Properties":{"Path":"$.entity_descr"},"column":"entity_descr","datatype":"string"},{"Properties":{"Path":"$.entity_type"},"column":"entity_type","datatype":"string"},{"Properties":{"Path":"$.bom_no"},"column":"bom_no","datatype":"string"},{"Properties":{"Path":"$.priority"},"column":"priority","datatype":"string"},{"Properties":{"Path":"$.department"},"column":"department","datatype":"string"},{"Properties":{"Path":"$.level1_mtnoi"},"column":"level1_mtnoi","datatype":"int"},{"Properties":{"Path":"$.level2_mtnoi"},"column":"level2_mtnoi","datatype":"int"},{"Properties":{"Path":"$.level3_mtnoi"},"column":"level3_mtnoi","datatype":"int"},{"Properties":{"Path":"$.level4_mtnoi"},"column":"level4_mtnoi","datatype":"int"},{"Properties":{"Path":"$.level5_mtnoi"},"column":"level5_mtnoi","datatype":"int"},{"Properties":{"Path":"$.level6_mtnoi"},"column":"level6_mtnoi","datatype":"int"},{"Properties":{"Path":"$.level7_mtnoi"},"column":"level7_mtnoi","datatype":"int"},{"Properties":{"Path":"$.level8_mtnoi"},"column":"level8_mtnoi","datatype":"int"},{"Properties":{"Path":"$.update_date"},"column":"update_date","datatype":"datetime"},{"Properties":{"Path":"$.source_host"},"column":"source_host","datatype":"string"}]
+```
+.create-merge table AimmEntityHierarchy (hieroi:int, siteoi:int, mtnoi:int, entity_id:string, entity_descr:string, entity_type:string, bom_no:string, priority:string, department:string, level1_mtnoi:int, level2_mtnoi:int, level3_mtnoi:int, level4_mtnoi:int, level5_mtnoi:int, level6_mtnoi:int, level7_mtnoi:int, level8_mtnoi:int, update_date:datetime, source_host:string, IngestedAt:datetime) 
+.create-merge table PCIOutages (outage_id:long, iso_id:string, submittal_exemption:string, outage_status:string, unit_name:string, nc:string, action:string, priority:string, event_type:string, mw:real, plant:string, reason:string, begin_date:datetime, end_date:datetime, planned_start:datetime, planned_end:datetime, change_id:long, request_status:string, action_reason:string, cause_code:string, recall_time_uom:string, modified_on:datetime, modified_by:string, approved:string, approved_on:datetime, approved_by:string, requested_on:datetime, requested_by:string, journal_key:string, status_update_when:datetime, iso_rev_no:long, iso_modified_on:datetime, journal_status:string, submitted:string, disapprove:string, edition:string, unit_category:string, iso_response:string, IngestedAt:datetime) 
+.create-merge table MLFeedback (feedback_id:string, ts:datetime, feedback_user:string, persona:string, item_type:string, vote:string, asset_id:string, plant:string, unit:string, tag:string, item_ref:string, comment:string, context:dynamic, source:string)
+.create-or-alter function with (skipvalidation = "true") ParsePiEvent() {
+    PiEventsRaw
+    | where isnotempty(tag) and tag != "forwarder.heartbeat"
+    | project
+        Ts           = ts,
+        WebId        = webId,
+        Tag          = tag,
+        Plant        = plant,
+        Value        = value,
+        ValueType    = valueType,
+        Questionable = questionable,
+        Substituted  = substituted,
+        Source       = source,
+        Host         = host,
+        IngestedAt   = now()
+}
+.create-or-alter function with (skipvalidation = "true") ParseIcareEvent() { IcareEventsRaw | project measurementId, icare_id, asset_id, asset_name, gds, acqend, date_key, value, status, res_type, global_type, analysis_status, technology, analysis_measured_date, IngestedAt=now() }
+.create-or-alter function with (skipvalidation = "true") ParseGadsEvent() { GadsEventsRaw | project event_uid, GEN_SEQ_NO, UNIT_ID, UNIT_NAME, plant, REAL_START_DT, REAL_END_DT, DURATION_HRS, EVENT_YEAR, EVENT_MONTH, EVENT_TYPE_CD, EVENT_TYPE_DESC, EVENT_CAUSE_CD, CAUSE_CODE_DESC, AVAIL_CAP_DURING, AVAIL_CAP_AFTER, DERATING, IngestedAt=now() }
+.create-or-alter function with (skipvalidation = "true") RouteIcareEvents() { PiEventsRaw | where _sourceType == 'icare' | project measurementId, icare_id, asset_id, asset_name, gds, acqend, date_key, value=toreal(value), status=toint(status), res_type, global_type, analysis_status='', technology='', analysis_measured_date=datetime(null), IngestedAt=now() }
+.create-or-alter function with (skipvalidation = "true") RouteGadsEvents() { PiEventsRaw | where _sourceType == 'gads' | project event_uid, GEN_SEQ_NO, UNIT_ID, UNIT_NAME, plant, REAL_START_DT, REAL_END_DT, DURATION_HRS, EVENT_YEAR, EVENT_MONTH, EVENT_TYPE_CD, EVENT_TYPE_DESC, EVENT_CAUSE_CD, CAUSE_CODE_DESC, AVAIL_CAP_DURING, AVAIL_CAP_AFTER, DERATING, IngestedAt=now() }
+.create-or-alter function with (skipvalidation = "true") ParseSmartSignalIncident() {
+    SmartSignalIncidentsRaw
+    | project
+        incident_id, asset_id, asset_path, status, priority,
+        message, tag_name, data_source_tag, tag_description, tag_unit,
+        model_name, rule_name,
+        first_occurred, last_occurred, occurrence_count,
+        latest_actual, latest_estimate, latest_residual,
+        snapshot_ts,
+        IngestedAt = now()
+}
+.create-or-alter function with (skipvalidation = "true") ParseSmartSignalDiagnostic() {
+    SmartSignalDiagnosticsRaw
+    | project
+        incident_id, tag_role, tag_name, source_tag,
+        actual_value, expected_value, measurement_unit,
+        last_change, snapshot_ts,
+        IngestedAt = now()
+}
+.create-or-alter function with (skipvalidation = "true") ParseSmartSignalObservation() {
+    SmartSignalObservationsRaw
+    | project
+        asset_id, asset_path, tag_name, tag_id,
+        timestamp, actual_value, expected_value, residual,
+        model_name, snapshot_ts,
+        IngestedAt = now()
+}
+.create-or-alter function with (folder = "ml", docstring = "ML-driven tag watchlist - updated 2026-08-12 07:15 CT", skipvalidation = "true") WatchTags() {
+    datatable(tag:string, asset_id:string, descriptor:string, engineering_units:string,
+              watch_priority:string, watch_horizon:string, signal_sources:string,
+              risk_score:real, current_value:real, hazard_ratio:real,
+              model_agreement_count:int, recommended_action:string)
+    [
+    "RV2:FLZU2HLV51XFB.AG", "RV2_U2_Boiler", "HEATER LVL VV 51 X FEEDBACK", "%", "CRITICAL", "24h", "AAKR,Anomaly,AnomalyDetection", real(2135.7175), real(99.8503), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:FLZU2HLV51XD.AG", "RV2_U2_Boiler", "HEATER LVL VV 51 X DEMAND", "%", "CRITICAL", "24h", "AAKR,Anomaly,AnomalyDetection", real(1854.9820), real(15.8629), real(0.0000), int(3), "INVESTIGATE",
+    "RV3:FPSU3TS24E.AG", "RV3_U3_Boiler_Feed_Pump_East", "3E BFPP  SPEED", "RPM", "CRITICAL", "14d", "AAKR,AnomalyDetection", real(1792.9870), real(1086.8812), real(0.0000), int(2), "MONITOR",
+    "RV3:TXSU3TS15A1.AG", "RV3_U3_Steam_Turbine", "UNIT 3 TURBINE SPEED", "RPM", "CRITICAL", "24h", "Anomaly,AnomalyDetection", real(965.1263), real(3049.9984), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLZU2HLV52XFB.AG", "RV2_U2_Boiler", "HEATER LVL VV 52 N FEEDBACK", "%", "CRITICAL", "24h", "AAKR,Anomaly,AnomalyDetection", real(539.9067), real(5.0505), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:FLZU2HLV55NFB.AG", "RV2_U2_Boiler", "HEATER LVL VV 55 N FEEDBACK", "%", "CRITICAL", "24h", "AAKR,Anomaly", real(468.1751), real(81.7872), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLZU2HL03V.AG", "RV2_U2_Boiler", "HTR#3 LEVEL CTRL VLV   - LV53N", "%", "CRITICAL", "24h", "AAKR,Anomaly", real(433.6171), real(15.9589), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BTPU2BP20.AG", "RV2_U2_Boiler", "DRUM PRESS (WEST)", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly", real(344.2995), real(1574.8361), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT37.AG", "RV2_U2_Boiler", "GAS TO 2B AIR PREHEATER", "Deg F", "CRITICAL", "24h", "AAKR,Anomaly,AnomalyDetection", real(160.5702), real(402.4174), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:TSPU2TP07.AG", "RV2_U2_Boiler", "HP TURB EXHAUST PRESSURE", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly", real(114.9113), real(101.3690), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLZU2HLV52XD.AG", "RV2_U2_Boiler", "HEATER LVL VV 52 X DEMAND", "%", "CRITICAL", "24h", "AAKR,Anomaly,AnomalyDetection", real(100.0000), real(0.3750), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:TSPU2TP05.AG", "RV2_U2_Boiler", "STEAM CHEST PRESSURE", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly,AnomalyDetection", real(99.4744), real(1467.7414), real(0.0000), int(3), "INVESTIGATE",
+    "RV3:TSPU3TP00.AG", "RV3_U3_Steam_Turbine", "THROTTLE STEAM PRESSURE (MED)", "PSIG", "CRITICAL", "24h", "Anomaly,AnomalyDetection", real(94.9537), real(3450.9688), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BTPU2BP21.AG", "RV2_U2_Boiler", "DRUM PRESS (EAST)", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly", real(91.9245), real(1655.3648), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLZU2HL05X-SP.AG", "RV2_U2_Boiler", "HEATER LVL VV 55 X SETPOINT", "%", "CRITICAL", "14d", "AAKR,AnomalyDetection", real(91.5481), real(1.1708), real(0.0000), int(2), "MONITOR",
+    "RV2:FLZU2HLV55XFB.AG", "RV2_U2_Boiler", "HEATER LVL VV 55 N FEEDBACK", "%", "CRITICAL", "24h", "Anomaly,AnomalyDetection", real(90.5347), real(13.3440), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:TSPU2TP03.AG", "RV2_U2_Boiler", "THROTTLE PRESS C", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly,GBM", real(84.4624), real(115.2145), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:TSPU2TP02.AG", "RV2_U2_Boiler", "THROTTLE PRESS B", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly", real(81.4580), real(1526.9704), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BRFU2WF90.AG", "RV2_U2_Boiler", "REHEAT SPRAY FLOW", "KLB/Hr", "CRITICAL", "24h", "AAKR,Anomaly", real(78.8450), real(9.8313), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:TSPU2TP01.AG", "RV2_U2_Boiler", "THROTTLE PRESS A", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly", real(77.8773), real(1602.5608), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:FPYU3TS20Y.AG", "RV3_U3_Boiler_Feed_Pump_East", "3E BFPT OUTBD VERTICAL", "Mils", "CRITICAL", "14d", "AAKR,AnomalyDetection", real(74.7872), real(1.5485), real(0.0000), int(2), "MONITOR",
+    "RV2:TSPU2TP14.AG", "RV2_U2_Boiler", "FIRST STAGE PRESS (ALT)", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly", real(58.7528), real(624.5230), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:TSPU2TP15.AG", "RV2_U2_Boiler", "FIRST STAGE PRESS (NORM)", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly", real(56.8173), real(599.9569), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FHTU2HT22.AG", "RV2_U2_Boiler", "BLR FEEDWATER TO HTR #2 TEMP", "Deg F", "CRITICAL", "24h", "AAKR,Anomaly,AnomalyDetection", real(54.2022), real(199.7727), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:FLPU2HP50.AG", "RV2_U2_Boiler", "STEAM TO #5 HEATER PRESSURE", "PSIA", "CRITICAL", "24h", "AAKR,Anomaly", real(53.0748), real(11.6545), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:FPFU3SP60.AG", "RV3_U3_Boiler_Feed_Pump_East", "MN STEAM FLOW TO BFP TURBINES", "KLB/Hr", "CRITICAL", "24h", "Anomaly,AnomalyDetection", real(51.1936), real(42.3682), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLPU2HP30.AG", "RV2_U2_Boiler", "STEAM TO #3 HEATER PRESSURE", "PSIG", "CRITICAL", "24h", "AAKR,Anomaly,CoxPH", real(39.2487), real(0.4775), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:FLPU2HP40.AG", "RV2_U2_Boiler", "STEAM TO #4 HEATER PRESSURE", "PSIA", "CRITICAL", "24h", "AAKR,Anomaly,CoxPH", real(32.7603), real(0.7113), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:BATU2BT28.AG", "RV2_U2_Boiler", "AIR FROM 2B AIRPREHEATER", "Deg F", "CRITICAL", "24h", "AAKR,Anomaly,GBM", real(4.6735), real(-12.3941), real(0.0000), int(3), "INVESTIGATE",
+    "RV2:TXSU2TS14.AG", "RV2_U2_Boiler", "TSI TURB SPEED", "RPM", "HIGH", "24h", "AAKR", real(2855.7610), real(1972.7010), real(0.0000), int(1), "MONITOR",
+    "RV2:BATU2BT22.AG", "RV2_U2_Boiler", "AIR FROM 2A AIRPREHEATER", "Deg F", "HIGH", "24h", "AAKR", real(447.0089), real(194.5290), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BSFU2WP70.AG", "RV2_U2_Boiler", "SUPERHEAT SPRAY FLOW", "KLB/Hr", "HIGH", "24h", "AAKR", real(116.8525), real(191.1538), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:FPZU3WP21.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFPT 3E CONTROL DRIVE POSITION", "%", "HIGH", "14d", "AnomalyDetection", real(62.6429), real(0.0853), real(0.0000), int(1), "MONITOR",
+    "RV3:GEEU3GE13.AG", "RV3_U3_Steam_Turbine", "GEN VOLTAGE", "KV", "HIGH", "14d", "AnomalyDetection", real(55.3343), real(22.8659), real(0.0000), int(1), "MONITOR",
+    "RV3:GEJU3GE14.AG", "RV3_U3_Steam_Turbine", "GEN GROSS REACTIVE", "MVAR", "HIGH", "24h", "Anomaly", real(48.8239), real(33.9817), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:TSPU2TP10.AG", "RV2_U2_Boiler", "IP TURBINE INLET PRESSURE", "PSIG", "HIGH", "24h", "AAKR,Anomaly", real(46.2805), real(127.7022), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BMFU2FF06.AG", "RV2_U2_Boiler", "GAS FLOW (HI RANGE) NORMAL", "KCFH", "HIGH", "24h", "AAKR,Anomaly", real(45.9812), real(1326.4877), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:GEJU2GE04.AG", "RV2_U2_Boiler", "UNIT MW (ALT)", "MW", "HIGH", "24h", "AAKR,Anomaly", real(45.1691), real(114.0025), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:CHPU2TP28.AG", "RV2_U2_Boiler", "CONDENSER VACUUM HI", "IN HgA", "HIGH", "24h", "AAKR,Anomaly", real(44.3475), real(23.9000), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:TOZU3CS51.AG", "RV3_U3_Steam_Turbine", "TB 3 L  O  CTRL VLV POSITION", "%", "HIGH", "14d", "AAKR,AnomalyDetection", real(43.9956), real(99.4859), real(0.0000), int(2), "MONITOR",
+    "RV2:FHPU2HP20.AG", "RV2_U2_Boiler", "STEAM TO #2 HEATER PRESSURE", "PSIG", "HIGH", "24h", "AAKR,Anomaly", real(41.9557), real(59.1919), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:TSPU2TP11.AG", "RV2_U2_Boiler", "REHEAT BOWL PRESSURE", "PSIG", "HIGH", "24h", "AAKR,Anomaly", real(41.0742), real(122.3727), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FHPU2HP10.AG", "RV2_U2_Boiler", "STEAM TO #1 HEATER PRESSURE", "PSIG", "HIGH", "24h", "AAKR,Anomaly", real(37.9487), real(125.8847), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:FPTU3MB00.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFPT 3E ACTIVE THRUST BRG TEMP", "Deg F", "HIGH", "14d", "AAKR", real(36.8462), real(108.0779), real(0.0000), int(1), "MONITOR",
+    "RV2:BMFU2FF07.AG", "RV2_U2_Boiler", "GAS FLOW (HI RANGE) ALT", "KCFH", "HIGH", "24h", "AAKR,Anomaly", real(35.8422), real(1259.3517), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:GEJU2GE03.AG", "RV2_U2_Boiler", "UNIT MW NORMAL", "MW", "HIGH", "24h", "AAKR", real(35.7443), real(100.4873), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:FPPU3PP03.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFP SUCTION HEADER PRESSURE", "PSIG", "HIGH", "14d", "AAKR", real(31.0934), real(484.6382), real(0.0000), int(1), "MONITOR",
+    "RV3:TBTU3TB06.AG", "RV3_U3_Steam_Turbine", "TURB-GEN BEARING  6 METAL TEMP", "Deg F", "HIGH", "24h", "Anomaly", real(30.0583), real(132.7544), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TVZU3TS17V1.AG", "RV3_U3_Steam_Turbine", "U3 TURBINE VALVE #1 POSITION", "%", "HIGH", "14d", "AnomalyDetection", real(25.0570), real(31.7374), real(0.0000), int(1), "MONITOR",
+    "RV3:GEJU3GE01.AG", "RV3_U3_Steam_Turbine", "GENERATOR GROSS LOAD A UNIT 3", "MW", "HIGH", "24h", "Anomaly", real(24.0398), real(234.5125), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BUPU2BP19.AG", "RV2_U2_Boiler", "FURNACE PRESSURE", "IN", "HIGH", "24h", "AAKR,Anomaly", real(23.4473), real(4.6141), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLZU2HLV55ND.AG", "RV2_U2_Boiler", "HEATER LVL VV 55 N DEMAND", "%", "HIGH", "24h", "AAKR,CoxPH", real(21.9114), real(-0.0017), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:TSPU3TP06.AG", "RV3_U3_Steam_Turbine", "TURBINE 1ST STAGE PRESSURE", "PSIG", "HIGH", "24h", "Anomaly", real(21.3071), real(605.1293), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FLPU2HP60.AG", "RV2_U2_Boiler", "STEAM TO #6 HEATER PRESSURE", "PSIA", "HIGH", "24h", "AAKR,Anomaly", real(20.3964), real(5.5630), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:GEJU3NLOAD.AG", "RV3_U3_Steam_Turbine", "U3 NET LOAD TO U1", "MW", "HIGH", "24h", "Anomaly", real(20.1202), real(212.0716), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TXTU3TT81.AG", "RV3_U3_Steam_Turbine", "TURB SEAL STEAM HEADER TEMP", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(20.1019), real(514.0760), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:FWFU3WF24.AG", "RV3_U3_Boiler_Feed_Pump_East", "FEEDWATER FLOW THROUGH BFP 3E", "KLB/Hr", "HIGH", "24h", "Anomaly", real(18.8208), real(490.4005), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BMFU2FF12.AG", "RV2_U2_Boiler", "FUEL OIL FLOW", "BBL/Hr", "HIGH", "24h", "Anomaly,AnomalyDetection", real(17.6453), real(0.0182), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:TSPU3TP12.AG", "RV3_U3_Steam_Turbine", "IP Turb Exh Pressure", "PSIG", "HIGH", "24h", "Anomaly", real(17.5037), real(56.3245), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:GBTU3GB02.AG", "RV3_U3_Steam_Turbine", "TURB-GEN BEARING  8 METAL TEMP", "Deg F", "HIGH", "24h", "Anomaly", real(17.2150), real(138.9065), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:GEJU3GE03.AG", "RV3_U3_Steam_Turbine", "GENERATOR GROSS LOAD", "MW", "HIGH", "24h", "Anomaly", real(16.4804), real(49.1215), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FHTU2HT23.AG", "RV2_U2_Boiler", "WATER TEMP FROM #2 HEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(16.1553), real(277.9241), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FWTU2WT21.AG", "RV2_U2_Boiler", "FW TEMP", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(15.9324), real(332.9190), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT47.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2B AIR HTR", "Deg F", "HIGH", "24h", "AAKR,AnomalyDetection", real(15.5498), real(122.3082), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLTU2HT44.AG", "RV2_U2_Boiler", "HEATER #4 DRAIN TEMP", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(13.8925), real(181.1660), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLTU2HT33.AG", "RV2_U2_Boiler", "WATER TEMP FROM #3 HEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(13.8797), real(233.2565), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:TBTU3TB03.AG", "RV3_U3_Steam_Turbine", "TURB-GEN BEARING  3 METAL TEMP", "Deg F", "HIGH", "14d", "AnomalyDetection", real(13.2640), real(166.6537), real(0.0000), int(1), "MONITOR",
+    "RV2:BFFU2BF01.AG", "RV2_U2_Boiler", "AIR FLOW-EAST SIDE-MAIN", "MCFH", "HIGH", "24h", "AAKR,Anomaly", real(13.0706), real(981.1453), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FHTU2HT24.AG", "RV2_U2_Boiler", "HEATER #2 DRAIN TEMP", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(12.0807), real(247.4248), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:TSPU2TP12.AG", "RV2_U2_Boiler", "IP TURBINE EXHAUST PRESSURE", "PSIG", "HIGH", "24h", "AAKR", real(12.0357), real(79.8623), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:CHLU3CDIA2.AG", "RV3_U3_Steam_Turbine", "Condenser Air In-Leakage", "SCFM", "HIGH", "24h", "Anomaly", real(11.9735), real(49.4822), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT48.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2B AIR HTR", "Deg F", "HIGH", "24h", "AAKR", real(11.9694), real(217.6729), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FLTU2HT54.AG", "RV2_U2_Boiler", "HEATER #5 DRAIN TEMP", "Deg F", "HIGH", "24h", "AAKR", real(11.9472), real(157.2884), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FLTU2HT53.AG", "RV2_U2_Boiler", "WATER TEMP FROM #5 HEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(11.9383), real(170.9428), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT42.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2A AIR HTR", "Deg F", "HIGH", "24h", "AAKR", real(11.9057), real(197.1211), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FWFU2WP00.AG", "RV2_U2_Boiler", "CONDENSATE FLOW", "KLB/Hr", "HIGH", "24h", "AAKR", real(11.7934), real(729.6958), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FLTU2HT63.AG", "RV2_U2_Boiler", "WATER TEMP FROM #6 HEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(11.7208), real(153.4256), real(0.0000), int(2), "INVESTIGATE",
+    "RV3:FPTU3MB02.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFPT 3E HP END BRG TEMP", "Deg F", "HIGH", "14d", "AnomalyDetection", real(11.6537), real(113.5750), real(0.0000), int(1), "MONITOR",
+    "RV2:FLTU2HT34.AG", "RV2_U2_Boiler", "HEATER #3 DRAIN TEMP", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(11.3791), real(217.4677), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLTU2HT43.AG", "RV2_U2_Boiler", "WATER TEMP FROM #4 HEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(11.2631), real(208.0848), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLZU2HLV55XD.AG", "RV2_U2_Boiler", "HEATER LVL VV 55 X DEMAND", "%", "HIGH", "24h", "Anomaly", real(11.2203), real(30.6664), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:GCZU3GP10.AG", "RV3_U3_Steam_Turbine", "GEN H2 CW CONTROL VLV POSITION", "%", "HIGH", "14d", "AnomalyDetection", real(10.4236), real(98.3286), real(0.0000), int(1), "MONITOR",
+    "RV3:TBYU3TS01Y-ABS.AG", "RV3_U3_Steam_Turbine", "BRNG1 TURBINE VIBRATION Y ABS", "Mils", "HIGH", "24h", "Anomaly", real(10.0529), real(2.1011), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:FPTU3MT01.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFPT 3E LUBE OIL TEMP A", "Deg F", "HIGH", "14d", "AAKR,AnomalyDetection", real(9.7484), real(107.3571), real(0.0000), int(2), "MONITOR",
+    "RV2:BFFU2BF03.AG", "RV2_U2_Boiler", "AIR FLOW-EAST SIDE-ALT", "MCFH", "HIGH", "24h", "AAKR,Anomaly", real(9.5476), real(957.1196), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLTU2HT73.AG", "RV2_U2_Boiler", "WATER TEMP FROM #7 HEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(8.6673), real(132.4085), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BFFU2BF02.AG", "RV2_U2_Boiler", "AIR FLOW-WEST SIDE-MAIN", "MCFH", "HIGH", "24h", "AAKR,Anomaly", real(8.2007), real(976.8905), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT29.AG", "RV2_U2_Boiler", "AIR FROM 2B AIRPREHEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(7.7825), real(471.5810), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:TSTU2TT00.AG", "RV2_U2_Boiler", "THROTTLE STEAM TEMP", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(7.7438), real(836.6002), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT39.AG", "RV2_U2_Boiler", "GAS TO 2B AIR PREHEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(7.1695), real(525.7314), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT31.AG", "RV2_U2_Boiler", "GAS TO 2A AIR PREHEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(7.1410), real(514.9559), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:CHPU2TP29.AG", "RV2_U2_Boiler", "CONDENSER BACKPRESSURE LO RNG", "IN HgA", "HIGH", "24h", "AAKR,Anomaly", real(6.9557), real(2.5107), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT24.AG", "RV2_U2_Boiler", "AIR FROM 2A AIRPREHEATER", "Deg F", "HIGH", "24h", "AAKR,GBM", real(6.0480), real(5.2540), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT33.AG", "RV2_U2_Boiler", "GAS TO 2A AIR PREHEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(5.5769), real(504.6677), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BFFU2BF04.AG", "RV2_U2_Boiler", "AIR FLOW-WEST SIDE-ALT", "MCFH", "HIGH", "24h", "AAKR,Anomaly", real(5.4639), real(924.2395), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT38.AG", "RV2_U2_Boiler", "GAS TO 2B AIR PREHEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(5.4589), real(496.8677), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT27.AG", "RV2_U2_Boiler", "AIR FROM 2B AIRPREHEATER", "Deg F", "HIGH", "24h", "AAKR,GBM", real(5.2979), real(33.7462), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:TXTU2TM65.AG", "RV2_U2_Boiler", "SEAL STEAM HEADER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(5.2971), real(647.0541), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT32.AG", "RV2_U2_Boiler", "GAS TO 2A AIR PREHEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(5.1626), real(507.5809), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:BATU2BT36.AG", "RV2_U2_Boiler", "GAS TO 2B AIR PREHEATER", "Deg F", "HIGH", "24h", "AAKR,Anomaly", real(4.8016), real(513.3898), real(0.0000), int(2), "INVESTIGATE",
+    "RV2:FLLU2LV53X.AG", "RV2_U2_Boiler", "53X Valve Output Position %", "PERCENT", "HIGH", "24h", "Anomaly,CoxPH", real(3.7071), real(0.3734), real(0.0000), int(2), "MONITOR",
+    "RV2:FLLU2HL05.AG", "RV2_U2_Boiler", "LP HEATER #5 X LEVEL", "IN", "HIGH", "24h", "AAKR,CoxPH", real(3.7022), real(0.5876), real(0.0000), int(2), "MONITOR",
+    "RV2:BMFU2FF08.AG", "RV2_U2_Boiler", "GAS FLOW (LOW RANGE) ALT", "KCFH", "HIGH", "24h", "AAKR,CoxPH", real(3.1084), real(0.6481), real(0.0000), int(2), "MONITOR",
+    "RV2:FLZU2HLV51NFB.AG", "RV2_U2_Boiler", "HEATER LVL VV 51 N FEEDBACK", "%", "HIGH", "24h", "Anomaly,CoxPH", real(3.0478), real(0.4622), real(0.0000), int(2), "MONITOR",
+    "RV2:CHLU2CL30.AG", "RV2_U2_Boiler", "COND HOTWELL LEVEL", "IN", "MEDIUM", "14d", "AnomalyDetection", real(9.4228), real(27.3332), real(0.0000), int(1), "MONITOR",
+    "RV3:FPYU3TS20V.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFP E TOBY VELOCITY", "IN/SEC", "MEDIUM", "14d", "AnomalyDetection", real(7.6162), real(0.0201), real(0.0000), int(1), "MONITOR",
+    "RV3:TSPU3TP07.AG", "RV3_U3_Steam_Turbine", "TURBINE HP EXHAUST PRESSURE", "PSIG", "MEDIUM", "24h", "Anomaly", real(6.7573), real(185.3954), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FLTU2HT77.AG", "RV2_U2_Boiler", "STEAM TEMP TO HTR #7-B", "Deg F", "MEDIUM", "24h", "Anomaly", real(6.6289), real(146.8488), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT43.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2A AIR HTR", "Deg F", "MEDIUM", "24h", "AAKR", real(6.6192), real(181.8896), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT49.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2B AIR HTR", "Deg F", "MEDIUM", "24h", "AAKR", real(6.5547), real(223.0049), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TSPU3TP05.AG", "RV3_U3_Steam_Turbine", "TURBINE STEAM CHEST PRESSURE", "PSIG", "MEDIUM", "24h", "Anomaly", real(6.4678), real(2591.4631), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BFZU2BP02.AG", "RV2_U2_Boiler", "FD FAN \"B\" VANE POSITION", "%", "MEDIUM", "24h", "AAKR", real(6.4449), real(53.9626), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FHTU2HT10.AG", "RV2_U2_Boiler", "STEAM TO #1 HEATER", "Deg F", "MEDIUM", "24h", "AAKR", real(6.3171), real(488.7946), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BFZU2BP01.AG", "RV2_U2_Boiler", "FD FAN \"A\" VANE POSITION", "%", "MEDIUM", "24h", "AAKR", real(6.2910), real(53.7708), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT46.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2B AIR HTR", "Deg F", "MEDIUM", "24h", "AAKR", real(6.0791), real(196.5568), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT41.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2A AIR HTR", "Deg F", "MEDIUM", "24h", "AAKR", real(5.9235), real(185.8721), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TOPU3TP58.AG", "RV3_U3_Steam_Turbine", "TURBINE BEARING OIL PRESSURE", "PSIG", "MEDIUM", "24h", "Anomaly", real(5.8923), real(27.7396), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FHTU2HT14.AG", "RV2_U2_Boiler", "HEATER #1 DRAIN TEMP", "Deg F", "MEDIUM", "24h", "AAKR", real(5.8726), real(291.5511), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:BRTU3BT94.AG", "RV3_U3_Steam_Turbine", "MAIN RH STM OUTLET TEMP S", "Deg F", "MEDIUM", "14d", "AnomalyDetection", real(5.8063), real(971.9840), real(0.0000), int(1), "MONITOR",
+    "RV2:BSTU2BT82.AG", "RV2_U2_Boiler", "FINAL SH OUTLET TEMP (NORM)", "Deg F", "MEDIUM", "24h", "AAKR", real(5.6917), real(915.1643), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT26.AG", "RV2_U2_Boiler", "AIR FROM 2B AIRPREHEATER", "Deg F", "MEDIUM", "24h", "AAKR", real(5.6344), real(436.9571), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FLTU2HT30.AG", "RV2_U2_Boiler", "STEAM TO #3 HEATER", "Deg F", "MEDIUM", "24h", "AAKR", real(5.4746), real(582.4552), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BKAU2BC09.AG", "RV2_U2_Boiler", "FLUE GAS O2 EAST", "%", "MEDIUM", "24h", "AAKR", real(5.3202), real(8.1745), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TBYU3TS08Y-ABS.AG", "RV3_U3_Steam_Turbine", "BRNG8 TURBINE VIBRATION Y ABS", "Mils", "MEDIUM", "14d", "AnomalyDetection", real(5.2734), real(3.1060), real(0.0000), int(1), "MONITOR",
+    "RV2:BATU2BT21.AG", "RV2_U2_Boiler", "AIR FROM 2A AIRPREHEATER", "Deg F", "MEDIUM", "24h", "AAKR", real(5.2331), real(441.1139), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TSPU3TP02.AG", "RV3_U3_Steam_Turbine", "MN STEAM PRESSURE AT TURBINE B", "PSIG", "MEDIUM", "24h", "Anomaly", real(5.1389), real(2627.2536), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:FLLU2HL07.AG", "RV2_U2_Boiler", "LP HEATER #7 LEVEL", "IN", "MEDIUM", "24h", "AAKR", real(5.1293), real(-0.5482), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TSPU3TP01.AG", "RV3_U3_Steam_Turbine", "MN STEAM PRESSURE AT TURBINE A", "PSIG", "MEDIUM", "24h", "Anomaly", real(5.1252), real(2621.8106), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:CHLU3CL30.AG", "RV3_U3_Steam_Turbine", "CONDENSER HOTWELL LEVEL", "IN WC", "MEDIUM", "24h", "Anomaly", real(4.9836), real(35.2259), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TBYU3TS02X-ABS.AG", "RV3_U3_Steam_Turbine", "BRNG2 TURBINE VIBRATION X ABS", "Mils", "MEDIUM", "24h", "Anomaly", real(4.9731), real(2.6806), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TSPU3TP03.AG", "RV3_U3_Steam_Turbine", "MN STEAM PRESSURE AT TURBINE C", "PSIG", "MEDIUM", "24h", "Anomaly", real(4.9614), real(2483.5927), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TSPU3TP10.AG", "RV3_U3_Steam_Turbine", "REHEATED STEAM AT TB PRESSURE", "PSIG", "MEDIUM", "24h", "Anomaly", real(4.8777), real(184.9544), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:TSTU2TT01.AG", "RV2_U2_Boiler", "ALT THROTTLE STEAM TEMP", "Deg F", "MEDIUM", "24h", "Anomaly", real(4.5676), real(838.0409), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BSTU2BT83.AG", "RV2_U2_Boiler", "FINAL SH OUTLET TEMP (ALT)", "Deg F", "MEDIUM", "24h", "AAKR", real(4.5639), real(908.1388), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TBYU3TS03X-ABS.AG", "RV3_U3_Steam_Turbine", "BRNG3 TURBINE VIBRATION X ABS", "Mils", "MEDIUM", "24h", "Anomaly", real(4.5428), real(0.9946), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT44.AG", "RV2_U2_Boiler", "GAS TEMP FROM 2A AIR HTR", "Deg F", "MEDIUM", "24h", "AAKR", real(4.3725), real(167.1111), real(0.0000), int(1), "MONITOR",
+    "RV2:TSTU2TT07.AG", "RV2_U2_Boiler", "HP TURB EXHAUST TEMP", "Deg F", "MEDIUM", "24h", "AAKR", real(4.2217), real(480.9212), real(0.0000), int(1), "MONITOR",
+    "RV3:TVZU3TS17V2.AG", "RV3_U3_Steam_Turbine", "U3 TURBINE VALVE #2 POSITION", "%", "MEDIUM", "24h", "Anomaly", real(4.2067), real(36.2707), real(0.0000), int(1), "INVESTIGATE",
+    "RV3:TBYU3TS03X.AG", "RV3_U3_Steam_Turbine", "BRNG3 TURBINE VIBRATION X", "Mils", "MEDIUM", "24h", "Anomaly", real(4.0849), real(0.4049), real(0.0000), int(1), "INVESTIGATE",
+    "RV2:BATU2BT23.AG", "RV2_U2_Boiler", "AIR FROM 2A AIRPREHEATER", "Deg F", "MEDIUM", "24h", "AAKR", real(3.7219), real(411.8015), real(0.0000), int(1), "MONITOR",
+    "RV2:BRTU2BT97.AG", "RV2_U2_Boiler", "REHEAT OUTLET TEMP (ALT)", "Deg F", "MEDIUM", "24h", "AAKR", real(3.6779), real(899.7864), real(0.0000), int(1), "MONITOR",
+    "RV2:FLTU2HT64.AG", "RV2_U2_Boiler", "HEATER #6 DRAIN TEMP", "Deg F", "MEDIUM", "24h", "AAKR", real(3.6408), real(133.7655), real(0.0000), int(1), "MONITOR",
+    "RV3:TBYU3TS01X-ABS.AG", "RV3_U3_Steam_Turbine", "BRNG1 TURBINE VIBRATION X ABS", "Mils", "MEDIUM", "24h", "Anomaly", real(3.4074), real(2.4348), real(0.0000), int(1), "MONITOR",
+    "RV3:CHPU3TP28.AG", "RV3_U3_Steam_Turbine", "TURBINE BACK PRESSURE- HI RNG", "IN HgA", "MEDIUM", "24h", "Anomaly", real(3.1859), real(10.8705), real(0.0000), int(1), "MONITOR",
+    "RV2:FHTU2HT20.AG", "RV2_U2_Boiler", "STEAM TO #2 HEATER", "Deg F", "MEDIUM", "24h", "Anomaly", real(3.0778), real(716.3505), real(0.0000), int(1), "MONITOR",
+    "RV2:FLPU2HP70.AG", "RV2_U2_Boiler", "STEAM TO #7 HEATER PRESSURE", "PSIA", "LOW", "14d", "AnomalyDetection", real(2.1254), real(1.6061), real(0.0000), int(1), "MONITOR",
+    "RV3:TSTU3TT39.AG", "RV3_U3_Steam_Turbine", "TURBINE EXHAUST STEAM TEMP W2", "Deg F", "LOW", "14d", "CoxPH", real(0.3577), real(0.4570), real(0.0000), int(1), "MONITOR",
+    "RV2:BATU2BT24.AG__avg12h", "RV2_U2_Boiler", "STOP 24h alert", "", "LOW", "1d", "GBM", real(0.1841), real(0.2663), real(0.0000), int(1), "MONITOR",
+    "RV3:TBYU3TS04X-ABS.AG", "RV3_U3_Steam_Turbine", "BRNG4 TURBINE VIBRATION X ABS", "Mils", "LOW", "14d", "CoxPH", real(0.0968), real(-0.0679), real(0.0000), int(1), "MONITOR",
+    "RV3:FPYU3TS27Y.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFP 3E INBD BRG VIB Y", "IPS", "LOW", "14d", "CoxPH", real(0.0635), real(0.5065), real(0.0000), int(1), "MONITOR",
+    "RV3:FPPU3BP35.AG", "RV3_U3_Boiler_Feed_Pump_East", "EAST BFP DICHARGE PRESSURE", "PSI", "LOW", "14d", "CoxPH", real(0.0569), real(0.4852), real(0.0000), int(1), "MONITOR",
+    "RV2:BTPU2BP20.AG__avg24h", "RV2_U2_Boiler", "STOP 8h alert", "", "LOW", "1d", "GBM", real(0.0344), real(0.6441), real(0.0000), int(1), "MONITOR",
+    "RV3:TBYU3TS09X-ABS.AG", "RV3_U3_Steam_Turbine", "BRNG9 TURBINE VIBRATION X ABS", "Mils", "LOW", "14d", "CoxPH", real(0.0261), real(0.1746), real(0.0000), int(1), "MONITOR",
+    "RV3:TBYU3TS05Y.AG", "RV3_U3_Steam_Turbine", "BRNG5 TURBINE VIBRATION Y", "Mils", "LOW", "14d", "CoxPH", real(0.0244), real(0.2665), real(0.0000), int(1), "MONITOR",
+    "RV3:FPTU3MB03.AG", "RV3_U3_Boiler_Feed_Pump_East", "BFPT 3E LP END BRG TEMP", "Deg F", "LOW", "14d", "CoxPH", real(0.0211), real(0.0949), real(0.0000), int(1), "MONITOR",
+    "RV3:TBYU3TS05X.AG", "RV3_U3_Steam_Turbine", "BRNG5 TURBINE VIBRATION X", "Mils", "LOW", "14d", "CoxPH", real(0.0165), real(0.2998), real(0.0000), int(1), "MONITOR",
+    "RV2:TSPU2TP03.AG__avg12h", "RV2_U2_Boiler", "STOP 4h alert", "", "LOW", "1d", "GBM", real(0.0102), real(0.5564), real(0.0000), int(1), "MONITOR",
+    "RV2:UXTU2BT00.AG", "RV2_U2_Boiler", "AMBIENT AIR TEMPERATURE", "Deg F", "LOW", "14d", "CoxPH", real(0.0061), real(0.2287), real(0.0000), int(1), "MONITOR",
+    "RV2:TSPU2TP03.AG__avg24h", "RV2_U2_Boiler", "STOP 4h alert", "", "LOW", "1d", "GBM", real(0.0018), real(0.5655), real(0.0000), int(1), "MONITOR"
+    ]
+}
+.create-or-alter function with (folder = "ml", docstring = "Asset-level risk summary - updated 2026-08-12 07:15 CT", skipvalidation = "true") WatchAssets() {
+    datatable(asset_id:string, risk_level:string, cox_survival_7d:real, cox_survival_14d:real,
+              short_term_stop_prob_4h:real, short_term_alert:string, scored_at:datetime)
+    [
+    "RV3_U3_Boiler_Feed_Pump_East", "MEDIUM", real(0.738), real(0.586), real(0.0), "UNKNOWN", datetime(2026-08-12T07:15:17Z),
+    "RV2_U2_Boiler", "MEDIUM", real(0.734), real(0.564), real(0.535), "MEDIUM", datetime(2026-08-12T07:15:17Z),
+    "RV3_U3_Steam_Turbine", "MEDIUM", real(0.729), real(0.572), real(0.026), "NORMAL", datetime(2026-08-12T07:15:17Z)
+    ]
+}
+.create-or-alter function with (skipvalidation = "true") ParsePCIOutage() {
+    PCIOutagesRaw
+    | project
+        outage_id, unit_name, unit_id, outage_type, status,
+        start_date = todatetime(start_date),
+        end_date = todatetime(end_date),
+        duration_hrs, cause_code, cause_description,
+        mw_capability, mw_reduction,
+        description, miso_status,
+        plant, priority, iso_id, action,
+        modified_on = todatetime(modified_on),
+        modified_by,
+        snapshot_ts,
+        IngestedAt = now()
+}
+.create-or-alter function with (skipvalidation = "true") ParseAimmWorkRequest() { AimmWorkRequestsRaw | project wr_id, problem_descr, problem_location, location, wr_type, wr_type_code, wr_status, wr_status_id, site_code, site_name, priority, priority_code, priority_rank, planner, pm_identifier, pm_descr, pm_due_date, safety_related, environ_related, unit_status, unit_status_id, offline_status, offline_status_id, elec_hrs, mech_hrs, ic_hrs, other_hrs, total_hrs, estimate_hrs, obsrv_date, start_date, complete_date, condition, condition_code, entity_identity, entity_descr, parent_identity, parent_descr, create_date, update_date, source_host, IngestedAt = now() }
+.create-or-alter function with (skipvalidation = "true") ParseAimmEntityHierarchy() { AimmEntityHierarchyRaw | project hieroi, siteoi, mtnoi, entity_id, entity_descr, entity_type, bom_no, priority, department, level1_mtnoi, level2_mtnoi, level3_mtnoi, level4_mtnoi, level5_mtnoi, level6_mtnoi, level7_mtnoi, level8_mtnoi, update_date, source_host, IngestedAt = now() }
+.alter table PiEventsRaw policy retention @'{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Disabled"}'
+.alter table PiEventsRaw policy caching hotdata = time(1.00:00:00) hotindex = time(1.00:00:00)
+.alter table PiEvents policy retention @'{"SoftDeletePeriod":"365.00:00:00","Recoverability":"Enabled"}'
+.alter table PiEvents policy caching hotdata = time(30.00:00:00) hotindex = time(30.00:00:00)
+.alter table IcareEventsRaw policy retention @'{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Enabled"}'
+.alter table IcareEventsRaw policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter table IcareEvents policy retention @'{"SoftDeletePeriod":"365.00:00:00","Recoverability":"Enabled"}'
+.alter table GadsEventsRaw policy retention @'{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Enabled"}'
+.alter table GadsEventsRaw policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter table GadsEvents policy retention @'{"SoftDeletePeriod":"365.00:00:00","Recoverability":"Enabled"}'
+.alter table SmartSignalIncidentsRaw policy retention @'{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Enabled"}'
+.alter table SmartSignalIncidentsRaw policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter table SmartSignalIncidents policy retention @'{"SoftDeletePeriod":"365.00:00:00","Recoverability":"Enabled"}'
+.alter table SmartSignalDiagnosticsRaw policy retention @'{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Enabled"}'
+.alter table SmartSignalDiagnosticsRaw policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter table SmartSignalDiagnostics policy retention @'{"SoftDeletePeriod":"365.00:00:00","Recoverability":"Enabled"}'
+.alter table SmartSignalObservationsRaw policy retention @'{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Enabled"}'
+.alter table SmartSignalObservationsRaw policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter table SmartSignalObservations policy retention @'{"SoftDeletePeriod":"365.00:00:00","Recoverability":"Enabled"}'
+.alter table PCIOutagesRaw policy retention @'{"SoftDeletePeriod":"7.00:00:00","Recoverability":"Enabled"}'
+.alter table PCIOutagesRaw policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter table MLFeedback policy retention @'{"SoftDeletePeriod":"3650.00:00:00","Recoverability":"Enabled"}'
+.alter table MLFeedback policy streamingingestion "{\"IsEnabled\":true,\"HintAllocatedRate\":null,\"NumberOfRowStores\":null,\"SealIntervalLimit\":null,\"SealThresholdBytes\":null,\"UsageTags\":[],\"IsMaintenanceActive\":false}"
+.alter table PiEvents policy update "[{\"IsEnabled\":true,\"Source\":\"PiEventsRaw\",\"Query\":\"ParsePiEvent()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"
+.alter table IcareEvents policy update "[{\"IsEnabled\":true,\"Source\":\"IcareEventsRaw\",\"Query\":\"ParseIcareEvent()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"
+.alter table GadsEvents policy update "[{\"IsEnabled\":true,\"Source\":\"GadsEventsRaw\",\"Query\":\"ParseGadsEvent()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"
+.alter table SmartSignalIncidents policy update "[{\"IsEnabled\":true,\"Source\":\"SmartSignalIncidentsRaw\",\"Query\":\"ParseSmartSignalIncident()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"
+.alter table SmartSignalDiagnostics policy update "[{\"IsEnabled\":true,\"Source\":\"SmartSignalDiagnosticsRaw\",\"Query\":\"ParseSmartSignalDiagnostic()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"
+.alter table SmartSignalObservations policy update "[{\"IsEnabled\":true,\"Source\":\"SmartSignalObservationsRaw\",\"Query\":\"ParseSmartSignalObservation()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"
+.alter table AimmWorkRequests policy update "[{\"IsEnabled\":true,\"Source\":\"AimmWorkRequestsRaw\",\"Query\":\"ParseAimmWorkRequest()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"
+.alter table AimmEntityHierarchy policy update "[{\"IsEnabled\":true,\"Source\":\"AimmEntityHierarchyRaw\",\"Query\":\"ParseAimmEntityHierarchy()\",\"IsTransactional\":true,\"PropagateIngestionProperties\":true,\"ManagedIdentity\":null}]"

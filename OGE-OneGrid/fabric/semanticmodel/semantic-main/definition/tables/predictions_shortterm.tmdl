@@ -1,0 +1,96 @@
+table predictions_shortterm
+	lineageTag: 1e9f26fc-1d85-4995-aa8d-93d809f60cf0
+	sourceLineageTag: [ml].[predictions_shortterm]
+
+	column scoring_timestamp
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 55774073-5c81-4ff8-85a3-8606407608a4
+		sourceLineageTag: scoring_timestamp
+		summarizeBy: none
+		sourceColumn: scoring_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_id
+		dataType: string
+		lineageTag: 4dd14ff9-3e0b-4bbf-9d30-778a0b475413
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column prediction_horizon
+		dataType: string
+		lineageTag: ec6f771c-a2cc-43bb-bea2-ec9b065b63e1
+		sourceLineageTag: prediction_horizon
+		summarizeBy: none
+		sourceColumn: prediction_horizon
+
+		annotation SummarizationSetBy = Automatic
+
+	column stop_probability
+		dataType: double
+		lineageTag: 878702fa-e3c9-4661-99ed-a548a43e3c1f
+		sourceLineageTag: stop_probability
+		summarizeBy: sum
+		sourceColumn: stop_probability
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column alert_level
+		dataType: string
+		lineageTag: a6e3837e-5a4f-460d-a55c-3d003f18027f
+		sourceLineageTag: alert_level
+		summarizeBy: none
+		sourceColumn: alert_level
+
+		annotation SummarizationSetBy = Automatic
+
+	column model_algorithm
+		dataType: string
+		lineageTag: e1d93a42-1a45-461c-8e42-ab521722ae5f
+		sourceLineageTag: model_algorithm
+		summarizeBy: none
+		sourceColumn: model_algorithm
+
+		annotation SummarizationSetBy = Automatic
+
+	column model_run_id
+		dataType: string
+		lineageTag: 27bc5d4b-8d49-4b1b-b1db-eb2a2cd4a2e9
+		sourceLineageTag: model_run_id
+		summarizeBy: none
+		sourceColumn: model_run_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column scored_at
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 5688e38c-81d1-4825-801f-da13c41a42bb
+		sourceLineageTag: scored_at
+		summarizeBy: none
+		sourceColumn: scored_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column label_type
+		dataType: string
+		lineageTag: 00779c3a-08c7-40fa-a6f4-bad42ab2d818
+		sourceLineageTag: label_type
+		summarizeBy: none
+		sourceColumn: label_type
+
+		annotation SummarizationSetBy = Automatic
+
+	partition predictions_shortterm = entity
+		mode: directLake
+		source
+			entityName: predictions_shortterm
+			schemaName: ml
+			expressionSource: 'DirectLake - lh_poc'
+

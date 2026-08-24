@@ -1,0 +1,700 @@
+{
+  "schema_version": 75,
+  "autoRefresh": {
+    "enabled": true,
+    "defaultInterval": "30s",
+    "minInterval": "1s"
+  },
+  "changeDetection": {
+    "kind": "liveUpdates",
+    "minRefreshRate": "10s",
+    "fallbackRefreshRate": "30s"
+  },
+  "tiles": [
+    {
+      "id": "34945efe-8e58-4825-9fc3-690e49c815ae",
+      "title": "Equipment Status",
+      "visualType": "multistat",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 12,
+        "height": 3
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "2e148780-b537-4201-adee-1203632eb503"
+      },
+      "hideTitle": true,
+      "visualOptions": {
+        "multiStat__textSize": "auto",
+        "multiStat__valueColumn": "Status",
+        "colorRulesDisabled": false,
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__labelColumn": "Asset",
+        "multiStat__slot": {
+          "width": 2,
+          "height": 1
+        },
+        "colorRules": [
+          {
+            "id": "3c91f7e9-4d3b-432e-952b-14d7e2af5377",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Status",
+                "values": [
+                  "STOPPED"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "red",
+            "tag": "",
+            "icon": "critical",
+            "ruleName": "",
+            "visualType": "multistat"
+          },
+          {
+            "id": "ce3709bd-1360-406b-9a43-a9d23ee65115",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Status",
+                "values": [
+                  "RUNNING"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "green",
+            "tag": "",
+            "icon": "completed",
+            "ruleName": "",
+            "visualType": "multistat"
+          }
+        ]
+      }
+    },
+    {
+      "id": "107e9ef6-c4d1-4c79-940e-fb6a836ef172",
+      "title": "Asset Risk — 14d Survival %",
+      "visualType": "multistat",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 12,
+        "y": 0,
+        "width": 12,
+        "height": 3
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "95a7fb29-7950-4af1-98fa-157a895c4424"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "auto",
+        "multiStat__valueColumn": "Value",
+        "multiStat__labelColumn": "Asset",
+        "multiStat__displayOrientation": "horizontal",
+        "multiStat__slot": {
+          "width": 3,
+          "height": 1
+        },
+        "colorRulesDisabled": false,
+        "colorRules": [
+          {
+            "id": "6ba9eda4-1be7-4be8-ac72-17e601ca80b4",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Risk",
+                "values": [
+                  "CRITICAL"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "red",
+            "tag": "",
+            "icon": "critical",
+            "ruleName": "",
+            "visualType": "multistat"
+          },
+          {
+            "id": "e79db355-0ae7-4e43-9346-72c4e27b328e",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Risk",
+                "values": [
+                  "HIGH"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "yellow",
+            "tag": "",
+            "icon": "warning",
+            "ruleName": "",
+            "visualType": "multistat"
+          },
+          {
+            "id": "e5bb6337-2dc5-4720-9685-cdb0e0e822d2",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Risk",
+                "values": [
+                  "MEDIUM"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "yellow",
+            "tag": "",
+            "icon": "tentative",
+            "ruleName": "",
+            "visualType": "multistat"
+          },
+          {
+            "id": "6333aa39-f928-4709-b601-3ec29d7a863e",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Risk",
+                "values": [
+                  "LOW"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "green",
+            "tag": "",
+            "icon": "completed",
+            "ruleName": "",
+            "visualType": "multistat"
+          }
+        ]
+      }
+    },
+    {
+      "id": "242ed161-8614-45dc-b567-4b3ec866c03c",
+      "title": "Critical & High Sensors — 24h",
+      "visualType": "line",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 0,
+        "y": 3,
+        "width": 16,
+        "height": 7
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "361a9e20-b432-4c5e-b5a9-f9e3dcf579f7"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        }
+      }
+    },
+    {
+      "id": "db98c707-2d8d-48ff-ba82-604714ec9e48",
+      "title": "Tags per Asset by Priority",
+      "visualType": "column",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 16,
+        "y": 3,
+        "width": 8,
+        "height": 7
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "61bf84eb-9f82-48f0-ac74-7bfcd273f519"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        }
+      }
+    },
+    {
+      "id": "269d9ee8-fd1d-4fff-8ca7-8863edec2f98",
+      "title": "Watch Tags — Current Values",
+      "visualType": "table",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "width": 16,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "927011a0-e804-4434-ab85-8c7289fb2f1f"
+      },
+      "visualOptions": {
+        "table__enableRenderLinks": false,
+        "colorRulesDisabled": false,
+        "table__renderLinks": [],
+        "colorRules": [
+          {
+            "id": "02517c12-d0b4-4f55-abe2-c2b5288fbd66",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Priority",
+                "values": [
+                  "CRITICAL"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "red",
+            "tag": "",
+            "icon": "critical",
+            "ruleName": "",
+            "visualType": "table"
+          },
+          {
+            "id": "ea3a8adb-8450-4871-adc0-a3b3af03bc8d",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Priority",
+                "values": [
+                  "HIGH"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "yellow",
+            "tag": "",
+            "icon": "warning",
+            "ruleName": "",
+            "visualType": "table"
+          }
+        ],
+        "selectedDataOnLoad": {
+          "all": false,
+          "limit": 30
+        }
+      }
+    },
+    {
+      "id": "bf9fc85a-4d21-41aa-9254-d54dd67f63d5",
+      "title": "Top Risk Drivers",
+      "visualType": "bar",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 16,
+        "y": 10,
+        "width": 8,
+        "height": 8
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "dfa54c2c-a1b2-40eb-b138-1c6a9e70674c"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        }
+      }
+    },
+    {
+      "id": "cfb19071-87ef-4995-98b5-09b2cf6f374f",
+      "title": "Z-Score Trend — 7 Days",
+      "visualType": "line",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 16,
+        "height": 7
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "4c6b7004-d87d-45c8-93fe-030f4d79c183"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "Z-Score (0=normal)",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": [
+              {
+                "value": 3,
+                "id": "bad6ce05-b5c6-4980-9b70-246aa9d2fb4b"
+              },
+              {
+                "value": -3,
+                "id": "16535ab3-6d90-4569-a772-d8be84e0ba62"
+              }
+            ]
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        }
+      }
+    },
+    {
+      "id": "89c66361-ea18-40fc-a8fd-d395c13a01a5",
+      "title": "Data Feed Health",
+      "visualType": "multistat",
+      "pageId": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "layout": {
+        "x": 16,
+        "y": 18,
+        "width": 8,
+        "height": 7
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "8cd33dc4-75af-482d-b361-cd097523a185"
+      },
+      "visualOptions": {
+        "multiStat__textSize": "auto",
+        "multiStat__valueColumn": "Status",
+        "multiStat__labelColumn": "Status",
+        "multiStat__displayOrientation": "vertical",
+        "multiStat__slot": {
+          "width": 1,
+          "height": 1
+        },
+        "colorRulesDisabled": false,
+        "colorRules": [
+          {
+            "id": "01a90a28-91c6-4f3e-ac40-4e40b7430bac",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Status",
+                "values": [
+                  "LIVE"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "green",
+            "tag": "",
+            "icon": "completed",
+            "ruleName": "",
+            "visualType": "multistat"
+          },
+          {
+            "id": "87e68831-5928-47f4-b1d7-63abac1c3871",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Status",
+                "values": [
+                  "DELAYED"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "yellow",
+            "tag": "",
+            "icon": "warning",
+            "ruleName": "",
+            "visualType": "multistat"
+          },
+          {
+            "id": "299af889-a5f6-4fee-98fc-62bdcdda6490",
+            "ruleType": "colorByCondition",
+            "applyToColumn": null,
+            "hideText": false,
+            "applyTo": "cells",
+            "conditions": [
+              {
+                "operator": "==",
+                "column": "Status",
+                "values": [
+                  "STALE"
+                ]
+              }
+            ],
+            "chainingOperator": "and",
+            "colorStyle": "light",
+            "color": "red",
+            "tag": "",
+            "icon": "critical",
+            "ruleName": "",
+            "visualType": "multistat"
+          }
+        ]
+      }
+    },
+    {
+      "id": "c0ffee00-0000-0000-0000-000000000004",
+      "title": "Today's CRITICAL Tags - Actual vs Expected (Live)",
+      "visualType": "table",
+      "pageId": "c0ffee00-0000-0000-0000-000000000001",
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 24,
+        "height": 13
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c0ffee00-0000-0000-0000-000000000002"
+      },
+      "visualOptions": {
+        "colorRulesDisabled": true,
+        "colorRules": [],
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 100
+        }
+      }
+    },
+    {
+      "id": "c0ffee00-0000-0000-0000-000000000005",
+      "title": "Today's CRITICAL Tags - Live Trend (60 min)",
+      "visualType": "line",
+      "pageId": "c0ffee00-0000-0000-0000-000000000001",
+      "layout": {
+        "x": 0,
+        "y": 13,
+        "width": 24,
+        "height": 10
+      },
+      "queryRef": {
+        "kind": "query",
+        "queryId": "c0ffee00-0000-0000-0000-000000000003"
+      },
+      "visualOptions": {
+        "hideLegend": false,
+        "multipleYAxes": {
+          "base": {
+            "id": "-1",
+            "columns": [],
+            "label": "",
+            "yAxisMinimumValue": null,
+            "yAxisMaximumValue": null,
+            "yAxisScale": "linear",
+            "horizontalLines": []
+          },
+          "additional": [],
+          "showMultiplePanels": false
+        },
+        "selectedDataOnLoad": {
+          "all": true,
+          "limit": 10
+        }
+      }
+    }
+  ],
+  "baseQueries": [],
+  "parameters": [],
+  "dataSources": [
+    {
+      "id": "793f0ae3-ae0b-4761-a8c5-6117c283db51",
+      "name": "pi-realtime-db",
+      "kind": "kusto-trident",
+      "clusterUri": "https://trd-8a08ckb2duw406mvvg.z2.kusto.fabric.microsoft.com",
+      "database": "da213762-0780-4c20-aef2-04371f1a4d89",
+      "databaseArtifactId": "da213762-0780-4c20-aef2-04371f1a4d89",
+      "workspace": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "pages": [
+    {
+      "id": "c0ffee00-0000-0000-0000-000000000001",
+      "name": "Today's Critical Tags"
+    },
+    {
+      "id": "516be5c4-ae96-4036-8e05-3bd27141721f",
+      "name": "ML Tag Watch"
+    }
+  ],
+  "queries": [
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "let rv2=PiEvents|where not(Questionable) and Tag==\"RV2:BTPU2BPDRUM.AG\"|top 1 by Ts desc|extend Asset=\"RV2 Unit 2 Boiler\",Indicator=\"Drum Pressure\",Units=\"PSI\",Threshold=600;\nlet rv3=PiEvents|where not(Questionable) and Tag==\"RV3:TXSU3TS15A.AG\"|top 1 by Ts desc|extend Asset=\"RV3 Unit 3 Steam Turbine\",Indicator=\"Turbine Speed\",Units=\"RPM\",Threshold=6;\nunion rv2,rv3\n|extend V=toreal(Value)\n|extend Status=case(V>Threshold,\"RUNNING\",\"STOPPED\")\n|project Asset, Status, Value=round(V,1), Indicator, Units, LastReading=Ts\n| order by Asset asc",
+      "id": "2e148780-b537-4201-adee-1203632eb503",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "WatchAssets()\n| project Asset=asset_id, Risk=risk_level,\n          Value=round(cox_survival_14d*100,1)",
+      "id": "95a7fb29-7950-4af1-98fa-157a895c4424",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "PiEvents\n| where Ts > ago(24h) and not(Questionable)\n| where Tag in (WatchTags() | where watch_priority in (\"CRITICAL\",\"HIGH\") | project tag)\n| lookup (WatchTags() | project tag, descriptor) on $left.Tag == $right.tag\n| summarize Value=avg(toreal(Value)) by bin(Ts, 5m), descriptor",
+      "id": "361a9e20-b432-4c5e-b5a9-f9e3dcf579f7",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "WatchTags()\n| summarize Tags=count() by asset_id, watch_priority",
+      "id": "61bf84eb-9f82-48f0-ac74-7bfcd273f519",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "let wt = WatchTags();\nlet current = PiEvents\n| where Ts > ago(1h) and not(Questionable)\n| where Tag in (wt | project tag)\n| summarize CurrentValue=round(avg(toreal(Value)),2), LastReading=max(Ts) by Tag;\ncurrent\n| join kind=inner wt on $left.Tag == $right.tag\n| project Sensor=descriptor, CurrentValue, Units=engineering_units,\n          Priority=watch_priority, Sources=signal_sources,\n          Models=model_agreement_count, Action=recommended_action\n| order by Priority asc, Models desc",
+      "id": "927011a0-e804-4434-ab85-8c7289fb2f1f",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "WatchTags()\n| where risk_score > 0\n| top 15 by risk_score desc\n| project Sensor=descriptor, risk_score=round(risk_score,2)",
+      "id": "dfa54c2c-a1b2-40eb-b138-1c6a9e70674c",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "let wt = WatchTags() | where watch_priority in (\"CRITICAL\",\"HIGH\") | project tag, descriptor;\nlet baselines = PiEvents\n| where Ts between (ago(30d) .. ago(1d)) and not(Questionable)\n| where Tag in (wt | project tag)\n| summarize Mean=avg(toreal(Value)), Std=stdev(toreal(Value)) by Tag;\nPiEvents\n| where Ts > ago(7d) and not(Questionable)\n| where Tag in (wt | project tag)\n| summarize DailyAvg=avg(toreal(Value)) by Day=bin(Ts, 1d), Tag\n| join kind=leftouter baselines on Tag\n| join kind=leftouter wt on $left.Tag == $right.tag\n| extend ZScore=round((DailyAvg - Mean) / Std, 2)\n| project Timestamp=Day, descriptor, ZScore",
+      "id": "4c6b7004-d87d-45c8-93fe-030f4d79c183",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "PiEvents\n| where Ts > ago(1h) and not(Questionable)\n| where Tag in (WatchTags() | project tag)\n| summarize Readings=count(), ActiveTags=dcount(Tag),\n            LatestReading=max(Ts),\n            LagSeconds=datetime_diff('second', now(), max(Ts))\n| extend Status=case(LagSeconds < 60, \"LIVE\", LagSeconds < 300, \"DELAYED\", \"STALE\")",
+      "id": "8cd33dc4-75af-482d-b361-cd097523a185",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "let crit = datatable(Tag:string, Descriptor:string, Risk:real)[\n    \"RV2:TXSU2TS14.AG\",\"Tsi Turb Speed\",2855.7610,\n    \"RV2:FLZU2HLV51XFB.AG\",\"Heater Lvl Vv 51 X Feedback\",2135.7175,\n    \"RV2:FLZU2HLV51XD.AG\",\"Heater Lvl Vv 51 X Demand\",1854.9820,\n    \"RV3:FPSU3TS24E.AG\",\"3E Bfpp  Speed\",1792.9870,\n    \"RV3:TXSU3TS15A1.AG\",\"Unit 3 Turbine Speed\",965.1263\n];\nlet baseline = PiEvents\n| where Tag in (crit | project Tag) and not(Questionable) and Ts between (ago(14d) .. ago(1h))\n| summarize Expected=avg(toreal(Value)), Std=stdev(toreal(Value)) by Tag;\nPiEvents\n| where Tag in (crit | project Tag) and not(Questionable) and IngestedAt > ago(10m)\n| summarize arg_max(Ts, Value) by Tag\n| join kind=inner crit on Tag\n| join kind=leftouter baseline on Tag\n| extend Actual=round(toreal(Value),2), Expected=round(Expected,2)\n| extend Deviation=round(Actual-Expected,2), Sigma=iff(isnull(Std) or Std<=0,real(null),round((Actual-Expected)/Std,1))\n| project Priority=\"CRITICAL\", Descriptor, Tag, Actual, Expected, Deviation, Sigma, RiskZ=round(Risk,1), Updated=Ts\n| order by RiskZ desc",
+      "id": "c0ffee00-0000-0000-0000-000000000002",
+      "usedVariables": []
+    },
+    {
+      "dataSource": {
+        "kind": "inline",
+        "dataSourceId": "793f0ae3-ae0b-4761-a8c5-6117c283db51"
+      },
+      "text": "let crit = dynamic([\"RV2:TXSU2TS14.AG\",\"RV2:FLZU2HLV51XFB.AG\",\"RV2:FLZU2HLV51XD.AG\",\"RV3:FPSU3TS24E.AG\",\"RV3:TXSU3TS15A1.AG\"]);\nPiEvents\n| where Tag in (crit) and Ts > ago(1h)\n| summarize Value=avg(toreal(Value)) by bin(Ts, 1m), Tag\n| order by Ts asc",
+      "id": "c0ffee00-0000-0000-0000-000000000003",
+      "usedVariables": []
+    }
+  ],
+  "embeddedApps": []
+}

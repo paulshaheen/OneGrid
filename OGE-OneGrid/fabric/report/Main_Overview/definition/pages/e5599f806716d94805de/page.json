@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/page/2.1.0/schema.json",
+  "name": "e5599f806716d94805de",
+  "displayName": "Status",
+  "displayOption": "ActualSize",
+  "height": 150,
+  "width": 500,
+  "pageBinding": {
+    "name": "220c70731363817ace95",
+    "type": "Default",
+    "parameters": [],
+    "acceptsFilterContext": "None"
+  },
+  "type": "Tooltip"
+}

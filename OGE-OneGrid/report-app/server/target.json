@@ -1,0 +1,6 @@
+{
+  "workspaceId": "a9fefbc4-1e6f-4473-977c-87e776eecf74",
+  "datasetId": "fcf7f5d3-4952-4d7b-81d1-31af45d19009",
+  "kustoUri": "https://trd-8b70nwgdfwk8yc2ac1.z9.kusto.fabric.microsoft.com",
+  "kqlDatabase": "pi-realtime-db"
+}

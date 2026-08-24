@@ -1,0 +1,132 @@
+table predictions_longterm
+	lineageTag: 1e58f63c-9e91-4b72-9be4-2cbb5ed47ba1
+	sourceLineageTag: [ml].[predictions_longterm]
+
+	column scoring_timestamp
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 252a751a-9af7-47ba-9ea5-f8ae26b47a76
+		sourceLineageTag: scoring_timestamp
+		summarizeBy: none
+		sourceColumn: scoring_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	column scoring_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: af738e89-1f4a-4a9f-8f4b-56f2cb74219b
+		sourceLineageTag: scoring_date
+		summarizeBy: none
+		sourceColumn: scoring_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_id
+		dataType: string
+		lineageTag: 9f4c55d8-ff3e-4516-8c09-9603b6e0f8d9
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column risk_score
+		dataType: double
+		lineageTag: f55e8175-3832-46cd-938a-b1c34c93982a
+		sourceLineageTag: risk_score
+		summarizeBy: sum
+		sourceColumn: risk_score
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column survival_probability_7d
+		dataType: double
+		lineageTag: f8b32a9b-1492-40e0-b0c6-0b4c6102e399
+		sourceLineageTag: survival_probability_7d
+		summarizeBy: sum
+		sourceColumn: survival_probability_7d
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column survival_probability_14d
+		dataType: double
+		lineageTag: e2af9d7b-3995-4284-b11c-5f85594108f4
+		sourceLineageTag: survival_probability_14d
+		summarizeBy: sum
+		sourceColumn: survival_probability_14d
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column predicted_median_survival_days
+		dataType: double
+		lineageTag: a52b7b4d-89d6-4985-abe5-77c1b3d77377
+		sourceLineageTag: predicted_median_survival_days
+		summarizeBy: sum
+		sourceColumn: predicted_median_survival_days
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column risk_level
+		dataType: string
+		lineageTag: 82e4728d-3615-4263-905b-c392d476d898
+		sourceLineageTag: risk_level
+		summarizeBy: none
+		sourceColumn: risk_level
+
+		annotation SummarizationSetBy = Automatic
+
+	column model_type
+		dataType: string
+		lineageTag: e23c7ce9-7a3c-405e-919e-3a4160e9543f
+		sourceLineageTag: model_type
+		summarizeBy: none
+		sourceColumn: model_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column horizon
+		dataType: string
+		lineageTag: 0a225af8-180e-45d8-9e9a-7a571f285751
+		sourceLineageTag: horizon
+		summarizeBy: none
+		sourceColumn: horizon
+
+		annotation SummarizationSetBy = Automatic
+
+	column model_run_id
+		dataType: string
+		lineageTag: dd949b90-2f05-40a4-b0ff-3c338699bf1c
+		sourceLineageTag: model_run_id
+		summarizeBy: none
+		sourceColumn: model_run_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column model_run_timestamp
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: da21118d-3231-40a7-9f56-b06ba1eca16b
+		sourceLineageTag: model_run_timestamp
+		summarizeBy: none
+		sourceColumn: model_run_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	partition predictions_longterm = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("i22siiabnewedg7vb3coyirmp4-rsrtwftjhbxublnxg7f4tajzbq.datawarehouse.fabric.microsoft.com", "lh_poc"),
+				    Data = Source{[Schema="ml",Item="predictions_longterm"]}[Data]
+				in
+				    Data
+

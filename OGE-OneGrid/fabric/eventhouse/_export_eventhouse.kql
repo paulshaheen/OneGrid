@@ -1,0 +1,30 @@
+// ============================================================================
+//  _export_eventhouse.kql — AUTHORING-SIDE. Export the Eventhouse historical
+//  data to parquet so it can be bundled and re-ingested in the new workspace.
+//
+//  Run these against the SOURCE Eventhouse (pi-realtime-db). Each writes parquet
+//  to a storage location you control (SAS URL) or to the lakehouse OneLake path.
+//  Then place the files under the solution's  data/eventhouse/.
+//
+//  Full PiEvents history is the chat agent's trend source, so export it in full.
+//  The other tables are small.
+// ============================================================================
+
+// PiEvents (full history) -> parquet
+.export compressed to parquet (
+    h@"https://<youraccount>.blob.core.windows.net/pmbundle/PiEvents;<SAS>"
+) with (sizeLimit=1073741824, namePrefix="PiEvents", includeHeaders="firstFile")
+<| PiEvents
+
+// Curated / small operational tables (export each the same way)
+.export compressed to parquet ( h@"https://<youraccount>.blob.core.windows.net/pmbundle/AimmWorkRequests;<SAS>" ) with (namePrefix="AimmWorkRequests") <| AimmWorkRequests
+.export compressed to parquet ( h@"https://<youraccount>.blob.core.windows.net/pmbundle/AimmEntityHierarchy;<SAS>" ) with (namePrefix="AimmEntityHierarchy") <| AimmEntityHierarchy
+.export compressed to parquet ( h@"https://<youraccount>.blob.core.windows.net/pmbundle/PCIOutages;<SAS>" ) with (namePrefix="PCIOutages") <| PCIOutages
+.export compressed to parquet ( h@"https://<youraccount>.blob.core.windows.net/pmbundle/PITagMetadata;<SAS>" ) with (namePrefix="PITagMetadata") <| PITagMetadata
+.export compressed to parquet ( h@"https://<youraccount>.blob.core.windows.net/pmbundle/SmartSignalIncidents;<SAS>" ) with (namePrefix="SmartSignalIncidents") <| SmartSignalIncidents
+
+// ---------------------------------------------------------------------------
+//  Re-ingest in the NEW Eventhouse (after schema.kql created the tables):
+//    .ingest into table PiEvents (h'<url-to-parquet>;<SAS>') with (format='parquet')
+//  Repeat per table. For OneLake-hosted parquet, use the onelake path + token.
+// ---------------------------------------------------------------------------

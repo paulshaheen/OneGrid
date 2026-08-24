@@ -1,0 +1,134 @@
+table aakr_health
+	lineageTag: 8f83e464-35f0-4c53-b397-8f5947991e7c
+	sourceLineageTag: [ml].[aakr_health]
+
+	column asset_id
+		dataType: string
+		lineageTag: 8140b071-9061-4138-87e2-31553a0a65eb
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column health_score
+		dataType: double
+		lineageTag: a09d5a2b-8a34-4196-b86f-ba8cc537cd92
+		sourceLineageTag: health_score
+		summarizeBy: sum
+		sourceColumn: health_score
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column total_tag_bins
+		dataType: int64
+		formatString: 0
+		lineageTag: ca67d216-60de-4a82-9520-e2b70f3284dc
+		sourceLineageTag: total_tag_bins
+		summarizeBy: sum
+		sourceColumn: total_tag_bins
+
+		annotation SummarizationSetBy = Automatic
+
+	column anomalous_tag_bins
+		dataType: int64
+		formatString: 0
+		lineageTag: 590d2536-a3e8-4498-b84f-445ea0b44773
+		sourceLineageTag: anomalous_tag_bins
+		summarizeBy: sum
+		sourceColumn: anomalous_tag_bins
+
+		annotation SummarizationSetBy = Automatic
+
+	column anomaly_pct
+		dataType: double
+		lineageTag: 5267d98e-dd3a-4153-8f16-00206ed4a85f
+		sourceLineageTag: anomaly_pct
+		summarizeBy: sum
+		sourceColumn: anomaly_pct
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column mean_abs_z
+		dataType: double
+		lineageTag: 863a980f-a2d7-45f7-ac02-9d312d024f39
+		sourceLineageTag: mean_abs_z
+		summarizeBy: sum
+		sourceColumn: mean_abs_z
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column max_abs_z
+		dataType: double
+		lineageTag: 2a1782e3-bc71-44b8-845f-39ebca7d4200
+		sourceLineageTag: max_abs_z
+		summarizeBy: sum
+		sourceColumn: max_abs_z
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column mean_effective_n
+		dataType: double
+		lineageTag: c2fdc2c2-6106-4190-b539-1ced980e1156
+		sourceLineageTag: mean_effective_n
+		summarizeBy: sum
+		sourceColumn: mean_effective_n
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column n_tags
+		dataType: int64
+		formatString: 0
+		lineageTag: 075fcff9-5cf1-4bf5-aa70-52e074e97566
+		sourceLineageTag: n_tags
+		summarizeBy: sum
+		sourceColumn: n_tags
+
+		annotation SummarizationSetBy = Automatic
+
+	column threshold
+		dataType: double
+		lineageTag: c88501a1-dff7-4ae6-90f8-768c3984c221
+		sourceLineageTag: threshold
+		summarizeBy: sum
+		sourceColumn: threshold
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column scored_at
+		dataType: string
+		lineageTag: 6e88dc69-2529-4c92-949c-020554962f00
+		sourceLineageTag: scored_at
+		summarizeBy: none
+		sourceColumn: scored_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column notebook_run_id
+		dataType: string
+		lineageTag: eb55ac79-fae8-42b6-80b1-1b90ad385415
+		sourceLineageTag: notebook_run_id
+		summarizeBy: none
+		sourceColumn: notebook_run_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition aakr_health = entity
+		mode: directLake
+		source
+			entityName: aakr_health
+			schemaName: ml
+			expressionSource: 'DirectLake - lh_poc'
+

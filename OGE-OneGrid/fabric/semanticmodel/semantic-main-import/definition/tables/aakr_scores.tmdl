@@ -1,0 +1,147 @@
+table aakr_scores
+	lineageTag: d2ccb718-3f85-474d-ac40-c602c40604c4
+	sourceLineageTag: [ml].[aakr_scores]
+
+	measure 'Sustained Anomaly' = ```
+			
+			 IF(
+			     CALCULATE(COUNTROWS(aakr_scores), aakr_scores[is_anomaly] = TRUE) >= 3,
+			     "Anomaly",
+			     "Normal"
+			 )
+			```
+		lineageTag: ddc9e79d-b7d3-4823-aa17-50e5f1575cc9
+
+		changedProperty = Name
+
+	column asset_id
+		dataType: string
+		lineageTag: 4cf99b7d-3a5a-436c-ad7f-e04f1ff15734
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column bin_start
+		dataType: string
+		lineageTag: b6919048-3537-4688-b816-5de98f0066f8
+		sourceLineageTag: bin_start
+		summarizeBy: none
+		sourceColumn: bin_start
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag
+		dataType: string
+		lineageTag: c1efeadb-c64c-4421-ad72-9e5b6b02da61
+		sourceLineageTag: tag
+		summarizeBy: none
+		sourceColumn: tag
+
+		annotation SummarizationSetBy = Automatic
+
+	column actual_value
+		dataType: double
+		lineageTag: 3330b285-5e8d-41f1-ba5d-f6c1ef244a02
+		sourceLineageTag: actual_value
+		summarizeBy: sum
+		sourceColumn: actual_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column expected_value
+		dataType: double
+		lineageTag: 8a430516-8f9e-43d2-bd3f-97cf94058e0a
+		sourceLineageTag: expected_value
+		summarizeBy: sum
+		sourceColumn: expected_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column residual
+		dataType: double
+		lineageTag: 662e5d0a-6dcc-4106-9bb2-521ac108f0a9
+		sourceLineageTag: residual
+		summarizeBy: sum
+		sourceColumn: residual
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column z_residual
+		dataType: double
+		lineageTag: 02ef85fa-c21f-4ac3-a77f-b105c41b1a40
+		sourceLineageTag: z_residual
+		summarizeBy: sum
+		sourceColumn: z_residual
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column is_anomaly
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: a56ca4c1-6678-48f0-b0b7-a1828ecffaf6
+		sourceLineageTag: is_anomaly
+		summarizeBy: none
+		sourceColumn: is_anomaly
+
+		annotation SummarizationSetBy = Automatic
+
+	column effective_n
+		dataType: double
+		lineageTag: 59672e91-e1b8-4c1e-9cdf-ab1236751d6c
+		sourceLineageTag: effective_n
+		summarizeBy: sum
+		sourceColumn: effective_n
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column bandwidth
+		dataType: double
+		lineageTag: 9a15dff9-f9ec-4e3c-9ae4-3609cce60197
+		sourceLineageTag: bandwidth
+		summarizeBy: sum
+		sourceColumn: bandwidth
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column notebook_run_id
+		dataType: string
+		lineageTag: ff34b7e5-fa92-4d7c-8dfd-a9a6788d2ec1
+		sourceLineageTag: notebook_run_id
+		summarizeBy: none
+		sourceColumn: notebook_run_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column scored_at
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 49da1fd6-b229-4567-9662-cd4b12974d78
+		sourceLineageTag: scored_at
+		summarizeBy: none
+		sourceColumn: scored_at
+
+		annotation SummarizationSetBy = Automatic
+
+	partition aakr_scores = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("i22siiabnewedg7vb3coyirmp4-rsrtwftjhbxublnxg7f4tajzbq.datawarehouse.fabric.microsoft.com", "lh_poc"),
+				    Data = Source{[Schema="ml",Item="aakr_scores"]}[Data]
+				in
+				    Data
+

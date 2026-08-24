@@ -1,0 +1,24 @@
+{
+  "Id": "100006",
+  "Namespace": "usertypes",
+  "BaseEntityTypeId": "2",
+  "Name": "Advisory",
+  "Properties": [
+    {
+      "ValueType": "String",
+      "Name": "DisplayName",
+      "Id": "9000000000000015"
+    },
+    {
+      "ValueType": "String",
+      "Name": "Severity",
+      "Id": "9000000000000016"
+    },
+    {
+      "ValueType": "String",
+      "Name": "SourceSystem",
+      "Id": "9000000000000017"
+    }
+  ],
+  "TimeseriesProperties": []
+}

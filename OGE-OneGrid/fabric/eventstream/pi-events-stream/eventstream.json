@@ -1,0 +1,50 @@
+{
+  "sources": [
+    {
+      "id": "3c077131-9492-4254-9868-e6641767eb47",
+      "name": "PIForwarderEndpoint",
+      "type": "CustomEndpoint",
+      "properties": {}
+    }
+  ],
+  "destinations": [
+    {
+      "id": "138b947d-6e3a-4595-8bc4-c55b8f4f1820",
+      "name": "KqlPiEventsRaw",
+      "type": "Eventhouse",
+      "properties": {
+        "dataIngestionMode": "ProcessedIngestion",
+        "workspaceId": "163ba38c-3869-406f-adb7-37cbc981390c",
+        "itemId": "da213762-0780-4c20-aef2-04371f1a4d89",
+        "databaseName": "pi-realtime-db",
+        "tableName": "PiEventsRaw",
+        "inputSerialization": {
+          "type": "Json",
+          "properties": {
+            "encoding": "UTF8"
+          }
+        }
+      },
+      "inputNodes": [
+        {
+          "name": "PIForwarderStream"
+        }
+      ]
+    }
+  ],
+  "streams": [
+    {
+      "id": "f73e43f1-88c0-4b35-b646-4980f2b29a45",
+      "name": "PIForwarderStream",
+      "type": "DefaultStream",
+      "properties": {},
+      "inputNodes": [
+        {
+          "name": "PIForwarderEndpoint"
+        }
+      ]
+    }
+  ],
+  "operators": [],
+  "compatibilityLevel": "1.0"
+}

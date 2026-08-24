@@ -1,0 +1,181 @@
+table anomaly_advisories
+	lineageTag: eb122d29-60eb-4a90-b720-dd376ae09735
+	sourceLineageTag: [ml].[anomaly_advisories]
+
+	column asset_id
+		dataType: string
+		lineageTag: 70acbcb5-2260-49db-9a97-ae04e60a1766
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column Tag
+		dataType: string
+		lineageTag: fc0bc5d7-1231-4789-a52e-7c064a373441
+		sourceLineageTag: Tag
+		summarizeBy: none
+		sourceColumn: Tag
+
+		annotation SummarizationSetBy = Automatic
+
+	column first_seen
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: e5a4c9f7-97b0-4344-aa3b-9f28e6593374
+		sourceLineageTag: first_seen
+		summarizeBy: none
+		sourceColumn: first_seen
+
+		annotation SummarizationSetBy = Automatic
+
+	column last_seen
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: a3cf077f-2800-456f-aaaf-b5c2308b8a0a
+		sourceLineageTag: last_seen
+		summarizeBy: none
+		sourceColumn: last_seen
+
+		annotation SummarizationSetBy = Automatic
+
+	column peak_abs_z
+		dataType: double
+		lineageTag: 31c23be2-3233-4e9b-96b8-ad62cc6f6ed6
+		sourceLineageTag: peak_abs_z
+		summarizeBy: sum
+		sourceColumn: peak_abs_z
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column mean_abs_z
+		dataType: double
+		lineageTag: 21242c65-e71e-4df0-8a00-ec8c30191e84
+		sourceLineageTag: mean_abs_z
+		summarizeBy: sum
+		sourceColumn: mean_abs_z
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column n_breach_bins
+		dataType: int64
+		formatString: 0
+		lineageTag: 5e895df4-5fc0-4540-b64b-60e9e292e434
+		sourceLineageTag: n_breach_bins
+		summarizeBy: sum
+		sourceColumn: n_breach_bins
+
+		annotation SummarizationSetBy = Automatic
+
+	column latest_value
+		dataType: double
+		lineageTag: 45a29e7f-ca24-4e6d-a2ea-061f8ae27d65
+		sourceLineageTag: latest_value
+		summarizeBy: sum
+		sourceColumn: latest_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column baseline_median
+		dataType: double
+		lineageTag: 067c5dee-e06a-425a-98de-535510a3b24b
+		sourceLineageTag: baseline_median
+		summarizeBy: sum
+		sourceColumn: baseline_median
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column baseline_mad
+		dataType: double
+		lineageTag: f6a7edd4-f69c-41b3-872d-7f45f600dd00
+		sourceLineageTag: baseline_mad
+		summarizeBy: sum
+		sourceColumn: baseline_mad
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column anomaly_direction
+		dataType: string
+		lineageTag: accbc94e-35c2-47cb-a8b7-9577df9ead5c
+		sourceLineageTag: anomaly_direction
+		summarizeBy: none
+		sourceColumn: anomaly_direction
+
+		annotation SummarizationSetBy = Automatic
+
+	column mw_bin
+		dataType: int64
+		formatString: 0
+		lineageTag: 52d10fc9-1953-4a99-a748-7783e4f083c3
+		sourceLineageTag: mw_bin
+		summarizeBy: sum
+		sourceColumn: mw_bin
+
+		annotation SummarizationSetBy = Automatic
+
+	column duration_h
+		dataType: double
+		lineageTag: 842fbcbe-48f8-4b52-82eb-f634f617a5d6
+		sourceLineageTag: duration_h
+		summarizeBy: sum
+		sourceColumn: duration_h
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column severity
+		dataType: string
+		lineageTag: b8b55bdf-9f27-4248-9f2b-0b1f09154f6c
+		sourceLineageTag: severity
+		summarizeBy: none
+		sourceColumn: severity
+
+		annotation SummarizationSetBy = Automatic
+
+	column advisory_message
+		dataType: string
+		lineageTag: 65c942ac-fe32-42c8-8956-f5ab1f2513bd
+		sourceLineageTag: advisory_message
+		summarizeBy: none
+		sourceColumn: advisory_message
+
+		annotation SummarizationSetBy = Automatic
+
+	column scored_at
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 4851dabf-11f0-4744-9c89-4cdb1802b937
+		sourceLineageTag: scored_at
+		summarizeBy: none
+		sourceColumn: scored_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column notebook_run_id
+		dataType: string
+		lineageTag: 7b81d30b-80ab-451e-bd6f-b8bfdd076561
+		sourceLineageTag: notebook_run_id
+		summarizeBy: none
+		sourceColumn: notebook_run_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition anomaly_advisories = entity
+		mode: directLake
+		source
+			entityName: anomaly_advisories
+			schemaName: ml
+			expressionSource: 'DirectLake - lh_poc'
+

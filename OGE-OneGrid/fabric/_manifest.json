@@ -1,0 +1,182 @@
+﻿[
+    {
+        "type": "Notebook",
+        "displayName": "Gold-Feature-Selection",
+        "folder": "notebooks/Gold-Feature-Selection",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Gold-Schema-Cleanup-Analysis",
+        "folder": "notebooks/Gold-Schema-Cleanup-Analysis",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "PI-Gold-Delta",
+        "folder": "notebooks/PI-Gold-Delta",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase-LongTerm-Cox",
+        "folder": "notebooks/Phase-LongTerm-Cox",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase-LongTerm-Survival",
+        "folder": "notebooks/Phase-LongTerm-Survival",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase0-Data-Archaeology",
+        "folder": "notebooks/Phase0-Data-Archaeology",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase0b-Pipeline-Diagnostics",
+        "folder": "notebooks/Phase0b-Pipeline-Diagnostics",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase1-Label-Construction",
+        "folder": "notebooks/Phase1-Label-Construction",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase2-Feature-Engineering",
+        "folder": "notebooks/Phase2-Feature-Engineering",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase3-Predictive-Model",
+        "folder": "notebooks/Phase3-Predictive-Model",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase4-Model-Scoring-Batch",
+        "folder": "notebooks/Phase4-Model-Scoring-Batch",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase5-Daily-Narrative",
+        "folder": "notebooks/Phase5-Daily-Narrative",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Phase5-RealTime-Report",
+        "folder": "notebooks/Phase5-RealTime-Report",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Process-AIMM-Data",
+        "folder": "notebooks/Process-AIMM-Data",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Process-GADS-Data",
+        "folder": "notebooks/Process-GADS-Data",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Process-Intake-Checklist",
+        "folder": "notebooks/Process-Intake-Checklist",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Process-PIData",
+        "folder": "notebooks/Process-PIData",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Process-iCare-Data",
+        "folder": "notebooks/Process-iCare-Data",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "SmartSignal-Anomaly-Detection",
+        "folder": "notebooks/SmartSignal-Anomaly-Detection",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "SmartSignal-Replacement",
+        "folder": "notebooks/SmartSignal-Replacement",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "interactive",
+        "folder": "notebooks/interactive",
+        "parts": 2
+    },
+    {
+        "type": "KQLDashboard",
+        "displayName": "Critical-Tag-Monitor",
+        "folder": "kqldashboards/Critical-Tag-Monitor",
+        "parts": 2
+    },
+    {
+        "type": "KQLDashboard",
+        "displayName": "pi-realtime-dashboard",
+        "folder": "kqldashboards/pi-realtime-dashboard",
+        "parts": 2
+    },
+    {
+        "type": "Eventstream",
+        "displayName": "pi-events-stream",
+        "folder": "eventstream/pi-events-stream",
+        "parts": 3
+    },
+    {
+        "type": "DataPipeline",
+        "displayName": "Prediction_Pipeline",
+        "folder": "pipelines/Prediction_Pipeline",
+        "parts": 3
+    },
+    {
+        "type": "Notebook",
+        "displayName": "PI-Seed-Synthetic",
+        "folder": "notebooks/PI-Seed-Synthetic",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Watchlist-Seed-Synthetic",
+        "folder": "notebooks/Watchlist-Seed-Synthetic",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Demo-Prep-RunOnce",
+        "folder": "notebooks/Demo-Prep-RunOnce",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Multi-Site-Fanout",
+        "folder": "notebooks/Multi-Site-Fanout",
+        "parts": 2
+    },
+    {
+        "type": "Notebook",
+        "displayName": "Ontology-Knowledge-Graph",
+        "folder": "notebooks/Ontology-Knowledge-Graph",
+        "parts": 2
+    }
+]

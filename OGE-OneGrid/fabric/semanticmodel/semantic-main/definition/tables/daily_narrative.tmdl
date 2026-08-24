@@ -1,0 +1,86 @@
+table daily_narrative
+	lineageTag: 1a7624c1-3385-4528-89c8-01096e130d7e
+	sourceLineageTag: [ml].[daily_narrative]
+
+	column narrative_date
+		dataType: string
+		lineageTag: 6aaf5eb6-41c3-465f-8363-856f1301d992
+		sourceLineageTag: narrative_date
+		summarizeBy: none
+		sourceColumn: narrative_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column narrative_text
+		dataType: string
+		lineageTag: 60968521-5ef4-42f1-a838-42629a5854f0
+		sourceLineageTag: narrative_text
+		summarizeBy: none
+		sourceColumn: narrative_text
+
+		annotation SummarizationSetBy = Automatic
+
+	column system_status
+		dataType: string
+		lineageTag: b7cfc5ed-2350-4d38-b3ff-eae51d2fbc29
+		sourceLineageTag: system_status
+		summarizeBy: none
+		sourceColumn: system_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column critical_alerts
+		dataType: int64
+		formatString: 0
+		lineageTag: 5a7da393-cbae-4711-935f-48e0a72e1aa9
+		sourceLineageTag: critical_alerts
+		summarizeBy: sum
+		sourceColumn: critical_alerts
+
+		annotation SummarizationSetBy = Automatic
+
+	column total_alerts
+		dataType: int64
+		formatString: 0
+		lineageTag: 2a7075af-1662-4dff-8f2d-b8574b234e40
+		sourceLineageTag: total_alerts
+		summarizeBy: sum
+		sourceColumn: total_alerts
+
+		annotation SummarizationSetBy = Automatic
+
+	column assets_flagged
+		dataType: int64
+		formatString: 0
+		lineageTag: 9bcad12c-995a-454d-a901-c3918cb8860f
+		sourceLineageTag: assets_flagged
+		summarizeBy: sum
+		sourceColumn: assets_flagged
+
+		annotation SummarizationSetBy = Automatic
+
+	column generated_at
+		dataType: string
+		lineageTag: 3675d812-3132-418b-b396-a1a2ca3bb1df
+		sourceLineageTag: generated_at
+		summarizeBy: none
+		sourceColumn: generated_at
+
+		annotation SummarizationSetBy = Automatic
+
+	column narrative_html
+		dataType: string
+		lineageTag: 65bc129f-e50b-4343-ab80-fb164836ac99
+		sourceLineageTag: narrative_html
+		summarizeBy: none
+		sourceColumn: narrative_html
+
+		annotation SummarizationSetBy = Automatic
+
+	partition daily_narrative = entity
+		mode: directLake
+		source
+			entityName: daily_narrative
+			schemaName: ml
+			expressionSource: 'DirectLake - lh_poc'
+

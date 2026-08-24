@@ -1,0 +1,24 @@
+{
+  "Id": "100004",
+  "Namespace": "usertypes",
+  "BaseEntityTypeId": "2",
+  "Name": "Sensor",
+  "Properties": [
+    {
+      "ValueType": "String",
+      "Name": "DisplayName",
+      "Id": "9000000000000009"
+    },
+    {
+      "ValueType": "String",
+      "Name": "TagName",
+      "Id": "9000000000000010"
+    },
+    {
+      "ValueType": "String",
+      "Name": "Uom",
+      "Id": "9000000000000011"
+    }
+  ],
+  "TimeseriesProperties": []
+}

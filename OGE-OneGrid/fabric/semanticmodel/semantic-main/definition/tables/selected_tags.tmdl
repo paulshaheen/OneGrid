@@ -1,0 +1,201 @@
+table selected_tags
+	lineageTag: bbed1534-e959-4bd9-b8cf-9b6adc16d087
+	sourceLineageTag: [ml].[selected_tags]
+
+	column tag_asset_id
+		dataType: string
+		lineageTag: 52b5d75f-f0ec-489e-8dae-d26b312cb828
+		sourceLineageTag: tag_asset_id
+		summarizeBy: none
+		sourceColumn: tag_asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column Tag
+		dataType: string
+		lineageTag: 2f5c6ddc-4723-4ee8-8477-8b7715284e48
+		sourceLineageTag: Tag
+		summarizeBy: none
+		sourceColumn: Tag
+
+		annotation SummarizationSetBy = Automatic
+
+	column sensor_source
+		dataType: string
+		lineageTag: 7b6bfcf1-cc88-4420-bd75-3f1e314282b1
+		sourceLineageTag: sensor_source
+		summarizeBy: none
+		sourceColumn: sensor_source
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag_description
+		dataType: string
+		lineageTag: 0d117007-7759-4329-aca3-760206bf3891
+		sourceLineageTag: tag_description
+		summarizeBy: none
+		sourceColumn: tag_description
+
+		annotation SummarizationSetBy = Automatic
+
+	column eng_units
+		dataType: string
+		lineageTag: bcd96e1d-5d3c-45cc-ba1c-ac1bc712c6c4
+		sourceLineageTag: eng_units
+		summarizeBy: none
+		sourceColumn: eng_units
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag_role
+		dataType: string
+		lineageTag: 2ba2558f-3f6a-4047-93d7-17c33d458d69
+		sourceLineageTag: tag_role
+		summarizeBy: none
+		sourceColumn: tag_role
+
+		annotation SummarizationSetBy = Automatic
+
+	column downtime_relevance
+		dataType: string
+		lineageTag: f2b9b3d7-3ebd-451b-96a0-716bbb780e7d
+		sourceLineageTag: downtime_relevance
+		summarizeBy: none
+		sourceColumn: downtime_relevance
+
+		annotation SummarizationSetBy = Automatic
+
+	column corr_4h
+		dataType: double
+		lineageTag: 2b09c186-5078-4137-a164-e4a96d5ece36
+		sourceLineageTag: corr_4h
+		summarizeBy: sum
+		sourceColumn: corr_4h
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column corr_8h
+		dataType: double
+		lineageTag: 34647c71-5757-41d0-a4d6-310535e30929
+		sourceLineageTag: corr_8h
+		summarizeBy: sum
+		sourceColumn: corr_8h
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column corr_24h
+		dataType: double
+		lineageTag: da4a546c-b9f1-4852-8d70-c2a8bd7e2d06
+		sourceLineageTag: corr_24h
+		summarizeBy: sum
+		sourceColumn: corr_24h
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column abs_corr_4h
+		dataType: double
+		lineageTag: 838c1d31-1678-4539-8c52-730c6aab7fa5
+		sourceLineageTag: abs_corr_4h
+		summarizeBy: sum
+		sourceColumn: abs_corr_4h
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column abs_corr_8h
+		dataType: double
+		lineageTag: 54da8731-10c8-4812-8962-ff94156b025f
+		sourceLineageTag: abs_corr_8h
+		summarizeBy: sum
+		sourceColumn: abs_corr_8h
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column abs_corr_24h
+		dataType: double
+		lineageTag: 68b5873a-e8a9-482d-8d5d-6fa4af2aa9e7
+		sourceLineageTag: abs_corr_24h
+		summarizeBy: sum
+		sourceColumn: abs_corr_24h
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column samples_4h
+		dataType: int64
+		formatString: 0
+		lineageTag: 7d608a08-ebd2-4c07-a100-26da29a0ee18
+		sourceLineageTag: samples_4h
+		summarizeBy: sum
+		sourceColumn: samples_4h
+
+		annotation SummarizationSetBy = Automatic
+
+	column samples_8h
+		dataType: int64
+		formatString: 0
+		lineageTag: a6b97750-b897-42a5-8b07-eba28c414a41
+		sourceLineageTag: samples_8h
+		summarizeBy: sum
+		sourceColumn: samples_8h
+
+		annotation SummarizationSetBy = Automatic
+
+	column samples_24h
+		dataType: int64
+		formatString: 0
+		lineageTag: 0f9af4eb-fa09-4607-a642-46020f76252f
+		sourceLineageTag: samples_24h
+		summarizeBy: sum
+		sourceColumn: samples_24h
+
+		annotation SummarizationSetBy = Automatic
+
+	column avg_abs_corr
+		dataType: double
+		lineageTag: dd094fc5-d19c-4e0a-a55f-1046a15ebc45
+		sourceLineageTag: avg_abs_corr
+		summarizeBy: sum
+		sourceColumn: avg_abs_corr
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column total_samples
+		dataType: int64
+		formatString: 0
+		lineageTag: 3d6f5a33-6d32-44b9-87ea-a53ddd132fe1
+		sourceLineageTag: total_samples
+		summarizeBy: sum
+		sourceColumn: total_samples
+
+		annotation SummarizationSetBy = Automatic
+
+	column rank_in_asset
+		dataType: int64
+		formatString: 0
+		lineageTag: 95ea31de-66f2-4cd7-88a5-cf16527127cc
+		sourceLineageTag: rank_in_asset
+		summarizeBy: sum
+		sourceColumn: rank_in_asset
+
+		annotation SummarizationSetBy = Automatic
+
+	partition selected_tags = entity
+		mode: directLake
+		source
+			entityName: selected_tags
+			schemaName: ml
+			expressionSource: 'DirectLake - lh_poc'
+

@@ -1,0 +1,49 @@
+relationship a80ab640-4311-c6a0-ac5f-e042988e5139
+	fromColumn: predictions_longterm.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 8c0ea2fc-3105-7b63-fab6-6f1915a5f2c6
+	fromColumn: fact_gads_event.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship cb5643df-16dd-c92f-b8e0-8f4982d42a36
+	fromColumn: fact_icare_measurement.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 4b1700ed-530e-dbda-2058-05669fdd5410
+	fromColumn: watchlist.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship c4378ceb-afc9-07b1-f981-319a89806ebb
+	fromColumn: predictions_shortterm.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 7a8d957c-466e-0f4c-ee57-051fb401d165
+	crossFilteringBehavior: bothDirections
+	fromColumn: dim_equipment.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship a28036aa-ab13-f1dc-7013-0cf056c9b1ca
+	fromColumn: fact_pi.Tag
+	toColumn: bridge_pi_tag_to_asset.Tag
+
+relationship b020c080-f576-b0b3-0ba8-3ae9c17c518e
+	fromColumn: anomaly_advisories.Tag
+	toColumn: bridge_pi_tag_to_asset.Tag
+
+relationship a151bbb2-c6d8-cb6f-6c55-ca233ad77f3d
+	fromColumn: aakr_health.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship d67a7a64-8ee8-54b9-252b-26faf104071c
+	fromColumn: aakr_scores.tag
+	toColumn: bridge_pi_tag_to_asset.Tag
+
+relationship ef833afa-430d-61e9-d122-810621185449
+	fromColumn: bridge_pi_tag_to_asset.asset_id
+	toColumn: dim_equipment.icare_id
+
+relationship c26c7acf-d4e3-9f15-c181-a5825b311a6f
+	fromColumn: fact_work_requests.entity_identity
+	toColumn: dim_equipment.icare_id
+

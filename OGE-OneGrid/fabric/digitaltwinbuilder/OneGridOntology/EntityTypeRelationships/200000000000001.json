@@ -1,0 +1,8 @@
+{
+  "Id": "200000000000001",
+  "Namespace": "usertypes",
+  "RelationshipCardinality": "OneToMany",
+  "Name": "hasUnit",
+  "FirstEntityTypeId": "100001",
+  "SecondEntityTypeId": "100002"
+}

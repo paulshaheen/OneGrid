@@ -1,0 +1,182 @@
+table fact_pi
+	lineageTag: 3b4d09ab-4b0a-413f-aab3-1bda391270e0
+	sourceLineageTag: [gold].[fact_pi]
+
+	column Tag
+		dataType: string
+		lineageTag: decdaa2a-1d15-4562-800c-124c2658e2f8
+		sourceLineageTag: Tag
+		summarizeBy: none
+		sourceColumn: Tag
+
+		annotation SummarizationSetBy = Automatic
+
+	column plant
+		dataType: string
+		lineageTag: ea6e9066-b91c-4902-89f7-28aa594cf157
+		sourceLineageTag: plant
+		summarizeBy: none
+		sourceColumn: plant
+
+		annotation SummarizationSetBy = Automatic
+
+	column Timestamp
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: fc0ea7d7-8e32-4212-8069-83a476bd6b59
+		sourceLineageTag: Timestamp
+		summarizeBy: none
+		sourceColumn: Timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	column date_key
+		dataType: int64
+		formatString: 0
+		lineageTag: 901705a3-c6e8-4514-bfd2-53dfee71dc16
+		sourceLineageTag: date_key
+		summarizeBy: sum
+		sourceColumn: date_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column ValueNumeric
+		dataType: double
+		lineageTag: 296fb2f5-1503-495e-8477-10e047348cd4
+		sourceLineageTag: ValueNumeric
+		summarizeBy: sum
+		sourceColumn: ValueNumeric
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ValueString
+		dataType: string
+		lineageTag: 12e9b27e-0de1-46d6-b288-ae4924ef778a
+		sourceLineageTag: ValueString
+		summarizeBy: none
+		sourceColumn: ValueString
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsSystem
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 1ae7c907-144e-4393-9f49-65ad00c1ebe0
+		sourceLineageTag: IsSystem
+		summarizeBy: none
+		sourceColumn: IsSystem
+
+		annotation SummarizationSetBy = Automatic
+
+	column Good
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: d2002d48-4cd4-4196-8de0-8882a64fe4ab
+		sourceLineageTag: Good
+		summarizeBy: none
+		sourceColumn: Good
+
+		annotation SummarizationSetBy = Automatic
+
+	column Questionable
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 88df0c29-db03-45da-9ef2-c1970c98bb2c
+		sourceLineageTag: Questionable
+		summarizeBy: none
+		sourceColumn: Questionable
+
+		annotation SummarizationSetBy = Automatic
+
+	column WebId
+		dataType: string
+		lineageTag: 0fa33195-efc0-44a6-a8cb-c233dc7814b8
+		sourceLineageTag: WebId
+		summarizeBy: none
+		sourceColumn: WebId
+
+		annotation SummarizationSetBy = Automatic
+
+	column DataServer
+		dataType: string
+		lineageTag: be40074f-9d56-4791-a46d-31cba8631395
+		sourceLineageTag: DataServer
+		summarizeBy: none
+		sourceColumn: DataServer
+
+		annotation SummarizationSetBy = Automatic
+
+	column icare_id
+		dataType: string
+		lineageTag: e3e7c903-32f1-4020-b665-7927e4ae9970
+		sourceLineageTag: icare_id
+		summarizeBy: none
+		sourceColumn: icare_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column pi_mapping_confidence
+		dataType: string
+		lineageTag: c54182c5-6252-48c0-995d-68b7b6c785f9
+		sourceLineageTag: pi_mapping_confidence
+		summarizeBy: none
+		sourceColumn: pi_mapping_confidence
+
+		annotation SummarizationSetBy = Automatic
+
+	column pi_mapping_jaccard
+		dataType: double
+		lineageTag: eb2e6deb-93f6-42dc-801d-d5a095664c29
+		sourceLineageTag: pi_mapping_jaccard
+		summarizeBy: sum
+		sourceColumn: pi_mapping_jaccard
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column asset_id
+		dataType: string
+		lineageTag: fa0acc8f-942c-4a31-a5ce-0170bcfe785c
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag_role
+		dataType: string
+		lineageTag: 4217e7a5-79ac-4c0d-86bc-abcd2af7ae19
+		sourceLineageTag: tag_role
+		summarizeBy: none
+		sourceColumn: tag_role
+
+		annotation SummarizationSetBy = Automatic
+
+	column downtime_relevance
+		dataType: string
+		lineageTag: 3553bf8c-62e1-41ac-a0f6-8c2526e1dabf
+		sourceLineageTag: downtime_relevance
+		summarizeBy: none
+		sourceColumn: downtime_relevance
+
+		annotation SummarizationSetBy = Automatic
+
+	column pi_match_source
+		dataType: string
+		lineageTag: f47761bf-7444-4796-b0cc-8cda96a07fe1
+		sourceLineageTag: pi_match_source
+		summarizeBy: none
+		sourceColumn: pi_match_source
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_pi = entity
+		mode: directLake
+		source
+			entityName: fact_pi
+			schemaName: gold
+			expressionSource: 'DirectLake - lh_poc'
+

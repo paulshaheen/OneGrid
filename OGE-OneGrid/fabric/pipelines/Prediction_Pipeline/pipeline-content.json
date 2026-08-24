@@ -1,0 +1,113 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "name": "Survival Analysis",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "8f8bfeb7-ef65-4d60-bb3d-2157e3a00fd4",
+          "workspaceId": "163ba38c-3869-406f-adb7-37cbc981390c"
+        }
+      },
+      {
+        "name": "AKKR",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "4de47a90-3b03-4912-b9cc-ecfce784e21d",
+          "workspaceId": "163ba38c-3869-406f-adb7-37cbc981390c"
+        }
+      },
+      {
+        "name": "Smart Signal New",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "AKKR",
+            "dependencyConditions": [
+              "Completed"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "125496e4-a588-4f60-9bb6-0ed66d7d316c",
+          "workspaceId": "163ba38c-3869-406f-adb7-37cbc981390c"
+        }
+      },
+      {
+        "name": "Short Term GBM",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "Survival Analysis",
+            "dependencyConditions": [
+              "Completed"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "0e48c702-403f-4423-8cb3-cb01b40a6560",
+          "workspaceId": "163ba38c-3869-406f-adb7-37cbc981390c"
+        }
+      },
+      {
+        "name": "Narrate",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "Short Term GBM",
+            "dependencyConditions": [
+              "Completed"
+            ]
+          },
+          {
+            "activity": "Smart Signal New",
+            "dependencyConditions": [
+              "Completed"
+            ]
+          }
+        ],
+        "policy": {
+          "timeout": "0.12:00:00",
+          "retry": 0,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "notebookId": "a8c1f0b5-44ca-4a3c-acc7-1506cb5bcd67",
+          "workspaceId": "163ba38c-3869-406f-adb7-37cbc981390c"
+        }
+      }
+    ]
+  }
+}

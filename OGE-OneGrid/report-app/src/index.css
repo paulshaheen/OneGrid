@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+* { -webkit-font-smoothing: antialiased; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
+    system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+  letter-spacing: -0.006em;
+}
+h1, h2, h3, h4 {
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI",
+    system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.022em;
+}
+
+/* scrollbars — blue-tinted to match the hairline system */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(120,160,255,.22); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(120,160,255,.4); }
+
+@layer utilities {
+  .glass { backdrop-filter: blur(14px) saturate(120%); -webkit-backdrop-filter: blur(14px) saturate(120%); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .grad-text { -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .drop-glow { filter: drop-shadow(0 0 6px currentColor); }
+  /* Signature eyebrow: mono, uppercase, wide-tracked — a distinctive, human design mark. */
+  .eyebrow {
+    font-family: "Cascadia Code", "Cascadia Mono", ui-monospace, Consolas, monospace;
+    font-size: 0.66rem; font-weight: 500; letter-spacing: 0.19em; text-transform: uppercase;
+  }
+  .tnum { font-variant-numeric: tabular-nums; }
+}
+
+/* Subtle structural grid — blue-tinted hairlines that read as depth, not neon. */
+.holo-grid {
+  background-image:
+    linear-gradient(rgba(120,160,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120,160,255,.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.ops-grid {
+  background-image:
+    linear-gradient(rgba(120,160,255,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120,160,255,.045) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+@keyframes sweep { 0% { transform: translateY(-100%);} 100% { transform: translateY(100%);} }
+.scanline::after {
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(180deg, transparent, rgba(63,150,255,.05), transparent);
+  height: 40%; animation: sweep 7s linear infinite;
+}
+@keyframes gridpan { 0%{background-position:0 0} 100%{background-position:44px 44px} }
+.holo-grid.animated { animation: gridpan 3.4s linear infinite; }

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Notebook",
+    "displayName": "Phase1-Label-Construction",
+    "description": "Build ground truth labels for predictive equipment failure modeling: derive running/stopped states from PI indicator tags, generate downtime intervals with debounce, cross-check against GADS events, and construct 15-min label grid (timestamp, asset, is_running, hours_to_next_stop) for model training."
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "00000000-0000-0000-0000-000000000000"
+  }
+}

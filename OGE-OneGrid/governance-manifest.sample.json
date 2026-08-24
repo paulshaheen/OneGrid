@@ -1,0 +1,65 @@
+{
+  "//": "Sample governance manifest — ships with the accelerator so the /governance review plane is fully populated for local preview and demos BEFORE a governance-enabled deploy has run. A real deploy overwrites governance-manifest.json (git-ignored) with tenant-specific ids. Object ids here are illustrative placeholders.",
+  "generatedAt": "2026-08-18T00:00:00.000Z",
+  "source": "sample",
+  "workspaceId": "",
+  "lakehouseId": "",
+  "lakehouseName": "lh_poc",
+  "mode": "demo",
+  "appGrant": "least-privilege (workspace Viewer + dataset ReadWrite)",
+  "reviewers": "00000000-0000-0000-0000-0000000000re",
+  "applied": true,
+  "sqlUserIdentityModeRequested": true,
+  "roles": [
+    {
+      "name": "ExecutiveCuratedReader",
+      "description": "Curated fleet KPIs only; no raw telemetry or maintenance notes.",
+      "paths": ["/Tables/gold"],
+      "rowFilter": null,
+      "hiddenColumns": [],
+      "groupObjectId": "00000000-0000-0000-0000-0000000000e1",
+      "membersConfigured": true,
+      "members": [
+        { "objectId": "00000000-0000-0000-0000-0000000000e1", "type": "Group", "displayName": "OneGrid-Executives" },
+        { "objectId": "00000000-0000-0000-0000-0000000000u1", "type": "User", "displayName": "Dana Osei (VP Operations)" }
+      ]
+    },
+    {
+      "name": "ControlRoomSiteReader",
+      "description": "Live operational + ML tables, filtered to assigned sites (RLS).",
+      "paths": ["/Tables/gold", "/Tables/ml"],
+      "rowFilter": "site_id IN (assigned sites)",
+      "hiddenColumns": [],
+      "groupObjectId": "00000000-0000-0000-0000-0000000000c1",
+      "membersConfigured": true,
+      "members": [
+        { "objectId": "00000000-0000-0000-0000-0000000000c1", "type": "Group", "displayName": "OneGrid-ControlRoom" }
+      ]
+    },
+    {
+      "name": "MaintenanceReader",
+      "description": "Asset health, work orders, predictions; commercial columns hidden (CLS).",
+      "paths": ["/Tables/gold", "/Tables/ml"],
+      "rowFilter": null,
+      "hiddenColumns": ["labor_rate", "vendor_cost", "contract_id"],
+      "groupObjectId": "00000000-0000-0000-0000-0000000000m1",
+      "membersConfigured": true,
+      "members": [
+        { "objectId": "00000000-0000-0000-0000-0000000000m1", "type": "Group", "displayName": "OneGrid-Maintenance" },
+        { "objectId": "00000000-0000-0000-0000-0000000000u2", "type": "User", "displayName": "Sam Rivera (Reliability Engineer)" }
+      ]
+    },
+    {
+      "name": "OntologyReader",
+      "description": "Ontology / approved entity relationships (read-only).",
+      "paths": ["/Tables/oge"],
+      "rowFilter": null,
+      "hiddenColumns": [],
+      "groupObjectId": "00000000-0000-0000-0000-0000000000o1",
+      "membersConfigured": true,
+      "members": [
+        { "objectId": "00000000-0000-0000-0000-0000000000o1", "type": "Group", "displayName": "OneGrid-OntologyReaders" }
+      ]
+    }
+  ]
+}

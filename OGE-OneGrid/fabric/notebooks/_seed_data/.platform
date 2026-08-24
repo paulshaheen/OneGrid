@@ -1,0 +1,5 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": { "type": "Notebook", "displayName": "_seed_data", "description": "Cloud-seed: download the public OneGrid data bundle straight into OneLake Files (no local copy)" },
+  "config": { "version": "2.0", "logicalId": "00000000-0000-0000-0000-000000000003" }
+}

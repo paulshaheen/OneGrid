@@ -1,0 +1,507 @@
+table watchlist
+	lineageTag: bb04a93a-74f6-4890-b568-cc666713c0ff
+	sourceLineageTag: [ml].[watchlist]
+
+	measure 'Total Critical Alerts' = ```
+			
+			 VAR _latestRuns = 
+			     SUMMARIZE(
+			         watchlist,
+			         watchlist[model_name],
+			         "LatestRun", MAX(watchlist[model_run_timestamp])
+			     )
+			 VAR _latestRows = 
+			     FILTER(
+			         watchlist,
+			         COUNTROWS(
+			             FILTER(
+			                 _latestRuns,
+			                 [model_name] = watchlist[model_name]
+			                     && [LatestRun] = watchlist[model_run_timestamp]
+			             )
+			         ) > 0
+			     )
+			 VAR _count = COUNTROWS(FILTER(_latestRows, watchlist[recommended_action] = "CRITICAL")) + 0
+			 RETURN
+			     IF(_count > 0, UNICHAR(128308) & " " & _count, UNICHAR(128994) & " 0")
+			```
+		lineageTag: a6ba3ac9-de25-4cf1-a63a-1809657f8499
+
+		changedProperty = Name
+
+	measure 'Survival Risk' = MAX(predictions_longterm[risk_score])
+		lineageTag: 6ea5c9c2-e9c9-40c6-ad69-087d0ec34c73
+
+		changedProperty = Name
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Sensors Above Threshold' = COUNTROWS(FILTER(aakr_scores, ABS(aakr_scores[z_residual]) > 3))
+		formatString: 0
+		lineageTag: 008e941d-ba5a-457b-9c17-165cac258105
+
+		changedProperty = Name
+
+	measure 'RV2 Unit Status' = ```
+			
+			 VAR _latestTS = 
+			     CALCULATE(
+			         MAX(fact_pi[Timestamp]),
+			         fact_pi[Tag] = "RV2:BTPU2BP20.AG"
+			     )
+			 VAR _latestValue = 
+			     CALCULATE(
+			         MAX(fact_pi[ValueNumeric]),
+			         fact_pi[Tag] = "RV2:BTPU2BP20.AG",
+			         fact_pi[Timestamp] = _latestTS
+			     )
+			 RETURN IF(_latestValue > 600, "Running", "Stopped")
+			```
+		lineageTag: 05716cbd-7bfb-45cc-b2a8-c0a839e17b4b
+
+		changedProperty = Name
+
+	measure 'RV3 Unit Status' = ```
+			
+			 VAR _latestTS = 
+			     CALCULATE(
+			         MAX(fact_pi[Timestamp]),
+			         fact_pi[Tag] = "RV3:TXSU3TS15A1.AG"
+			     )
+			 VAR _latestValue = 
+			     CALCULATE(
+			         MAX(fact_pi[ValueNumeric]),
+			         fact_pi[Tag] = "RV3:TXSU3TS15A1.AG",
+			         fact_pi[Timestamp] = _latestTS
+			     )
+			 RETURN IF(_latestValue > 6, "Running", "Stopped")
+			```
+		lineageTag: d4434d54-84ab-4329-bd40-89b121a0f444
+
+		changedProperty = Name
+
+	measure 'RV3 BFP East Status' = ```
+			
+			 VAR _latestValue = 
+			     CALCULATE(
+			         MAX(fact_pi[ValueNumeric]),
+			         fact_pi[Tag] = "RV3:FPSU3TS24E.AG",
+			         LASTDATE(fact_pi[Timestamp])
+			     )
+			 RETURN IF(_latestValue > 20, "Running", "Stopped")
+			```
+		lineageTag: 0bbc4300-60e5-49f5-aa2a-5a2f69234892
+
+		changedProperty = Name
+
+	measure 'RV2 Last Stop Date' = ```
+			
+			 CALCULATE(
+			     MAX(fact_pi[Timestamp]),
+			     fact_pi[Tag] = "RV2:BTPU2BP20.AG",
+			     fact_pi[ValueNumeric] <= 600,
+			     NOT ISBLANK(fact_pi[ValueNumeric])
+			 ) - TIME(5, 0, 0)
+			```
+		formatString: General Date
+		lineageTag: 8de76fa8-5709-4df2-ad4c-a9d640d24317
+
+		changedProperty = Name
+
+	measure 'RV3 Last Stop Date' = ```
+			
+			 CALCULATE(
+			     MAX(fact_pi[Timestamp]),
+			     fact_pi[Tag] = "RV3:TXSU3TS15A1.AG",
+			     fact_pi[ValueNumeric] <= 6
+			 ) - TIME(5, 0, 0)
+			```
+		formatString: General Date
+		lineageTag: 56195c94-9c86-45cd-9852-5723e25e92da
+
+		changedProperty = Name
+
+	measure 'RV3 BFP East Last Stop Date' = ```
+			
+			 CALCULATE(
+			     MAX(fact_pi[Timestamp]),
+			     fact_pi[Tag] = "RV3:FPSU3TS24E.AG",
+			     fact_pi[ValueNumeric] <= 20
+			 )
+			```
+		formatString: General Date
+		lineageTag: fb686a82-b484-4ef1-be1d-465274f20117
+
+		changedProperty = Name
+
+	measure 'System Health' = ```
+			
+			 VAR _latestRuns = 
+			     SUMMARIZE(
+			         watchlist,
+			         watchlist[model_name],
+			         "LatestRun", MAX(watchlist[model_run_timestamp])
+			     )
+			 VAR _latestRows = 
+			     FILTER(
+			         watchlist,
+			         COUNTROWS(
+			             FILTER(
+			                 _latestRuns,
+			                 [model_name] = watchlist[model_name]
+			                     && [LatestRun] = watchlist[model_run_timestamp]
+			             )
+			         ) > 0
+			     )
+			 VAR _critical = 
+			     COUNTROWS(
+			         FILTER(_latestRows, watchlist[recommended_action] IN {"CRITICAL", "HIGH"})
+			     )
+			 VAR _moderate = 
+			     COUNTROWS(
+			         FILTER(_latestRows, watchlist[recommended_action] IN {"MEDIUM", "INVESTIGATE"})
+			     )
+			 RETURN
+			     SWITCH(
+			         TRUE(),
+			         _critical > 0, UNICHAR(128308) & " Critical",
+			         _moderate > 0, UNICHAR(128993) & " Moderate",
+			         UNICHAR(128994) & " Healthy"
+			     )
+			```
+		lineageTag: 9f5287ba-37ed-4c7e-8780-20e9840671c8
+
+		changedProperty = Name
+
+	measure 'PI Last Refresh Date' = ```
+			
+			 MAX(fact_pi[Timestamp]) - TIME(5, 0, 0)
+			```
+		formatString: General Date
+		lineageTag: bc17abfc-ce19-4b57-87d9-e1fb23926491
+
+		changedProperty = Name
+
+	measure 'Cox 14d Downtime' = ```
+			
+			 VAR _LatestTs = MAX(predictions_longterm[scoring_timestamp])
+			 VAR _Surv = 
+			     CALCULATE(
+			         AVERAGE(predictions_longterm[survival_probability_14d]),
+			         predictions_longterm[scoring_timestamp] = _LatestTs
+			     )
+			 VAR _Pct = 1 - _Surv
+			 VAR _Risk = 
+			     CALCULATE(
+			         LASTNONBLANK(predictions_longterm[risk_level], 1),
+			         predictions_longterm[scoring_timestamp] = _LatestTs
+			     )
+			 VAR _Icon = 
+			     SWITCH(_Risk, 
+			         "HIGH", UNICHAR(128308),
+			         "MEDIUM", UNICHAR(128993),
+			         UNICHAR(128994)
+			     )
+			 RETURN
+			     _Icon & " " & FORMAT(_Pct, "0.0%")
+			```
+		lineageTag: 667c914f-d7da-4997-9c68-25ad64c2508d
+
+		changedProperty = Name
+
+	measure 'Last Model Run (CT)' = ```
+			
+			 FORMAT(
+			     MAX(watchlist[model_run_timestamp]) - TIME(5, 0, 0),
+			     "MM/DD/YYYY h:mm AM/PM"
+			 )
+			```
+		lineageTag: f2a00384-9de8-41ac-a8c1-898a51a298aa
+
+		changedProperty = Name
+
+	measure 'Max 4h Stop Display' = ```
+			
+			 VAR _Latest = MAX(predictions_shortterm[scoring_timestamp])
+			 VAR _Pct = 
+			     CALCULATE(
+			         MAX(predictions_shortterm[stop_probability]),
+			         predictions_shortterm[scoring_timestamp] = _Latest,
+			         predictions_shortterm[prediction_horizon] = "4h"
+			     )
+			 VAR _Icon = 
+			     SWITCH(TRUE(),
+			         _Pct >= 0.5, UNICHAR(128308),
+			         _Pct >= 0.25, UNICHAR(128993),
+			         UNICHAR(128994)
+			     )
+			 RETURN
+			     _Icon & " " & FORMAT(_Pct, "0.0%")
+			
+			```
+		lineageTag: d55a62bc-1a3b-48e0-9b3f-80a601134fa9
+
+		changedProperty = Name
+
+	measure 'AAKR Actual' = MAX(aakr_scores[actual_value])
+		lineageTag: 2ba4e021-b408-4e21-8c5c-74e3c3d432f9
+
+		changedProperty = Name
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'AAKR Expected' = MAX(aakr_scores[expected_value])
+		lineageTag: 8d8997bc-8854-49ef-a3c8-25882b647f62
+
+		changedProperty = Name
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Tag Units' = SELECTEDVALUE(bridge_pi_tag_to_asset[eng_units], "")
+		lineageTag: 2bf4cd92-67d8-4815-b905-a61686dfcf3e
+
+		changedProperty = Name
+
+	measure 'Selected Tag Name' = ```
+			
+			 SELECTEDVALUE(bridge_pi_tag_to_asset[tag_description], "Select a tag")
+			```
+		lineageTag: e00bf897-cd74-4d16-8ef1-46b18f4b8df6
+
+		changedProperty = Name
+
+	measure 'Is Top Anomaly Tag' = ```
+			
+			 VAR _TopTags = 
+			     TOPN(
+			         10,
+			         ALLSELECTED(bridge_pi_tag_to_asset[Tag]),
+			         CALCULATE(MAX(aakr_scores[z_residual]))
+			     )
+			 RETURN
+			     IF(
+			         SELECTEDVALUE(bridge_pi_tag_to_asset[Tag]) IN _TopTags,
+			         1, 0
+			     )
+			```
+		formatString: 0
+		lineageTag: d3cd5b4c-f80c-4bf9-9f14-693e54fa32ab
+
+		changedProperty = Name
+
+	measure 'Hours Since Last Run' = ```
+			
+			 VAR LastRunCT = MAX(watchlist[model_run_timestamp]) - TIME(5, 0, 0)
+			 RETURN
+			     INT(DATEDIFF(LastRunCT, NOW() - TIME(5, 0, 0), MINUTE) / 60) & "h " &
+			     MOD(DATEDIFF(LastRunCT, NOW() - TIME(5, 0, 0), MINUTE), 60) & "m ago"
+			```
+		lineageTag: 8c5cb377-d89a-48b0-afba-9edb37b9f6f1
+
+		changedProperty = Name
+
+	column model_name
+		dataType: string
+		lineageTag: 725dd431-082b-48f9-aab7-7b005c37bb78
+		sourceLineageTag: model_name
+		summarizeBy: none
+		sourceColumn: model_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column scoring_date
+		dataType: string
+		lineageTag: 52ca55fa-4738-496b-b7f0-76a2db06390b
+		sourceLineageTag: scoring_date
+		summarizeBy: none
+		sourceColumn: scoring_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_id
+		dataType: string
+		lineageTag: 639cd7bc-7364-40fc-906a-05aebdac1472
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column feature
+		dataType: string
+		lineageTag: 653f3a07-5f13-43a0-8dd6-0945775334ad
+		sourceLineageTag: feature
+		summarizeBy: none
+		sourceColumn: feature
+
+		annotation SummarizationSetBy = Automatic
+
+	column tag_name
+		dataType: string
+		lineageTag: f183f355-bf5f-49e5-b50f-5bc99a5d0518
+		sourceLineageTag: tag_name
+		summarizeBy: none
+		sourceColumn: tag_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column descriptor
+		dataType: string
+		lineageTag: 89c627af-6146-4d10-aa45-6476403fc3c0
+		sourceLineageTag: descriptor
+		summarizeBy: none
+		sourceColumn: descriptor
+
+		annotation SummarizationSetBy = Automatic
+
+	column engineering_units
+		dataType: string
+		lineageTag: 5c525a75-ff14-44e3-9c09-525d0bba4f4f
+		sourceLineageTag: engineering_units
+		summarizeBy: none
+		sourceColumn: engineering_units
+
+		annotation SummarizationSetBy = Automatic
+
+	column current_value
+		dataType: double
+		lineageTag: ac689876-604e-4556-adca-add11e433403
+		sourceLineageTag: current_value
+		summarizeBy: sum
+		sourceColumn: current_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column baseline_mean
+		dataType: double
+		lineageTag: 99a3a3f3-28cb-451d-96c2-9c88395fafda
+		sourceLineageTag: baseline_mean
+		summarizeBy: sum
+		sourceColumn: baseline_mean
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column baseline_std
+		dataType: double
+		lineageTag: 0adba99d-dfdb-4f24-ba11-c24ab8d085f6
+		sourceLineageTag: baseline_std
+		summarizeBy: sum
+		sourceColumn: baseline_std
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column normal_range_low
+		dataType: double
+		lineageTag: 7e73783c-e8d6-4b5c-890e-9b4930b0127a
+		sourceLineageTag: normal_range_low
+		summarizeBy: sum
+		sourceColumn: normal_range_low
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column normal_range_high
+		dataType: double
+		lineageTag: c43d18f8-5e7b-473c-a67e-0f5b168463b7
+		sourceLineageTag: normal_range_high
+		summarizeBy: sum
+		sourceColumn: normal_range_high
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column risk_contribution
+		dataType: double
+		lineageTag: 876871cd-41ab-4016-8412-b710a04cc23c
+		sourceLineageTag: risk_contribution
+		summarizeBy: sum
+		sourceColumn: risk_contribution
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column trend_direction
+		dataType: string
+		lineageTag: ec3206ad-28dd-4ea5-89fa-55d8b23b7a2b
+		sourceLineageTag: trend_direction
+		summarizeBy: none
+		sourceColumn: trend_direction
+
+		annotation SummarizationSetBy = Automatic
+
+	column trend_slope_per_day
+		dataType: double
+		lineageTag: 19985187-1f99-4f59-bb62-cb2aa8441846
+		sourceLineageTag: trend_slope_per_day
+		summarizeBy: sum
+		sourceColumn: trend_slope_per_day
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column recommended_action
+		dataType: string
+		lineageTag: 58c1b38e-15f0-41b4-ba8f-317606fb41f8
+		sourceLineageTag: recommended_action
+		summarizeBy: none
+		sourceColumn: recommended_action
+
+		annotation SummarizationSetBy = Automatic
+
+	column recommendation_text
+		dataType: string
+		lineageTag: 89ada9e9-35c7-4bb3-b780-eab812bcef47
+		sourceLineageTag: recommendation_text
+		summarizeBy: none
+		sourceColumn: recommendation_text
+
+		annotation SummarizationSetBy = Automatic
+
+	column watch_horizon_days
+		dataType: int64
+		formatString: 0
+		lineageTag: 769615b7-c7fa-43e6-af70-fd773a21580b
+		sourceLineageTag: watch_horizon_days
+		summarizeBy: sum
+		sourceColumn: watch_horizon_days
+
+		annotation SummarizationSetBy = Automatic
+
+	column model_run_timestamp
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: e52f4ea3-ddee-4117-8a1c-1a4e7b3bc631
+		sourceLineageTag: model_run_timestamp
+		summarizeBy: none
+		sourceColumn: model_run_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	column notebook_run_id
+		dataType: string
+		lineageTag: 1983ab4c-9517-481a-a4eb-5f4f4769ef99
+		sourceLineageTag: notebook_run_id
+		summarizeBy: none
+		sourceColumn: notebook_run_id
+
+		annotation SummarizationSetBy = Automatic
+
+	partition watchlist = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("i22siiabnewedg7vb3coyirmp4-rsrtwftjhbxublnxg7f4tajzbq.datawarehouse.fabric.microsoft.com", "lh_poc"),
+				    Data = Source{[Schema="ml",Item="watchlist"]}[Data]
+				in
+				    Data
+

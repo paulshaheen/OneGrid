@@ -1,0 +1,24 @@
+{
+  "Id": "100005",
+  "Namespace": "usertypes",
+  "BaseEntityTypeId": "2",
+  "Name": "WorkRequest",
+  "Properties": [
+    {
+      "ValueType": "String",
+      "Name": "DisplayName",
+      "Id": "9000000000000012"
+    },
+    {
+      "ValueType": "String",
+      "Name": "Status",
+      "Id": "9000000000000013"
+    },
+    {
+      "ValueType": "String",
+      "Name": "Priority",
+      "Id": "9000000000000014"
+    }
+  ],
+  "TimeseriesProperties": []
+}

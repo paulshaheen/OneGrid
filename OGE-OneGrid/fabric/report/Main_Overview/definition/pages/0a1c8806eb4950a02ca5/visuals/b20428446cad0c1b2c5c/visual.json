@@ -1,0 +1,1018 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.11.0/schema.json",
+  "name": "b20428446cad0c1b2c5c",
+  "position": {
+    "x": 0,
+    "y": 280.91466371560375,
+    "z": 7000,
+    "height": 358.10651181875829,
+    "width": 1279.6339355656964,
+    "tabOrder": 7000
+  },
+  "visual": {
+    "visualType": "pivotTable",
+    "query": {
+      "queryState": {
+        "Rows": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level0_name"
+                }
+              },
+              "queryRef": "dim_equipment.level0_name",
+              "nativeQueryRef": "Hierarchy",
+              "active": true,
+              "displayName": "Hierarchy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level1_name"
+                }
+              },
+              "queryRef": "dim_equipment.level1_name",
+              "nativeQueryRef": "level1_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level2_name"
+                }
+              },
+              "queryRef": "dim_equipment.level2_name",
+              "nativeQueryRef": "level2_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level3_name"
+                }
+              },
+              "queryRef": "dim_equipment.level3_name",
+              "nativeQueryRef": "level3_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level4_name"
+                }
+              },
+              "queryRef": "dim_equipment.level4_name",
+              "nativeQueryRef": "level4_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level5_name"
+                }
+              },
+              "queryRef": "dim_equipment.level5_name",
+              "nativeQueryRef": "level5_name",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "bridge_pi_tag_to_asset"
+                    }
+                  },
+                  "Property": "tag_description"
+                }
+              },
+              "queryRef": "bridge_pi_tag_to_asset.tag_description",
+              "nativeQueryRef": "tag_description",
+              "active": true
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "bridge_pi_tag_to_asset"
+                    }
+                  },
+                  "Property": "Tag"
+                }
+              },
+              "queryRef": "bridge_pi_tag_to_asset.Tag",
+              "nativeQueryRef": "Tag",
+              "active": false
+            }
+          ]
+        },
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "fact_pi"
+                        }
+                      },
+                      "Property": "ValueNumeric"
+                    }
+                  },
+                  "Function": 1
+                }
+              },
+              "queryRef": "Sum(fact_pi.ValueNumeric)",
+              "nativeQueryRef": "PI Val",
+              "displayName": "PI Val"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "fact_pi"
+                        }
+                      },
+                      "Property": "Tag"
+                    }
+                  },
+                  "Function": 2
+                }
+              },
+              "queryRef": "Min(fact_pi.Tag)",
+              "nativeQueryRef": "# Tags",
+              "displayName": "# Tags"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "fact_work_requests"
+                        }
+                      },
+                      "Property": "entity_identity"
+                    }
+                  },
+                  "Function": 2
+                }
+              },
+              "queryRef": "Min(fact_work_requests.entity_identity)",
+              "nativeQueryRef": "# WR",
+              "displayName": "# WR"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "fact_work_requests"
+                        }
+                      },
+                      "Property": "create_date"
+                    }
+                  },
+                  "Function": 4
+                }
+              },
+              "queryRef": "Min(fact_work_requests.create_date)",
+              "nativeQueryRef": "Last WR",
+              "displayName": "Last WR"
+            }
+          ]
+        }
+      }
+    },
+    "expansionStates": [
+      {
+        "roles": [
+          "Rows"
+        ],
+        "levels": [
+          {
+            "queryRefs": [
+              "dim_equipment.level0_name"
+            ],
+            "isCollapsed": true,
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level0_name"
+                }
+              }
+            ],
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "dim_equipment.level1_name"
+            ],
+            "isCollapsed": true,
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level1_name"
+                }
+              }
+            ],
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "dim_equipment.level2_name"
+            ],
+            "isCollapsed": true,
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level2_name"
+                }
+              }
+            ],
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "dim_equipment.level3_name"
+            ],
+            "isCollapsed": true,
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level3_name"
+                }
+              }
+            ],
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "dim_equipment.level4_name"
+            ],
+            "isCollapsed": true,
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level4_name"
+                }
+              }
+            ],
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "dim_equipment.level5_name"
+            ],
+            "isCollapsed": true,
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "dim_equipment"
+                    }
+                  },
+                  "Property": "level5_name"
+                }
+              }
+            ],
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "bridge_pi_tag_to_asset.tag_description"
+            ],
+            "isCollapsed": true,
+            "identityKeys": [
+              {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "bridge_pi_tag_to_asset"
+                    }
+                  },
+                  "Property": "tag_description"
+                }
+              }
+            ],
+            "isPinned": true
+          },
+          {
+            "queryRefs": [
+              "bridge_pi_tag_to_asset.Tag"
+            ],
+            "isCollapsed": true,
+            "isPinned": true
+          }
+        ],
+        "root": {
+          "children": [
+            {
+              "identityValues": [
+                {
+                  "Literal": {
+                    "Value": "'Contoso'"
+                  }
+                }
+              ],
+              "isToggled": true,
+              "children": [
+                {
+                  "identityValues": [
+                    {
+                      "Literal": {
+                        "Value": "'Calderon'"
+                      }
+                    }
+                  ],
+                  "isToggled": true,
+                  "children": [
+                    {
+                      "identityValues": [
+                        {
+                          "Literal": {
+                            "Value": "'Riverton'"
+                          }
+                        }
+                      ],
+                      "isToggled": true,
+                      "children": [
+                        {
+                          "identityValues": [
+                            {
+                              "Literal": {
+                                "Value": "'MECHANICAL'"
+                              }
+                            }
+                          ],
+                          "isToggled": true,
+                          "children": [
+                            {
+                              "identityValues": [
+                                {
+                                  "Literal": {
+                                    "Value": "'TURBINE 3'"
+                                  }
+                                }
+                              ],
+                              "isToggled": true
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "identityValues": [
+                {
+                  "Literal": {
+                    "Value": "'Riverton'"
+                  }
+                }
+              ],
+              "isToggled": true,
+              "children": [
+                {
+                  "identityValues": [
+                    {
+                      "Literal": {
+                        "Value": "'Unit 2'"
+                      }
+                    }
+                  ],
+                  "isToggled": true,
+                  "children": [
+                    {
+                      "identityValues": [
+                        {
+                          "Literal": {
+                            "Value": "'Hotwell,Cond Pumps,Vac Pmps,Treated/River Wtr Pmps'"
+                          }
+                        }
+                      ],
+                      "children": [
+                        {
+                          "identityValues": [
+                            {
+                              "Literal": {
+                                "Value": "'Condensate U2 Condenser Vacuum System'"
+                              }
+                            }
+                          ],
+                          "isToggled": true,
+                          "children": [
+                            {
+                              "identityValues": [
+                                {
+                                  "Literal": {
+                                    "Value": "'Condensate U2-B Condenser Vac Pump,Motor,Pipe'"
+                                  }
+                                }
+                              ],
+                              "isToggled": true,
+                              "children": [
+                                {
+                                  "identityValues": [
+                                    {
+                                      "Literal": {
+                                        "Value": "'Condensate U2-2B Vac Pump Seal Wtr Pmp'"
+                                      }
+                                    }
+                                  ],
+                                  "isToggled": true
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "identityValues": [
+                        {
+                          "Literal": {
+                            "Value": "null"
+                          }
+                        }
+                      ],
+                      "children": [
+                        {
+                          "identityValues": [
+                            {
+                              "Literal": {
+                                "Value": "null"
+                              }
+                            }
+                          ],
+                          "isToggled": true
+                        }
+                      ]
+                    },
+                    {
+                      "identityValues": [
+                        {
+                          "Literal": {
+                            "Value": "'2 A/B BFP,Htr Drn Pmp,Hyd Coup,Sprays,Htrs'"
+                          }
+                        }
+                      ],
+                      "isToggled": true,
+                      "children": [
+                        {
+                          "identityValues": [
+                            {
+                              "Literal": {
+                                "Value": "'Feedwater U2 Boilerfeed Sys(Surv Test)'"
+                              }
+                            }
+                          ],
+                          "isToggled": true,
+                          "children": [
+                            {
+                              "identityValues": [
+                                {
+                                  "Literal": {
+                                    "Value": "'Feedwater U2-\"A\" Cond Inj Pmp,Mtr,MCC, Vlvs'"
+                                  }
+                                }
+                              ],
+                              "isToggled": true,
+                              "children": [
+                                {
+                                  "identityValues": [
+                                    {
+                                      "Literal": {
+                                        "Value": "'Feedwater U2-Condensate Injection Pump Motor'"
+                                      }
+                                    }
+                                  ],
+                                  "isToggled": true
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "identityValues": [
+                            {
+                              "Literal": {
+                                "Value": "'Feedwater U2 Heater Drain Pump'"
+                              }
+                            }
+                          ],
+                          "children": [
+                            {
+                              "identityValues": [
+                                {
+                                  "Literal": {
+                                    "Value": "null"
+                                  }
+                                }
+                              ],
+                              "isToggled": true,
+                              "children": [
+                                {
+                                  "identityValues": [
+                                    {
+                                      "Literal": {
+                                        "Value": "null"
+                                      }
+                                    }
+                                  ],
+                                  "isToggled": true
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "identityValues": [
+                    {
+                      "Literal": {
+                        "Value": "'Unit 3'"
+                      }
+                    }
+                  ],
+                  "children": [
+                    {
+                      "identityValues": [
+                        {
+                          "Literal": {
+                            "Value": "'Condensate U3-Cond Pmps,Bster Pmps,Vacuum Pmps'"
+                          }
+                        }
+                      ],
+                      "isToggled": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "objects": {
+      "subTotals": [
+        {
+          "properties": {
+            "columnSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            },
+            "rowSubtotals": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "grid": [
+        {
+          "properties": {
+            "gridHorizontal": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "visualContainerObjects": {
+      "stylePreset": [
+        {
+          "properties": {
+            "name": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Minimal'"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "visualHeader": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "background": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "false"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "dropShadow": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "904b642808bbc0b30e41",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_equipment"
+              }
+            },
+            "Property": "level0_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "6df39360b3a5c94a82a1",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_equipment"
+              }
+            },
+            "Property": "level1_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "c5b7a350cca617c16f6e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_equipment"
+              }
+            },
+            "Property": "level2_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "8c52ab3c2cea5cf56b3c",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_equipment"
+              }
+            },
+            "Property": "level3_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "61174dcac3b94526f0b3",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_equipment"
+              }
+            },
+            "Property": "level4_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "d162d29375c869b0fdc1",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "bridge_pi_tag_to_asset"
+              }
+            },
+            "Property": "tag_description"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "2755fadac62f1aa56c56",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "bridge_pi_tag_to_asset"
+              }
+            },
+            "Property": "Tag"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0bc8d154841f4318c9c4",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fact_pi"
+                  }
+                },
+                "Property": "ValueNumeric"
+              }
+            },
+            "Function": 1
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "8be1681b4ee79ca73f06",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fact_pi"
+                  }
+                },
+                "Property": "Tag"
+              }
+            },
+            "Function": 2
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a475535eab3eddff254a",
+        "type": "Include",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "d",
+              "Entity": "dim_equipment",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "In": {
+                  "Expressions": [
+                    {
+                      "Column": {
+                        "Expression": {
+                          "SourceRef": {
+                            "Source": "d"
+                          }
+                        },
+                        "Property": "level0_name"
+                      }
+                    }
+                  ],
+                  "Values": [
+                    [
+                      {
+                        "Literal": {
+                          "Value": "'Riverton'"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "Include"
+      },
+      {
+        "name": "c026f9656e217e0b0ffb",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_equipment"
+              }
+            },
+            "Property": "level5_name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "0ad50cf606c939be823f",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fact_work_requests"
+                  }
+                },
+                "Property": "entity_identity"
+              }
+            },
+            "Function": 2
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "9cd50003917ffc138c9a",
+        "type": "Exclude",
+        "filter": {
+          "Version": 2,
+          "From": [
+            {
+              "Name": "d",
+              "Entity": "dim_equipment",
+              "Type": 0
+            }
+          ],
+          "Where": [
+            {
+              "Condition": {
+                "Not": {
+                  "Expression": {
+                    "In": {
+                      "Expressions": [
+                        {
+                          "Column": {
+                            "Expression": {
+                              "SourceRef": {
+                                "Source": "d"
+                              }
+                            },
+                            "Property": "level0_name"
+                          }
+                        },
+                        {
+                          "Column": {
+                            "Expression": {
+                              "SourceRef": {
+                                "Source": "d"
+                              }
+                            },
+                            "Property": "level1_name"
+                          }
+                        }
+                      ],
+                      "Values": [
+                        [
+                          {
+                            "Literal": {
+                              "Value": "'Riverton'"
+                            }
+                          },
+                          {
+                            "Literal": {
+                              "Value": "null"
+                            }
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "howCreated": "Exclude"
+      },
+      {
+        "name": "4f0f44aee42781f32d10",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "fact_work_requests"
+                  }
+                },
+                "Property": "create_date"
+              }
+            },
+            "Function": 4
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

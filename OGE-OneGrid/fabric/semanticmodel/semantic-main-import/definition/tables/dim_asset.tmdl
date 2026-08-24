@@ -1,0 +1,95 @@
+table dim_asset
+	lineageTag: 943ffbad-dda1-4de3-a030-3fc003bd9dc1
+	sourceLineageTag: [gold].[dim_asset]
+
+	column asset_id
+		dataType: string
+		lineageTag: 6a6e6f4c-c807-439b-921c-3a947b895a84
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_display_name
+		dataType: string
+		lineageTag: 891bb4c3-ed44-4d28-9a9c-b4ee1ae01f2b
+		sourceLineageTag: asset_display_name
+		summarizeBy: none
+		sourceColumn: asset_display_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column unit
+		dataType: string
+		lineageTag: d2032878-055c-4f88-bc3c-3c9c26feafb3
+		sourceLineageTag: unit
+		summarizeBy: none
+		sourceColumn: unit
+
+		annotation SummarizationSetBy = Automatic
+
+	column plant
+		dataType: string
+		lineageTag: b37c2227-a335-4eb0-832a-2d7dfc7c27be
+		sourceLineageTag: plant
+		summarizeBy: none
+		sourceColumn: plant
+
+		annotation SummarizationSetBy = Automatic
+
+	column icare_id
+		dataType: string
+		lineageTag: 4e1fbc19-1474-4ae1-82d1-1253af8460a6
+		sourceLineageTag: icare_id
+		summarizeBy: none
+		sourceColumn: icare_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column equipment_category
+		dataType: string
+		lineageTag: 02599e22-aa65-461d-a4fe-fde8630ca38c
+		sourceLineageTag: equipment_category
+		summarizeBy: none
+		sourceColumn: equipment_category
+
+		annotation SummarizationSetBy = Automatic
+
+	column equipment_group
+		dataType: string
+		lineageTag: 529a071a-b0c2-4cab-b88a-586c72f0af5b
+		sourceLineageTag: equipment_group
+		summarizeBy: none
+		sourceColumn: equipment_group
+
+		annotation SummarizationSetBy = Automatic
+
+	column running_tag
+		dataType: string
+		lineageTag: 3db07e52-63cb-40ac-be8f-811df6ea350f
+		sourceLineageTag: running_tag
+		summarizeBy: none
+		sourceColumn: running_tag
+
+		annotation SummarizationSetBy = Automatic
+
+	column running_threshold
+		dataType: int64
+		formatString: 0
+		lineageTag: 5bc4e7c1-bfa6-47e1-82f0-0f4565fe576f
+		sourceLineageTag: running_threshold
+		summarizeBy: sum
+		sourceColumn: running_threshold
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_asset = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("i22siiabnewedg7vb3coyirmp4-rsrtwftjhbxublnxg7f4tajzbq.datawarehouse.fabric.microsoft.com", "lh_poc"),
+				    Data = Source{[Schema="gold",Item="dim_asset"]}[Data]
+				in
+				    Data
+

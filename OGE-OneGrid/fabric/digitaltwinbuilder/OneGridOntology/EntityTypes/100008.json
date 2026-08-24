@@ -1,0 +1,24 @@
+{
+  "Id": "100008",
+  "Namespace": "usertypes",
+  "BaseEntityTypeId": "2",
+  "Name": "Prediction",
+  "Properties": [
+    {
+      "ValueType": "String",
+      "Name": "DisplayName",
+      "Id": "9000000000000021"
+    },
+    {
+      "ValueType": "Double",
+      "Name": "RiskScore",
+      "Id": "9000000000000022"
+    },
+    {
+      "ValueType": "String",
+      "Name": "Horizon",
+      "Id": "9000000000000023"
+    }
+  ],
+  "TimeseriesProperties": []
+}

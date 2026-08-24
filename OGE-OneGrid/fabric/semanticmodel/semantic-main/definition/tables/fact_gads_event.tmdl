@@ -1,0 +1,343 @@
+table fact_gads_event
+	lineageTag: e13995ec-eba4-4e64-946b-3d1fb1127ba3
+	sourceLineageTag: [gold].[fact_gads_event]
+
+	column event_uid
+		dataType: string
+		lineageTag: 3ec6bdea-3b9e-4267-92cd-ac19be0c7758
+		sourceLineageTag: event_uid
+		summarizeBy: none
+		sourceColumn: event_uid
+
+		annotation SummarizationSetBy = Automatic
+
+	column GEN_SEQ_NO
+		dataType: string
+		lineageTag: 6cfbbc11-ddf4-4fba-8c15-d3b52f8efa91
+		sourceLineageTag: GEN_SEQ_NO
+		summarizeBy: none
+		sourceColumn: GEN_SEQ_NO
+
+		annotation SummarizationSetBy = Automatic
+
+	column UNIT_ID
+		dataType: string
+		lineageTag: d689bd07-901f-40c5-8ab9-1440b0db9e9e
+		sourceLineageTag: UNIT_ID
+		summarizeBy: none
+		sourceColumn: UNIT_ID
+
+		annotation SummarizationSetBy = Automatic
+
+	column UNIT_NAME
+		dataType: string
+		lineageTag: 558eb8bd-9a25-42d7-98bc-e7af95111546
+		sourceLineageTag: UNIT_NAME
+		summarizeBy: none
+		sourceColumn: UNIT_NAME
+
+		annotation SummarizationSetBy = Automatic
+
+	column plant
+		dataType: string
+		lineageTag: fbb64af2-8eb6-4324-b655-ad3ab91486df
+		sourceLineageTag: plant
+		summarizeBy: none
+		sourceColumn: plant
+
+		annotation SummarizationSetBy = Automatic
+
+	column REAL_START_DT
+		dataType: dateTime
+		formatString: Short Date
+		lineageTag: 6b55551e-622e-49b8-8e3b-dda62045403c
+		sourceLineageTag: REAL_START_DT
+		summarizeBy: none
+		sourceColumn: REAL_START_DT
+
+		changedProperty = FormatString
+
+		annotation SummarizationSetBy = Automatic
+
+	column REAL_END_DT
+		dataType: dateTime
+		formatString: Short Date
+		lineageTag: 44f4b465-ddab-4136-8adf-5860f8965d8d
+		sourceLineageTag: REAL_END_DT
+		summarizeBy: none
+		sourceColumn: REAL_END_DT
+
+		changedProperty = FormatString
+
+		annotation SummarizationSetBy = Automatic
+
+	column DURATION_HRS
+		dataType: double
+		lineageTag: 01b009d2-84d5-4492-9041-9fe03f8c5408
+		sourceLineageTag: DURATION_HRS
+		summarizeBy: sum
+		sourceColumn: DURATION_HRS
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column EVENT_YEAR
+		dataType: int64
+		formatString: 0
+		lineageTag: f7c1fe66-c901-49c8-86a2-1ee1745d13c6
+		sourceLineageTag: EVENT_YEAR
+		summarizeBy: sum
+		sourceColumn: EVENT_YEAR
+
+		annotation SummarizationSetBy = Automatic
+
+	column EVENT_MONTH
+		dataType: int64
+		formatString: 0
+		lineageTag: 6f6ee22a-ecd7-4037-8482-ce4016bad283
+		sourceLineageTag: EVENT_MONTH
+		summarizeBy: sum
+		sourceColumn: EVENT_MONTH
+
+		annotation SummarizationSetBy = Automatic
+
+	column EVENT_TYPE_CD
+		dataType: string
+		lineageTag: b32b597c-ebad-42c3-8f99-3c28528e78aa
+		sourceLineageTag: EVENT_TYPE_CD
+		summarizeBy: none
+		sourceColumn: EVENT_TYPE_CD
+
+		annotation SummarizationSetBy = Automatic
+
+	column EVENT_TYPE_DESC
+		dataType: string
+		lineageTag: be9a7c52-d6ee-4201-bc0d-98edc8ecbc4c
+		sourceLineageTag: EVENT_TYPE_DESC
+		summarizeBy: none
+		sourceColumn: EVENT_TYPE_DESC
+
+		annotation SummarizationSetBy = Automatic
+
+	column EVENT_CAUSE_CD
+		dataType: int64
+		formatString: 0
+		lineageTag: e903ac4c-c0c4-4df2-9217-26c42b3b5fb5
+		sourceLineageTag: EVENT_CAUSE_CD
+		summarizeBy: sum
+		sourceColumn: EVENT_CAUSE_CD
+
+		annotation SummarizationSetBy = Automatic
+
+	column CAUSE_CODE_DESC
+		dataType: string
+		lineageTag: 6eb4e153-c38a-4ecf-ad2e-a6593c7673c3
+		sourceLineageTag: CAUSE_CODE_DESC
+		summarizeBy: none
+		sourceColumn: CAUSE_CODE_DESC
+
+		annotation SummarizationSetBy = Automatic
+
+	column AVAIL_CAP_DURING
+		dataType: string
+		lineageTag: 9475fad0-d044-459a-abb2-acd26a67513c
+		sourceLineageTag: AVAIL_CAP_DURING
+		summarizeBy: none
+		sourceColumn: AVAIL_CAP_DURING
+
+		annotation SummarizationSetBy = Automatic
+
+	column AVAIL_CAP_AFTER
+		dataType: int64
+		formatString: 0
+		lineageTag: b771d194-adeb-424f-ad0a-c35b235b861d
+		sourceLineageTag: AVAIL_CAP_AFTER
+		summarizeBy: sum
+		sourceColumn: AVAIL_CAP_AFTER
+
+		annotation SummarizationSetBy = Automatic
+
+	column DERATING
+		dataType: string
+		lineageTag: 00636b9c-a2fd-41f5-8dec-2a6fee09cc64
+		sourceLineageTag: DERATING
+		summarizeBy: none
+		sourceColumn: DERATING
+
+		annotation SummarizationSetBy = Automatic
+
+	column EQUIPMENT_DESC
+		dataType: string
+		lineageTag: 60aababc-59c6-49da-bee2-b053d714f40c
+		sourceLineageTag: EQUIPMENT_DESC
+		summarizeBy: none
+		sourceColumn: EQUIPMENT_DESC
+
+		annotation SummarizationSetBy = Automatic
+
+	column CAUSE_OF_EVENT
+		dataType: string
+		lineageTag: c9828014-a330-4058-a6d9-df1b485e033b
+		sourceLineageTag: CAUSE_OF_EVENT
+		summarizeBy: none
+		sourceColumn: CAUSE_OF_EVENT
+
+		annotation SummarizationSetBy = Automatic
+
+	column PRIMARY_FUEL
+		dataType: string
+		lineageTag: ccd0fe2e-34ab-4371-b6c6-b3b3b0302162
+		sourceLineageTag: PRIMARY_FUEL
+		summarizeBy: none
+		sourceColumn: PRIMARY_FUEL
+
+		annotation SummarizationSetBy = Automatic
+
+	column UNIT_TYPE
+		dataType: int64
+		formatString: 0
+		lineageTag: 4bc5e7ba-e93d-4477-8a28-8838a009b415
+		sourceLineageTag: UNIT_TYPE
+		summarizeBy: sum
+		sourceColumn: UNIT_TYPE
+
+		annotation SummarizationSetBy = Automatic
+
+	column BOILER_MANF
+		dataType: string
+		lineageTag: bdadd454-5ca9-42a3-921d-83361d5ed4ba
+		sourceLineageTag: BOILER_MANF
+		summarizeBy: none
+		sourceColumn: BOILER_MANF
+
+		annotation SummarizationSetBy = Automatic
+
+	column TURBINE_MANF
+		dataType: string
+		lineageTag: 5775c102-074c-4b63-805a-cfa175b92916
+		sourceLineageTag: TURBINE_MANF
+		summarizeBy: none
+		sourceColumn: TURBINE_MANF
+
+		annotation SummarizationSetBy = Automatic
+
+	column MAX_DESIGN_CAP
+		dataType: int64
+		formatString: 0
+		lineageTag: a09dc853-6ae3-4a48-b68d-c8352788f92f
+		sourceLineageTag: MAX_DESIGN_CAP
+		summarizeBy: sum
+		sourceColumn: MAX_DESIGN_CAP
+
+		annotation SummarizationSetBy = Automatic
+
+	column icare_id
+		dataType: string
+		lineageTag: d2aa6be6-026f-466b-b38e-7be7d9cad9fd
+		sourceLineageTag: icare_id
+		summarizeBy: none
+		sourceColumn: icare_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column primary_matched_acronym
+		dataType: string
+		lineageTag: 3e80ece0-c293-4fe6-8c94-753bcc0d8c87
+		sourceLineageTag: primary_matched_acronym
+		summarizeBy: none
+		sourceColumn: primary_matched_acronym
+
+		annotation SummarizationSetBy = Automatic
+
+	column equipment_node_count
+		dataType: int64
+		formatString: 0
+		lineageTag: 8f36d9a7-930f-44de-a145-e4e327827820
+		sourceLineageTag: equipment_node_count
+		summarizeBy: sum
+		sourceColumn: equipment_node_count
+
+		annotation SummarizationSetBy = Automatic
+
+	column all_matched_acronyms
+		dataType: string
+		lineageTag: 039fdaa3-9e90-4e34-8e9e-16ee75f56640
+		sourceLineageTag: all_matched_acronyms
+		summarizeBy: none
+		sourceColumn: all_matched_acronyms
+
+		annotation SummarizationSetBy = Automatic
+
+	column start_date_key
+		dataType: int64
+		formatString: 0
+		lineageTag: 00fbede9-125a-4644-b869-ecbe82949ca4
+		sourceLineageTag: start_date_key
+		summarizeBy: sum
+		sourceColumn: start_date_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column end_date_key
+		dataType: int64
+		formatString: 0
+		lineageTag: e5ab55fd-4ced-4577-94bb-455e293acc9e
+		sourceLineageTag: end_date_key
+		summarizeBy: sum
+		sourceColumn: end_date_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column asset_id
+		dataType: string
+		lineageTag: 0bab53cf-9bc7-49aa-9a78-74e1b7d0d400
+		sourceLineageTag: asset_id
+		summarizeBy: none
+		sourceColumn: asset_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column downtime_classification
+		dataType: string
+		lineageTag: d928660d-b416-44d4-a1f4-c038da68f3af
+		sourceLineageTag: downtime_classification
+		summarizeBy: none
+		sourceColumn: downtime_classification
+
+		annotation SummarizationSetBy = Automatic
+
+	column root_cause_summary
+		dataType: string
+		lineageTag: 8d959746-ab42-4281-9699-bfe30dd1d4fd
+		sourceLineageTag: root_cause_summary
+		summarizeBy: none
+		sourceColumn: root_cause_summary
+
+		annotation SummarizationSetBy = Automatic
+
+	column gads_intake_notes
+		dataType: string
+		lineageTag: a0999d9d-ed87-445e-9ab5-a04cdc64532d
+		sourceLineageTag: gads_intake_notes
+		summarizeBy: none
+		sourceColumn: gads_intake_notes
+
+		annotation SummarizationSetBy = Automatic
+
+	column gads_match_source
+		dataType: string
+		lineageTag: 877e19e9-746e-4f25-917a-0eeb41a5540b
+		sourceLineageTag: gads_match_source
+		summarizeBy: none
+		sourceColumn: gads_match_source
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_gads_event = entity
+		mode: directLake
+		source
+			entityName: fact_gads_event
+			schemaName: gold
+			expressionSource: 'DirectLake - lh_poc'
+

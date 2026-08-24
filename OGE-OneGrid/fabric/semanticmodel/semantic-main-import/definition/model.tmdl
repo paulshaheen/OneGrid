@@ -1,0 +1,32 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation PBI_QueryOrder = ["DirectLake - lh_poc"]
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_ProTooling = ["DirectLakeOnOneLakeInWeb","WebModelingEdit","DaxQueryView_Desktop"]
+
+ref table selected_tags
+ref table predictions_shortterm
+ref table watchlist
+ref table predictions_longterm
+ref table anomaly_advisories
+ref table aakr_scores
+ref table aakr_health
+ref table bridge_pi_tag_to_asset
+ref table dim_equipment
+ref table fact_pi
+ref table fact_gads_event
+ref table fact_icare_measurement
+ref table dim_date
+ref table dim_asset
+ref table daily_narrative
+ref table fact_work_requests
+ref table root_cause
+

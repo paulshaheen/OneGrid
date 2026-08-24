@@ -1,0 +1,412 @@
+table fact_work_requests
+	lineageTag: 5e7a4034-32b7-4fc7-84e5-e101bfbf5a73
+	sourceLineageTag: [gold].[fact_work_requests]
+
+	column wr_id
+		dataType: int64
+		formatString: 0
+		lineageTag: aef03c99-7eed-437f-9cce-d631636a3c50
+		sourceLineageTag: wr_id
+		summarizeBy: sum
+		sourceColumn: wr_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column problem_descr
+		dataType: string
+		lineageTag: b479dbe7-2c6c-4b88-a64a-aa9293f80f02
+		sourceLineageTag: problem_descr
+		summarizeBy: none
+		sourceColumn: problem_descr
+
+		annotation SummarizationSetBy = Automatic
+
+	column problem_location
+		dataType: string
+		lineageTag: 2533883a-fe09-46fa-bf2e-bd6f47cd1499
+		sourceLineageTag: problem_location
+		summarizeBy: none
+		sourceColumn: problem_location
+
+		annotation SummarizationSetBy = Automatic
+
+	column location
+		dataType: string
+		lineageTag: 4ad3c3c1-9c2a-404f-8348-a5da12569f88
+		sourceLineageTag: location
+		summarizeBy: none
+		sourceColumn: location
+
+		annotation SummarizationSetBy = Automatic
+
+	column wr_type
+		dataType: string
+		lineageTag: 2d561a4a-a002-4454-bd3d-24fc010abe07
+		sourceLineageTag: wr_type
+		summarizeBy: none
+		sourceColumn: wr_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column wr_type_code
+		dataType: string
+		lineageTag: 851ecedf-d2b7-4db8-943d-0b9ef493dff5
+		sourceLineageTag: wr_type_code
+		summarizeBy: none
+		sourceColumn: wr_type_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column wr_status
+		dataType: string
+		lineageTag: bbd29cdf-bab4-42ab-a190-dee25eecb418
+		sourceLineageTag: wr_status
+		summarizeBy: none
+		sourceColumn: wr_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column wr_status_id
+		dataType: string
+		lineageTag: 91a7115f-412a-45f5-ad02-c5ea6bafe540
+		sourceLineageTag: wr_status_id
+		summarizeBy: none
+		sourceColumn: wr_status_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column site_code
+		dataType: string
+		lineageTag: 629c8231-bf0d-4446-9ba2-5caf4cd23e40
+		sourceLineageTag: site_code
+		summarizeBy: none
+		sourceColumn: site_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column site_name
+		dataType: string
+		lineageTag: 9ea79cef-a729-4462-97f7-8ec331ee3c0c
+		sourceLineageTag: site_name
+		summarizeBy: none
+		sourceColumn: site_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column priority
+		dataType: string
+		lineageTag: afd3014e-aae9-4cb8-acf2-feb37e1d2bde
+		sourceLineageTag: priority
+		summarizeBy: none
+		sourceColumn: priority
+
+		annotation SummarizationSetBy = Automatic
+
+	column priority_code
+		dataType: string
+		lineageTag: 5b71fbd1-e8b8-4c29-ab1b-e4c695d80523
+		sourceLineageTag: priority_code
+		summarizeBy: none
+		sourceColumn: priority_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column priority_rank
+		dataType: int64
+		formatString: 0
+		lineageTag: eecf76b7-cb0e-432d-b43a-ae678513426d
+		sourceLineageTag: priority_rank
+		summarizeBy: sum
+		sourceColumn: priority_rank
+
+		annotation SummarizationSetBy = Automatic
+
+	column planner
+		dataType: string
+		lineageTag: 01411976-2efc-4233-bd3d-38fa1dcd75dd
+		sourceLineageTag: planner
+		summarizeBy: none
+		sourceColumn: planner
+
+		annotation SummarizationSetBy = Automatic
+
+	column pm_identifier
+		dataType: int64
+		formatString: 0
+		lineageTag: 73baef11-4cd7-4b5f-99c5-4877912254e2
+		sourceLineageTag: pm_identifier
+		summarizeBy: sum
+		sourceColumn: pm_identifier
+
+		annotation SummarizationSetBy = Automatic
+
+	column pm_descr
+		dataType: string
+		lineageTag: 738254b4-4445-44a6-a12e-7f6d5b3688d0
+		sourceLineageTag: pm_descr
+		summarizeBy: none
+		sourceColumn: pm_descr
+
+		annotation SummarizationSetBy = Automatic
+
+	column pm_due_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 0814d621-eb3c-4547-a23e-39b906166bef
+		sourceLineageTag: pm_due_date
+		summarizeBy: none
+		sourceColumn: pm_due_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column safety_related
+		dataType: string
+		lineageTag: 5b1abbd0-91eb-4fd4-a749-626bc083798e
+		sourceLineageTag: safety_related
+		summarizeBy: none
+		sourceColumn: safety_related
+
+		annotation SummarizationSetBy = Automatic
+
+	column environ_related
+		dataType: string
+		lineageTag: 764db9e7-2fca-454f-b208-3ae010bf64d0
+		sourceLineageTag: environ_related
+		summarizeBy: none
+		sourceColumn: environ_related
+
+		annotation SummarizationSetBy = Automatic
+
+	column unit_status
+		dataType: string
+		lineageTag: 19931fad-1230-44fb-9b3e-e454424a172a
+		sourceLineageTag: unit_status
+		summarizeBy: none
+		sourceColumn: unit_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column unit_status_id
+		dataType: string
+		lineageTag: dfd275c5-fc78-40c4-885a-b8b429131df6
+		sourceLineageTag: unit_status_id
+		summarizeBy: none
+		sourceColumn: unit_status_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column offline_status
+		dataType: string
+		lineageTag: 204b1878-7615-4643-9c93-c90dc203436c
+		sourceLineageTag: offline_status
+		summarizeBy: none
+		sourceColumn: offline_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column offline_status_id
+		dataType: string
+		lineageTag: 3640156d-e561-4338-b458-6655a63dc957
+		sourceLineageTag: offline_status_id
+		summarizeBy: none
+		sourceColumn: offline_status_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column elec_hrs
+		dataType: double
+		lineageTag: ab0c3ec5-7705-43c7-a403-42f38717bbae
+		sourceLineageTag: elec_hrs
+		summarizeBy: sum
+		sourceColumn: elec_hrs
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column mech_hrs
+		dataType: double
+		lineageTag: 04d1b837-072b-4144-be24-4a560c60411b
+		sourceLineageTag: mech_hrs
+		summarizeBy: sum
+		sourceColumn: mech_hrs
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ic_hrs
+		dataType: double
+		lineageTag: 516a2e43-1e57-4939-ae8b-77c26478380d
+		sourceLineageTag: ic_hrs
+		summarizeBy: sum
+		sourceColumn: ic_hrs
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column other_hrs
+		dataType: double
+		lineageTag: e8740042-b294-447d-8ef7-df82f130f0fc
+		sourceLineageTag: other_hrs
+		summarizeBy: sum
+		sourceColumn: other_hrs
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column total_hrs
+		dataType: double
+		lineageTag: 6b2bbfee-9275-4d70-8e95-b5940c09ddca
+		sourceLineageTag: total_hrs
+		summarizeBy: sum
+		sourceColumn: total_hrs
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column estimate_hrs
+		dataType: double
+		lineageTag: e8179d4f-2b5b-4ae4-9ed0-d29dbc2bc290
+		sourceLineageTag: estimate_hrs
+		summarizeBy: sum
+		sourceColumn: estimate_hrs
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column obsrv_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 498bd7ec-cb86-4b12-a4b3-4deccb17dc7c
+		sourceLineageTag: obsrv_date
+		summarizeBy: none
+		sourceColumn: obsrv_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column start_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 62ccf84a-0d99-4366-ba60-2dd6aebfb5fd
+		sourceLineageTag: start_date
+		summarizeBy: none
+		sourceColumn: start_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column complete_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 27177101-cd2e-46bd-bd4f-eb3a3977e118
+		sourceLineageTag: complete_date
+		summarizeBy: none
+		sourceColumn: complete_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column condition
+		dataType: string
+		lineageTag: e1644abe-9fc5-4558-88de-0b0dc503617f
+		sourceLineageTag: condition
+		summarizeBy: none
+		sourceColumn: condition
+
+		annotation SummarizationSetBy = Automatic
+
+	column condition_code
+		dataType: string
+		lineageTag: e5d7d912-7a5c-425e-b5b2-f3eb66b66c85
+		sourceLineageTag: condition_code
+		summarizeBy: none
+		sourceColumn: condition_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column entity_identity
+		dataType: string
+		lineageTag: d01e58be-872f-47db-8f31-fa144e85ac68
+		sourceLineageTag: entity_identity
+		summarizeBy: none
+		sourceColumn: entity_identity
+
+		annotation SummarizationSetBy = Automatic
+
+	column entity_descr
+		dataType: string
+		lineageTag: ca7a5e02-32f8-4f8b-b6c7-38af0202e36a
+		sourceLineageTag: entity_descr
+		summarizeBy: none
+		sourceColumn: entity_descr
+
+		annotation SummarizationSetBy = Automatic
+
+	column parent_identity
+		dataType: int64
+		formatString: 0
+		lineageTag: ae9bb8b6-9941-426c-adcd-171f59b85bfe
+		sourceLineageTag: parent_identity
+		summarizeBy: sum
+		sourceColumn: parent_identity
+
+		annotation SummarizationSetBy = Automatic
+
+	column parent_descr
+		dataType: string
+		lineageTag: 2b5bce9c-9609-4810-a19c-3cb6eb6d93a2
+		sourceLineageTag: parent_descr
+		summarizeBy: none
+		sourceColumn: parent_descr
+
+		annotation SummarizationSetBy = Automatic
+
+	column create_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 3c715a6f-a8d3-47f1-9ee8-b71f7123e220
+		sourceLineageTag: create_date
+		summarizeBy: none
+		sourceColumn: create_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column update_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 1b1e8617-91d3-4fe3-876e-6170437d44b2
+		sourceLineageTag: update_date
+		summarizeBy: none
+		sourceColumn: update_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column source_host
+		dataType: string
+		lineageTag: 76c8efce-df17-4f07-b4a2-b64e00bc9a03
+		sourceLineageTag: source_host
+		summarizeBy: none
+		sourceColumn: source_host
+
+		annotation SummarizationSetBy = Automatic
+
+	column IngestedAt
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 871a6c41-6739-42ac-9d1e-3c4b33a080a3
+		sourceLineageTag: IngestedAt
+		summarizeBy: none
+		sourceColumn: IngestedAt
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_work_requests = entity
+		mode: directLake
+		source
+			entityName: fact_work_requests
+			schemaName: gold
+			expressionSource: 'DirectLake - lh_poc'
+
