@@ -151,6 +151,8 @@ their samples stay the source of truth.
 | `Microsoft.MachineLearningServices` | Aurora Foundry workspace + GPU endpoint (optional) |
 | `Microsoft.KeyVault` | Backing key vault for the Aurora Foundry workspace (optional) |
 | `Microsoft.Insights` | Application Insights dependency for the Aurora Foundry workspace (optional) |
+| `Microsoft.Resources` | Deployment script that provisions the OneGrid Fabric plane (optional) |
+| `Microsoft.ContainerInstance` | Container the Fabric-plane deployment script runs in (optional) |
 
 Register `Microsoft.Orbital` before deploying (the portal auto-registers the others during
 validation):
@@ -167,6 +169,39 @@ Register-AzResourceProvider -ProviderNamespace Microsoft.Orbital
 
 > **Preview regions:** GeoCatalog is available in **East US, North Central US, West Europe,
 > Canada Central, UK South**, and US Gov Virginia. Deploy into one of these regions.
+
+### OneGrid Fabric plane prerequisites (optional component)
+
+The **OneGrid Fabric plane** component provisions a Microsoft Fabric workspace, lakehouse,
+eventhouse/KQL database, the `geo_point_in_polygon` hazard join, and (when a connection id is
+supplied) a OneLake shortcut to the `model-outputs` container. Fabric workspaces and items are
+**not** ARM resource types, so this runs in-template as a
+`Microsoft.Resources/deploymentScripts` resource that calls the Fabric REST API using a
+user-assigned managed identity (`pcpro-fabricplane-identity`). This is the same pattern the
+template already uses for the Entra app registration (via the Microsoft Graph Bicep extension)
+— control-plane objects ARM can't create natively.
+
+Because it crosses into the Fabric and Entra control planes, a few prerequisites **cannot be
+set by the ARM template** and must exist before you deploy this component:
+
+| # | Prerequisite | Why | Who sets it |
+| --- | --- | --- | --- |
+| 1 | Fabric tenant setting **"Service principals can create workspaces, connections, and deployment pipelines"** enabled for the `pcpro-fabricplane-identity` | The Fabric Create Workspace REST API rejects service principals / managed identities unless this tenant setting allows it | Fabric administrator (Admin portal → Tenant settings) |
+| 2 | The `pcpro-fabricplane-identity` is **Contributor or Admin on the target Fabric capacity** | Assigning a workspace to a capacity requires capacity rights | Fabric capacity admin |
+| 3 | The **principal running the deployment** has **`Managed Identity Operator`** on `pcpro-fabricplane-identity`, plus rights to create the script's helper **storage account + container instance** | The deployment-scripts service starts an ACI + storage under your identity and runs the script *as* the Fabric-plane identity | Subscription owner / whoever launches the deploy |
+| 4 | Deploy into a region where **Azure Container Instances** is available | The deployment script runs in an ACI | You (pick a supported region) |
+| 5 | (For the OneLake shortcut only) an existing **Fabric cloud connection** to the storage account, supplied as `fabricConnectionId` | Connections are not ARM-creatable; without it the plane still deploys but **skips the shortcut** | Fabric workspace admin (create the connection first) |
+
+You also need an **existing Microsoft Fabric capacity** (F-SKU or trial) and must enable
+`deploySampleStorage` — the Fabric plane shortcuts to the sample storage account's
+`model-outputs` container. Supply the capacity id (bare GUID or full
+`/subscriptions/.../capacities/<name>` resource id), workspace name, and optional connection id
+in the wizard's **Fabric plane** step.
+
+> Prerequisites #1 and #2 are the same *class* of tenant/RBAC requirement the template already
+> relies on for its Entra app registration (which needs **Application Administrator /
+> `Application.ReadWrite.All`**). No ARM template can grant itself these directory-scoped
+> permissions — the first real deployment is the validation pass.
 
 ## Deploy to Azure
 
