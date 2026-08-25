@@ -18,7 +18,7 @@
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$ZipUrl  = if ($env:ONEGRID_WIZARD_URL) { $env:ONEGRID_WIZARD_URL } else { 'https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/OneGrid-Wizard.zip' }
+$ZipUrl  = if ($env:ONEGRID_WIZARD_URL) { $env:ONEGRID_WIZARD_URL } else { 'https://github.com/paulshaheen/OneGrid/releases/latest/download/OneGrid-Wizard.zip' }
 $Home_   = if ($env:ONEGRID_HOME) { $env:ONEGRID_HOME } else { Join-Path $env:LOCALAPPDATA 'OneGrid-Wizard' }
 $Force   = ($env:ONEGRID_FORCE -eq '1')
 

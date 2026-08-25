@@ -51,7 +51,7 @@ foreach ($f in $files) {
 $note = @"
 This lightweight wizard does not bundle the 532 MB data set.
 At deploy time the wizard seeds it cloud-to-cloud from the public repo:
-  https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/onegrid-data.zip
+  https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip
 Nothing to download here - just run Start-OneGrid-Wizard.cmd.
 "@
 New-Item -ItemType Directory -Force -Path (Join-Path $stageRoot "data") | Out-Null

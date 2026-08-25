@@ -6,7 +6,7 @@
     "config": {
       "isWizard": false,
       "basics": {
-        "description": "Deploy a Microsoft Planetary Computer Pro **GeoCatalog** plus optional components: the **web app** on an Azure App Service (Linux, Node), sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, and the Microsoft Aurora weather model on a GPU Foundry endpoint. The GeoCatalog is always deployed; choose the rest. [Learn more](https://github.com/Balunywa/planetary-computer-pro-poc).",
+        "description": "Deploy a Microsoft Planetary Computer Pro **GeoCatalog** plus optional components: the **web app** on an Azure App Service (Linux, Node), sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, and the Microsoft Aurora weather model on a GPU Foundry endpoint. The GeoCatalog is always deployed; choose the rest. [Learn more](https://github.com/paulshaheen/OneGrid).",
         "location": {
           "label": "Region",
           "toolTip": "GeoCatalog is available in these regions during Preview.",

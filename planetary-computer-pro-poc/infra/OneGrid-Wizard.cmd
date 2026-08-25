@@ -11,7 +11,7 @@ rem  wizard itself.
 rem ============================================================================
 title OneGrid Deployment Wizard
 setlocal
-set "BOOT=https://raw.githubusercontent.com/paulshaheen/OGE-OneGrid/main/deploy-ui/bootstrap-online.ps1"
+set "BOOT=https://raw.githubusercontent.com/paulshaheen/OneGrid/main/planetary-computer-pro-poc/infra/deploy-ui/bootstrap-online.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;$p=Join-Path $env:TEMP 'onegrid-bootstrap-online.ps1';try{Invoke-WebRequest -UseBasicParsing '%BOOT%' -OutFile $p}catch{Write-Host ('Could not reach GitHub: '+$_.Exception.Message) -ForegroundColor Red;Read-Host 'Press Enter to close';exit 1};& $p"
 if errorlevel 1 (
   echo.

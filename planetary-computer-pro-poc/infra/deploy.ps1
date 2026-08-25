@@ -444,7 +444,7 @@ function Phase-Data {
   $ws = $state.WorkspaceId; $lh = $state.LakehouseId
   $dataRoot = Join-Path $Here "data\lakehouse"
   $hasLocalData = Test-Path $dataRoot
-  $bundleUrl = if ($cfg.data -and $cfg.data.bundleUrl) { $cfg.data.bundleUrl } else { "https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/onegrid-data.zip" }
+  $bundleUrl = if ($cfg.data -and $cfg.data.bundleUrl) { $cfg.data.bundleUrl } else { "https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip" }
 
   if (-not $hasLocalData) {
     # -------- lightweight wizard: seed OneLake straight from the public repo (cloud-to-cloud) --------

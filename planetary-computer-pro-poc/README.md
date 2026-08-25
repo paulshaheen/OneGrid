@@ -209,9 +209,9 @@ Click the button, sign in to the Azure portal, choose your components (GeoCatalo
 deployed; add the web app and/or sample storage), pick the App Service plan SKU, and select
 **Review + create**.
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FBalunywa%2Fplanetary-computer-pro-poc%2Fmain%2Fdeploy%2Fazure%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2FBalunywa%2Fplanetary-computer-pro-poc%2Fmain%2Fdeploy%2Fazure%2FcreateUiDefinition.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2FcreateUiDefinition.json)
 
-[Visualize](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2FBalunywa%2Fplanetary-computer-pro-poc%2Fmain%2Fdeploy%2Fazure%2Fazuredeploy.json)
+[Visualize](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2Fazuredeploy.json)
 
 > The GeoCatalog is the long pole; a typical deployment completes in about **10–20 minutes**
 > (the deployment status may show "Created" before the GeoCatalog is fully ready). The App

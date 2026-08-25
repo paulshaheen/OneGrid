@@ -7,8 +7,8 @@
  notebooks/pipeline/semantic model/report), the AI Foundry account, and the
  chat/web-app Container App are NOT ARM resource types. Instead of re-porting that
  logic, this script stands them up by running OneGrid's own battle-tested
- orchestrator (OGE-OneGrid/deploy.ps1) headless, under the deployment's
- user-assigned managed identity, wired to the PCP backend this template just built.
+ orchestrator (planetary-computer-pro-poc/infra/deploy.ps1) headless, under the
+ deployment's user-assigned managed identity, wired to the PCP backend this template built.
 
  It:
    1. installs the toolchain the orchestrator needs (git + az CLI) if missing;
@@ -61,14 +61,23 @@ if ($env:IDENTITY_CLIENT_ID) {
 if ($env:SUBSCRIPTION_ID) { & az account set --subscription $env:SUBSCRIPTION_ID --only-show-errors 2>$null | Out-Null }
 
 # --- 3. Clone the OneGrid orchestrator + accelerator content ----------------------
-$repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OGE-OneGrid.git' }
+$repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OneGrid.git' }
 $ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }
 $work = Join-Path ([IO.Path]::GetTempPath()) 'onegrid'
 if (Test-Path $work) { Remove-Item $work -Recurse -Force }
 Log "cloning $repo ($ref)..."
 $env:GIT_LFS_SKIP_SMUDGE = '1'   # data is cloud-seeded from the release bundle, not LFS
 & git clone --depth 1 --branch $ref $repo $work
-if (-not (Test-Path (Join-Path $work 'deploy.ps1'))) { throw "clone did not produce deploy.ps1 at $work" }
+
+# Locate the orchestrator. The OneGrid monorepo keeps it at
+# planetary-computer-pro-poc/infra/deploy.ps1; a flat/standalone repo keeps it at root.
+$deployScript = @(
+  (Join-Path $work 'planetary-computer-pro-poc/infra/deploy.ps1'),
+  (Join-Path $work 'deploy.ps1')
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $deployScript) { throw "clone did not produce deploy.ps1 (looked for planetary-computer-pro-poc/infra/deploy.ps1 and ./deploy.ps1) under $work" }
+$deployDir = Split-Path -Parent $deployScript
+Log "orchestrator: $deployScript"
 
 # --- 4. Compose config.json from ARM params + PCP outputs -------------------------
 $rg = $env:TARGET_RESOURCE_GROUP
@@ -85,7 +94,7 @@ $cfg = [ordered]@{
     factWindowDays  = 30
     siteCount       = 8
   }
-  data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/onegrid-data.zip' }
+  data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip' }
   telemetry  = [ordered]@{ enabled = $false }
   reuseExistingFoundry = $reuseFoundry
   pcp = [ordered]@{
@@ -114,19 +123,19 @@ $cfg = [ordered]@{
   }
   governance = [ordered]@{ enabled = $false }
 }
-$cfgPath = Join-Path $work 'config.json'
+$cfgPath = Join-Path $deployDir 'config.json'
 [IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
 Log "config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName))"
 
 # --- 5. Run the orchestrator for the selected phases ------------------------------
 $phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 Log "running deploy.ps1 -Only $($phases -join ',')"
-Push-Location $work
+Push-Location $deployDir
 try {
   if ($phases.Count -gt 0) {
-    & pwsh -NoProfile -File ./deploy.ps1 -ConfigPath ./config.json -Only $phases
+    & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath -Only $phases
   } else {
-    & pwsh -NoProfile -File ./deploy.ps1 -ConfigPath ./config.json
+    & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath
   }
   $deployExit = $LASTEXITCODE
 } finally { Pop-Location }
@@ -134,7 +143,7 @@ Log "deploy.ps1 exit=$deployExit"
 
 # --- 6. Surface the resulting ids as deployment outputs ---------------------------
 $state = @{}
-$statePath = Join-Path $work 'last-deploy-state.json'
+$statePath = Join-Path $deployDir 'last-deploy-state.json'
 if (Test-Path $statePath) {
   try { $state = Get-Content $statePath -Raw | ConvertFrom-Json } catch {}
 }

@@ -18,7 +18,7 @@
 
   "//data": "OPTIONAL. Where the lightweight wizard seeds the demo data from when no local data/ bundle is present. Pulled cloud-to-cloud into OneLake. Defaults to the public release asset below.",
   "data": {
-    "bundleUrl": "https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/onegrid-data.zip"
+    "bundleUrl": "https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip"
   },
 
   "//telemetry": "OPTIONAL. On deploy, the wizard reports a one-time install event (tenant, signed-in user, subscription, region, workspace name, wizard version, outcome) to Microsoft OGE's Application Insights so the team can see adoption. DEFAULT ON. Set enabled=false to opt out (or uncheck the box in the wizard, or set env ONEGRID_TELEMETRY=0). Set connectionString to send to your own App Insights instead.",

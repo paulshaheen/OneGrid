@@ -14,7 +14,7 @@ and **Azure AI Foundry**. The **accelerator** — the thing you clone and deploy
 
 ## ⚡ Quick start — no terminal, just double-click (Windows)
 
-1. **Download one file:** **[`OneGrid-Wizard.cmd`](https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/OneGrid-Wizard.cmd)**.
+1. **Download one file:** **[`OneGrid-Wizard.cmd`](https://github.com/paulshaheen/OneGrid/releases/latest/download/OneGrid-Wizard.cmd)**.
 2. **Double-click it.** It downloads the wizard, installs Node.js + the Azure CLI for you if they're missing (a Windows approval prompt may appear), opens your browser, and starts the wizard at `http://localhost:7333`.
 3. In the wizard: **Sign in to Azure** (a button) → choose targets → prerequisite checks → **Deploy**.
 
@@ -35,8 +35,8 @@ Node.js and the Azure CLI are installed for you. No local Docker — the app ima
 # Full clone includes the local data/ bundle (Git LFS), so deploy uploads it
 # directly instead of cloud-seeding.
 git lfs install
-git clone https://github.com/paulshaheen/OGE-OneGrid.git
-cd OGE-OneGrid
+git clone https://github.com/paulshaheen/OneGrid.git
+cd OneGrid/planetary-computer-pro-poc/infra
 az login
 node deploy-ui/server.js          # or:  ./deploy-ui/launch.ps1
 #    → http://localhost:7333

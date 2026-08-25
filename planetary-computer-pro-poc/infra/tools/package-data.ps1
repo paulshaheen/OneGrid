@@ -58,4 +58,4 @@ Write-Host "Built $zip ($mb MB)" -ForegroundColor Green
 Write-Host "Publish it as a Release asset, e.g.:" -ForegroundColor Gray
 Write-Host "  gh release create data-v1 `"$zip`" --title `"OneGrid data bundle`" --notes `"Scrubbed synthetic demo data`"" -ForegroundColor Gray
 Write-Host "  # or attach to an existing release:  gh release upload <tag> `"$zip`" --clobber" -ForegroundColor Gray
-Write-Host "The wizard defaults to: https://github.com/paulshaheen/OGE-OneGrid/releases/latest/download/onegrid-data.zip" -ForegroundColor Gray
+Write-Host "The wizard defaults to: https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip" -ForegroundColor Gray

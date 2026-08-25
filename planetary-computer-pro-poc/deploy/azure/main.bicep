@@ -118,8 +118,8 @@ param deployOneGridApp bool = false
 @description('Seed the full OneGrid historical demo dataset into the lakehouse/eventhouse (cloud-seeded from the public release bundle, ~hundreds of MB). Off by default to keep the deployment fast; enable for a fully populated demo.')
 param deployOneGridData bool = false
 
-@description('Git repository the in-template provisioner clones OneGrid deploy.ps1 + accelerator content from.')
-param oneGridRepoUrl string = 'https://github.com/paulshaheen/OGE-OneGrid.git'
+@description('Git repository the in-template provisioner clones OneGrid deploy.ps1 + accelerator content from. The OneGrid monorepo keeps the orchestrator at planetary-computer-pro-poc/infra/deploy.ps1.')
+param oneGridRepoUrl string = 'https://github.com/paulshaheen/OneGrid.git'
 
 @description('Git ref (branch/tag/commit) of the OneGrid repository to deploy.')
 param oneGridRef string = 'main'
