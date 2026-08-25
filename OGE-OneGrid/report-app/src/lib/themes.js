@@ -48,6 +48,7 @@ export const PERSONAS = [
   { id: 'controlroom', name: 'Control-Room', tagline: 'Live mission-control operations' },
   { id: 'maintenance', name: 'Maintenance', tagline: 'Critical issues & work orders' },
   { id: 'ontology', name: 'Ontology', tagline: 'Knowledge graph of the data model' },
+  { id: 'explorer', name: 'Explorer', tagline: 'Weather & asset-risk operations' },
 ];
 
 // Back-compat: some code still imports THEMES keyed by persona id.

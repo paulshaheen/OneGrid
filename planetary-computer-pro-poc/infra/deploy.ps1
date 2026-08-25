@@ -947,8 +947,23 @@ function Phase-ChatAgent {
   Copy-Item (Join-Path $appSrc 'chatagent')  $stage -Recurse -Force
   Remove-Item (Join-Path $stage 'report-app\node_modules') -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item (Join-Path $stage 'report-app\dist')         -Recurse -Force -ErrorAction SilentlyContinue
+  # The Planetary-Compute-Pro web app (the "Explorer" tab) ships in the SAME package as a
+  # sibling of report-app; the report server reverse-proxies /webapp to its SSR child. Only
+  # stage it when present (standalone clone or monorepo). Built by Oryx under base /webapp.
+  $hasWebapp = Test-Path (Join-Path $appSrc 'webapp')
+  if ($hasWebapp) {
+    Copy-Item (Join-Path $appSrc 'webapp') $stage -Recurse -Force
+    Remove-Item (Join-Path $stage 'webapp\node_modules') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $stage 'webapp\dist')         -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $stage 'webapp\dist-sample')  -Recurse -Force -ErrorAction SilentlyContinue
+  } else {
+    Log "  note: webapp/ not found next to report-app - the Explorer tab will 503 until it is deployed" "Yellow"
+  }
   Get-ChildItem (Join-Path $Here 'governance-manifest*.json') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName $stage -Force }
-  $rootPkg = '{"name":"onegrid-web","version":"1.0.0","private":true,"scripts":{"build":"cd report-app && npm install --include=dev && npm run build","start":"node report-app/server/index.js"}}'
+  # Root package.json drives the Oryx build + start command. When the webapp is present we
+  # also install + build it with base /webapp (its assets/routes must carry that prefix).
+  $webappBuild = if ($hasWebapp) { ' && cd ../webapp && npm install --include=dev && APP_BASE_PATH=/webapp npm run build' } else { '' }
+  $rootPkg = '{"name":"onegrid-web","version":"1.0.0","private":true,"scripts":{"build":"cd report-app && npm install --include=dev && npm run build' + $webappBuild + '","start":"node report-app/server/index.js"}}'
   [IO.File]::WriteAllText((Join-Path $stage 'package.json'), $rootPkg, (New-Object System.Text.UTF8Encoding($false)))
   $zip = "$stage.zip"
   if (Test-Path $zip) { Remove-Item $zip -Force }

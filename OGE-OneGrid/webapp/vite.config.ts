@@ -5,6 +5,10 @@ import tailwindcss from "@tailwindcss/vite";
 import tsConfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
+  // When embedded as the OneGrid "Explorer" tab the app is reverse-proxied under
+  // /webapp, so asset URLs + the router must carry that prefix. Standalone builds
+  // leave APP_BASE_PATH unset and serve from root.
+  base: process.env.APP_BASE_PATH || "/",
   plugins: [
     tsConfigPaths(),
     tailwindcss(),

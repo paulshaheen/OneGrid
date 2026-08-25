@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { attachRealtime } from './realtime.js';
 import { resolveTarget } from './target.js';
 import { proxyChat, proxyModels, warmAgent } from './chat.js';
+import { proxyWebapp, warmWebapp } from './webapp.js';
 import { isCapacityPausedError } from './fabric.js';
 import * as api from './dataApi.js';
 import * as gov from './governance.js';
@@ -124,6 +125,9 @@ function serveStatic(req, res, url) {
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const url = new URL(req.url, `http://localhost:${PORT}`);
+  // Embedded Planetary-Compute-Pro web app (the "Explorer" tab) — reverse-proxy
+  // everything under /webapp to its SSR child process, streaming both ways.
+  if (url.pathname === '/webapp' || url.pathname.startsWith('/webapp/')) return proxyWebapp(req, res);
   // Chat agent proxy (streamed SSE) — collect body then forward.
   if (url.pathname === '/api/chat' && req.method === 'POST') {
     const chunks = [];
@@ -158,6 +162,7 @@ const server = http.createServer((req, res) => {
 
 attachRealtime(server);
 warmAgent();
+warmWebapp();
 server.listen(PORT, () => {
   const t = resolveTarget();
   console.log(`\n  Report backend on http://localhost:${PORT}`);

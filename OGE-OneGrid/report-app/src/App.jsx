@@ -9,11 +9,12 @@ import Executive from './personas/Executive.jsx';
 const ControlRoom = lazy(() => import('./personas/ControlRoom.jsx'));
 const Maintenance = lazy(() => import('./personas/Maintenance.jsx'));
 const Ontology = lazy(() => import('./personas/Ontology.jsx'));
+const Explorer = lazy(() => import('./personas/Explorer.jsx'));
 import Governance, { ShieldIcon } from './personas/Governance.jsx';
 import ChatPanel from './components/ChatPanel.jsx';
 import { Tour, TOUR_STEPS } from './components/Tour.jsx';
 
-const PAGES = { executive: Executive, controlroom: ControlRoom, maintenance: Maintenance, ontology: Ontology };
+const PAGES = { executive: Executive, controlroom: ControlRoom, maintenance: Maintenance, ontology: Ontology, explorer: Explorer };
 
 // Guards a view so a render error inside one page can never blank the whole app.
 class ViewErrorBoundary extends Component {

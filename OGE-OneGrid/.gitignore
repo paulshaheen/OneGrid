@@ -28,3 +28,7 @@ _gen-*.py
 bin/
 obj/
 *.user
+
+# Webapp (Explorer) build output
+webapp/dist/
+webapp/dist-sample/
