@@ -52,7 +52,11 @@ param(
   [string[]] $Only,
   [string] $PcpDir     = "$PSScriptRoot/planetary-computer-pro-poc/deploy/azure",
   [string] $OneGridDir = "$PSScriptRoot/OGE-OneGrid",
-  [string] $ConfigPath = "$PSScriptRoot/OGE-OneGrid/config.json"
+  # The OneGrid orchestrator (deploy.ps1) + its config.sample.json now live under
+  # planetary-computer-pro-poc/infra after the infra/app split. The app source
+  # (report-app + webapp + chatagent) is auto-detected by deploy.ps1 at ../../OGE-OneGrid.
+  [string] $InfraDir   = "$PSScriptRoot/planetary-computer-pro-poc/infra",
+  [string] $ConfigPath = "$PSScriptRoot/planetary-computer-pro-poc/infra/config.json"
 )
 $ErrorActionPreference = 'Stop'
 function Step($m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
@@ -104,7 +108,7 @@ if (-not $fpc.pcp.connectionId) {
 # 3) Merge into OneGrid config.json (start from existing config.json or the sample).
 # ---------------------------------------------------------------------------------
 Step "Writing OneGrid config ($ConfigPath)"
-$seed = if (Test-Path $ConfigPath) { $ConfigPath } else { Join-Path $OneGridDir 'config.sample.json' }
+$seed = if (Test-Path $ConfigPath) { $ConfigPath } else { Join-Path $InfraDir 'config.sample.json' }
 $cfg = Get-Content $seed -Raw | ConvertFrom-Json
 
 $cfg.location = $Location
@@ -121,7 +125,7 @@ Write-Host "  config written." -ForegroundColor Green
 # 4) Run the OneGrid Fabric-plane deploy (Fabric REST). Single progress trail.
 # ---------------------------------------------------------------------------------
 Step "Provisioning OneGrid Fabric plane"
-$deploy = Join-Path $OneGridDir 'deploy.ps1'
+$deploy = Join-Path $InfraDir 'deploy.ps1'
 $deployArgs = @{ ConfigPath = $ConfigPath }
 if ($Only) { $deployArgs.Only = $Only }
 & $deploy @deployArgs
