@@ -884,11 +884,9 @@ Guidance:
 
 # ============================ PHASE: chat agent ==============================
 function Phase-ChatAgent {
-  Log "PHASE chatagent: container app"
+  Log "PHASE chatagent: App Service web app"
   $rg = $cfg.chatAgent.resourceGroup
   az group create -n $rg -l $cfg.location --tags "onegrid-deploy=1" "onegrid-workspace=$($state.WorkspaceId)" -o none
-  if (-not (AzTry { az extension show -n containerapp --query name -o tsv })) { az extension add -n containerapp --only-show-errors 1>$null }
-  az provider register -n Microsoft.App --wait 1>$null 2>$null
 
   $sub = $cfg.subscriptionId
   $models = ($cfg.foundry.models | ForEach-Object { "$($_.deployment)~$($_.deployment)~$($_.format)" }) -join ", "
@@ -923,83 +921,65 @@ function Phase-ChatAgent {
     else { Log "  note: no published data agent found - 'Ask Fabric Data Agent' stays hidden until the 'dataagent' phase runs" "Yellow" }
   }
 
-  # ---- Build the FULL dashboard image via ACR, then create the app from that image.
-  # We deliberately do NOT use 'az containerapp up --source': its build-log stream prints a
-  # Unicode success glyph (U+2713) that crashes the az CLI on Windows (cp1252 stdout),
-  # making the deploy think the app failed and burn ~15 min per fallback region. Instead we
-  # run 'az acr build' in a BACKGROUND JOB (so a client-side crash/hang can't block us) and
-  # poll the ACR run status, then create the container app from the built --image.
+  # ---- Deploy the FULL dashboard as an Azure App Service web app (Linux, Node) - no
+  # container, no ACR. We stage report-app + chatagent + the governance manifest(s) and let
+  # App Service (Oryx) build the SPA on deploy. The report server then serves the built SPA +
+  # /api + the realtime WebSocket and spawns the chat agent (../chatagent) exactly like local.
+  az provider register -n Microsoft.Web --wait 1>$null 2>$null
   $app = $cfg.chatAgent.appName
-  $acrName = 'acrpm' + [guid]::NewGuid().ToString('N').Substring(0,12)
-  $tag = 'v' + (Get-Date -f 'yyyyMMddHHmmss')
-  $imageRef = "$acrName.azurecr.io/$app`:$tag"
-  Log "  creating registry '$acrName' + building dashboard image (several minutes)..."
-  az acr create -n $acrName -g $rg -l $cfg.location --sku Basic --admin-enabled true -o none 2>$null
-  $buildLog = Join-Path $env:TEMP "pm_acrbuild_$tag.log"
-  $bjob = Start-Job -ScriptBlock {
-    param($acr,$app,$tag,$here,$log)
-    $env:PYTHONUTF8='1'; $env:PYTHONIOENCODING='utf-8'
-    az acr build --registry $acr --image ($app + ':' + $tag) --file (Join-Path $here 'Dockerfile') $here *> $log 2>&1
-  } -ArgumentList $acrName,$app,$tag,$Here,$buildLog
-  $built = $false
-  for ($i=0; $i -lt 75; $i++) {
-    Start-Sleep -Seconds 20
-    $st = AzTry { az acr task list-runs --registry $acrName --top 1 --query "[0].status" -o tsv }
-    if ($st -eq 'Succeeded') { $built = $true; break }
-    if ($st -in @('Failed','Canceled','Error','Timeout')) { Log "  ACR build $st (log: $buildLog)" "Red"; break }
-    if ($i % 3 -eq 0) { Log "  ...building image ($([int]($i*20))s elapsed, status=$([string]$st))" }
-  }
-  Stop-Job $bjob -ErrorAction SilentlyContinue; Remove-Job $bjob -Force -ErrorAction SilentlyContinue
-  if (-not $built) {
+
+  # Locate the app source (report-app + chatagent). Standalone OGE-OneGrid clone => siblings
+  # of this script ($Here); monorepo layout => ../../OGE-OneGrid alongside the infra folder.
+  $appSrc = if (Test-Path (Join-Path $Here 'report-app')) { $Here }
+            elseif (Test-Path (Join-Path $Here '..\..\OGE-OneGrid\report-app')) { (Resolve-Path (Join-Path $Here '..\..\OGE-OneGrid')).Path }
+            else { $null }
+  if (-not $appSrc) {
     $state.ChatAgentFailed = $true
-    Log "  dashboard image did not build - chat agent NOT deployed. Re-run: deploy.ps1 -Only chatagent,permissions" "Red"
+    Log "  app source (report-app + chatagent) not found near '$Here' - chat agent NOT deployed." "Red"
     return
   }
-  Log "  dashboard image built: $imageRef" "Green"
-  $acrUser = AzTry { az acr credential show -n $acrName --query username -o tsv }
-  $acrPass = AzTry { az acr credential show -n $acrName --query "passwords[0].value" -o tsv }
 
-  # ---- Create the managed environment + container app from the built image (no build
-  # stream). Retry across regions if a managed environment fails to provision in one.
+  # Stage a clean deployable tree: report-app + chatagent + governance manifest(s) at the web
+  # root, plus a tiny root package.json that drives the Oryx build and the start command.
+  $stage = Join-Path $env:TEMP ("pm_webapp_" + [guid]::NewGuid().ToString('N').Substring(0,8))
+  New-Item -ItemType Directory -Force $stage | Out-Null
+  Copy-Item (Join-Path $appSrc 'report-app') $stage -Recurse -Force
+  Copy-Item (Join-Path $appSrc 'chatagent')  $stage -Recurse -Force
+  Remove-Item (Join-Path $stage 'report-app\node_modules') -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $stage 'report-app\dist')         -Recurse -Force -ErrorAction SilentlyContinue
+  Get-ChildItem (Join-Path $Here 'governance-manifest*.json') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName $stage -Force }
+  $rootPkg = '{"name":"onegrid-web","version":"1.0.0","private":true,"scripts":{"build":"cd report-app && npm install --include=dev && npm run build","start":"node report-app/server/index.js"}}'
+  [IO.File]::WriteAllText((Join-Path $stage 'package.json'), $rootPkg, (New-Object System.Text.UTF8Encoding($false)))
+  $zip = "$stage.zip"
+  if (Test-Path $zip) { Remove-Item $zip -Force }
+  Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+
+  # App settings = the chat/report env vars + the Oryx build flag. The server binds
+  # REPORT_PORT (default 7700); App Service Linux/Node routes to 8080, so pin REPORT_PORT=8080.
+  $settings = @($envVars) + @('REPORT_PORT=8080','WEBSITES_PORT=8080','SCM_DO_BUILD_DURING_DEPLOYMENT=true','WEBSITE_NODE_DEFAULT_VERSION=~20')
+
+  # Create the plan + web app, with a small region fallback if a region is out of capacity.
   $regions = @($cfg.location)
   if ($cfg.chatAgent.fallbackLocations) { $regions += $cfg.chatAgent.fallbackLocations }
   else { $regions += @('eastus','westus3','centralus','westeurope') | Where-Object { $_ -ne $cfg.location } }
   $regions = $regions | Select-Object -Unique
-  $appOk = $false
+  $appOk = $false; $fqdn = $null
   foreach ($loc in $regions) {
-    # Region-unique env name so a FAILED env in one region can't block a retry in another.
-    $envName = "$($cfg.chatAgent.environmentName)-$loc"
-    $envState = AzTry { az containerapp env show -n $envName -g $rg --query properties.provisioningState -o tsv }
-    if ($envState -eq 'Failed') { Log "  removing failed environment '$envName'..."; az containerapp env delete -n $envName -g $rg --yes 2>&1 | Out-Null; $envState = $null }
-    if (-not $envState) {
-      Log "  creating container app environment '$envName' in $loc ..."
-      az containerapp env create -n $envName -g $rg -l $loc -o none 2>&1 | Out-Null
-    }
-    $envReady = $false
-    for ($j=0; $j -lt 36; $j++) {
-      $es = AzTry { az containerapp env show -n $envName -g $rg --query properties.provisioningState -o tsv }
-      if ($es -eq 'Succeeded') { $envReady = $true; break }
-      if ($es -eq 'Failed') { break }
-      Start-Sleep -Seconds 10
-    }
-    if (-not $envReady) { Log "  env not ready in $loc - trying next region" "Yellow"; continue }
-    Log "  creating container app '$app' in $loc ..."
-    $createOut = az containerapp create -n $app -g $rg --environment $envName `
-      --image $imageRef --registry-server "$acrName.azurecr.io" --registry-username $acrUser --registry-password $acrPass `
-      --target-port 8080 --ingress external --min-replicas 1 --max-replicas 1 --cpu 1 --memory 2Gi `
-      --env-vars @envVars -o none 2>&1
-    # Poll briefly for the ingress FQDN (populates within seconds of a successful create).
-    $fqdn = $null
-    for ($k=0; $k -lt 12; $k++) {
-      $fqdn = AzTry { az containerapp show -n $app -g $rg --query properties.configuration.ingress.fqdn -o tsv }
-      if ($fqdn) { break }
-      if ((AzTry { az containerapp show -n $app -g $rg --query properties.provisioningState -o tsv }) -eq 'Failed') { break }
-      Start-Sleep -Seconds 5
-    }
-    if ($fqdn) { $appOk = $true; $state.ChatAgentLocation = $loc; $state.ChatAgentEnv = $envName; break }
-    $ce = ("$createOut" -split "`n" | Where-Object { $_ -match 'ERROR|not recognized|Bad Request|denied|Quota' } | Select-Object -First 1)
-    Log "  container app not up in $loc$(if($ce){" - $($ce.Trim())"}) - trying next region" "Yellow"
+    $plan = "$app-plan"
+    Log "  creating App Service plan + web app '$app' in $loc ..."
+    az appservice plan create -n $plan -g $rg -l $loc --is-linux --sku B1 -o none 2>$null
+    az webapp create -n $app -g $rg --plan $plan --runtime 'NODE:20-lts' -o none 2>&1 | Out-Null
+    if (-not (AzTry { az webapp show -n $app -g $rg --query name -o tsv })) { Log "  web app not created in $loc - trying next region" "Yellow"; continue }
+    az webapp config appsettings set -n $app -g $rg --settings @settings -o none 2>$null
+    az webapp config set -n $app -g $rg --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
+    Log "  deploying app (App Service builds the SPA - several minutes)..."
+    az webapp deploy -n $app -g $rg --src-path $zip --type zip -o none 2>&1 | Out-Null
+    $fqdn = AzTry { az webapp show -n $app -g $rg --query defaultHostName -o tsv }
+    if ($fqdn) { $appOk = $true; $state.ChatAgentLocation = $loc; break }
+    Log "  web app not up in $loc - trying next region" "Yellow"
   }
+  Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item $zip -Force -ErrorAction SilentlyContinue
   if (-not $appOk) {
     $state.ChatAgentFailed = $true
     Log "  chat agent FAILED to provision in all attempted regions ($($regions -join ', ')). Re-run: deploy.ps1 -Only chatagent,permissions" "Red"
@@ -1007,7 +987,7 @@ function Phase-ChatAgent {
   }
 
   # Managed identity + Foundry role grants
-  $appId = AzTry { az containerapp identity assign -n $cfg.chatAgent.appName -g $rg --system-assigned --query principalId -o tsv }
+  $appId = AzTry { az webapp identity assign -n $cfg.chatAgent.appName -g $rg --query principalId -o tsv }
   # When reusing PCP's Azure OpenAI, grant on THAT account (id from config) rather than a
   # locally-created Foundry account.
   $scope = if ($state.FoundryReused -and $cfg.pcp.openAiAccountId) { $cfg.pcp.openAiAccountId }
@@ -1030,11 +1010,11 @@ function Phase-ChatAgent {
 function Phase-Permissions {
   Log "PHASE permissions: Eventhouse + Power BI grants for the app identity"
   if ($state.ChatAgentFailed -or -not $state.AppPrincipalId) {
-    $probe = AzTry { az containerapp identity show -n $cfg.chatAgent.appName -g $cfg.chatAgent.resourceGroup --query principalId -o tsv }
+    $probe = AzTry { az webapp identity show -n $cfg.chatAgent.appName -g $cfg.chatAgent.resourceGroup --query principalId -o tsv }
     if (-not $probe) { Log "  skipping grants - chat agent identity not available (chat agent did not provision). Re-run: deploy.ps1 -Only chatagent,permissions" "Yellow"; return }
   }
   $appId = $state.AppPrincipalId
-  if (-not $appId) { $appId = AzTry { az containerapp identity show -n $cfg.chatAgent.appName -g $cfg.chatAgent.resourceGroup --query principalId -o tsv } }
+  if (-not $appId) { $appId = AzTry { az webapp identity show -n $cfg.chatAgent.appName -g $cfg.chatAgent.resourceGroup --query principalId -o tsv } }
   $tenant = AzTry { az account show --query tenantId -o tsv }
   $appClientId = AzTry { az ad sp show --id $appId --query appId -o tsv }
 
@@ -1196,13 +1176,13 @@ function Phase-Teardown {
 
   # Discover the chat-agent app name(s) BEFORE deleting the resource groups, so we can also
   # remove the matching refresh service principal even in a picker-driven teardown that has no
-  # config.json (the placeholder $cfg has an empty chatAgent). The container-app name IS
+  # config.json (the placeholder $cfg has an empty chatAgent). The web-app name IS
   # chatAgent.appName, and its refresh SP is '<appName>-refresh-sp'. Captured now because the
-  # RG delete below is async and the container apps may be gone by the SP-cleanup step.
+  # RG delete below is async and the web apps may be gone by the SP-cleanup step.
   $appNames = @()
   if ($cfg.chatAgent.appName) { $appNames += $cfg.chatAgent.appName }
   foreach ($rg in $rgs) {
-    $found = AzTry { az containerapp list -g $rg --query "[].name" -o tsv }
+    $found = AzTry { az webapp list -g $rg --query "[].name" -o tsv }
     if ($found) { $appNames += ($found -split '\r?\n' | Where-Object { $_ }) }
   }
   $appNames = $appNames | Where-Object { $_ } | Select-Object -Unique
