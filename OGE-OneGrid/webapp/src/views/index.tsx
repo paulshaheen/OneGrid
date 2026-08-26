@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ArrowRight, Filter, Sparkles, TrendingUp, X } from "lucide-react";
+import { ArrowRight, Boxes, Filter, Sparkles, TrendingUp, X } from "lucide-react";
 
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { AppShell } from "@/components/ops/AppShell";
@@ -198,6 +198,35 @@ export function OverviewPage() {
               value={metrics.firstImpactHours === null ? "—" : `${metrics.firstImpactHours} h`}
               sub="Earliest asset onset"
             />
+          </div>
+        </div>
+
+        {/* Digital Twin · fleet health — blends the report-app Executive view */}
+        <div className="shrink-0 border-b bg-surface px-4 py-3">
+          <div className="mb-2 flex items-center gap-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            <Boxes className="size-3.5 text-primary" /> Digital Twin · fleet health
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-md border bg-card px-4 py-3">
+              <div className="label-xs">Fleet health</div>
+              <div className="num text-2xl leading-none font-semibold">92%</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">+0.4% vs yesterday</div>
+            </div>
+            <div className="rounded-md border bg-card px-4 py-3">
+              <div className="label-xs">Assets streaming</div>
+              <div className="num text-2xl leading-none font-semibold">48</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">live historian</div>
+            </div>
+            <div className="rounded-md border bg-card px-4 py-3">
+              <div className="label-xs">Open anomalies</div>
+              <div className="num text-2xl leading-none font-semibold text-risk-high">2</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">Compressor B · Boiler 3</div>
+            </div>
+            <div className="rounded-md border bg-card px-4 py-3">
+              <div className="label-xs">Predicted trips · 14d</div>
+              <div className="num text-2xl leading-none font-semibold">3</div>
+              <div className="mt-1 text-[11px] text-muted-foreground">survival model</div>
+            </div>
           </div>
         </div>
 
