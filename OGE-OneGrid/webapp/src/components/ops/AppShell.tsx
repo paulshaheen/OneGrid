@@ -68,7 +68,7 @@ const NAV: Entry[] = [
       { to: "/posture", label: "Response Posture", icon: ShieldAlert },
     ],
   },
-  { kind: "item", to: "/ontology", label: "Ontology", icon: Network, soon: true },
+  { kind: "item", to: "/ontology", label: "Ontology", icon: Network },
 ];
 
 const ADMIN: Group = {
@@ -78,7 +78,7 @@ const ADMIN: Group = {
   icon: Settings,
   children: [
     { to: "/thresholds", label: "Thresholds", icon: SlidersHorizontal },
-    { label: "Governance & Security", icon: ShieldCheck, soon: true },
+    { to: "/governance", label: "Governance & Security", icon: ShieldCheck },
     { to: "/deployment", label: "Deployment", icon: ServerCog },
   ],
 };
