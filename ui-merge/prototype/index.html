@@ -316,20 +316,17 @@ const IC_OVERVIEW='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const IC_ONTOLOGY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9.5 5h5M6.5 8 11 14.5M17.5 8 13 14.5" stroke-linecap="round"/><rect x="2.5" y="2.5" width="7" height="5" rx="1.2"/><rect x="14.5" y="2.5" width="7" height="5" rx="1.2"/><rect x="8.5" y="15" width="7" height="5.5" rx="1.2"/></svg>';
 const PILLARS = [
   { id:'overview',  label:'Overview',        icon:IC_OVERVIEW, single:true, bold:true, areas:[ {id:'overview', label:'Overview', icon:IC_OVERVIEW} ] },
-  { id:'weather',   label:'Weather',         icon:'≈', src:'B', ov:'weatherOv', areas:[
-      {id:'map',      label:'Live Map',        icon:'◉'},
-      {id:'forecast', label:'Forecast',        icon:'⌁'},                    // Events + Timeline
-      {id:'exposure', label:'Storm Exposure',  icon:'△', alerts:3},          // weather-driven exposure (was "Asset Risk")
-      {id:'posture',  label:'Response Posture', icon:'⛨'},
-  ]},
+  { id:'assetexplorer', label:'Asset Explorer', icon:'▤', single:true, src:'A + B', areas:[ {id:'assetrisk', label:'Asset Explorer', icon:'▤'} ] },
   { id:'twin',      label:'Digital Twin',    icon:'◧', src:'A', ov:'twinOv', areas:[
       {id:'controlroom', label:'Control Room', icon:'◧'},
       {id:'simulation',  label:'Simulation',   icon:'⚗'},                    // alembic (real build: lucide FlaskConical)
       {id:'maintenance', label:'Maintenance',  icon:'✚', alerts:2},
   ]},
-  { id:'assets',    label:'Assets',          icon:'▤', src:'A + B', ov:'assetrisk', areas:[
-      {id:'assetrisk', label:'Asset Explorer', icon:'▲'},                    // unified: weather exposure + reliability
-      {id:'assets',    label:'Registry',   icon:'▤'},
+  { id:'weather',   label:'Weather',         icon:'≈', src:'B', ov:'weatherOv', areas:[
+      {id:'map',      label:'Live Map',        icon:'◉'},
+      {id:'forecast', label:'Forecast',        icon:'⌁'},                    // Events + Timeline
+      {id:'exposure', label:'Storm Exposure',  icon:'△', alerts:3},          // weather-driven exposure (feeds Asset Explorer)
+      {id:'posture',  label:'Response Posture', icon:'⛨'},
   ]},
   { id:'ontology',  label:'Ontology',        icon:IC_ONTOLOGY, single:true, src:'A', areas:[ {id:'ontology', label:'Graph', icon:IC_ONTOLOGY} ] },
 ];
@@ -447,8 +444,8 @@ V.maintenance=()=>head('Maintenance','Work orders driven by the twin + survival 
   <div class="pad card"><table><thead><tr><th>Asset</th><th>Signal</th><th>Due</th><th>Sev</th></tr></thead><tbody>
     ${['Compressor B|bearing wear|26h|high','Boiler 3|survival flag|4d|high','Pump 12|drift|9d|mon'].map(r=>{const[a,s,d,c]=r.split('|');return `<tr><td>${a}</td><td class="muted">${s}</td><td class="mono">${d}</td><td><span class="chip ${c}">${c}</span></td></tr>`}).join('')}
   </tbody></table></div>`;
-V.assetrisk=()=>head('Asset Explorer','One risk per asset — weather exposure blended with equipment reliability.','A + B')+
-  tabbar('assetrisk',[['total','Total risk'],['exposure','Weather exposure'],['reliability','Reliability']])+`<div class="pad" id="arbody"></div>`;
+V.assetrisk=()=>head('Asset Explorer','Explore every asset — weather exposure blended with equipment reliability.','A + B')+
+  tabbar('assetrisk',[['total','Total risk'],['exposure','Weather exposure'],['reliability','Reliability'],['registry','Registry']])+`<div class="pad" id="arbody"></div>`;
 V.assets=()=>head('Asset Registry','Every asset joined across both data planes.','A + B')+`
   <div class="pad card"><table><thead><tr><th>Asset</th><th>Type</th><th>Region</th><th>Operator</th><th>Total risk</th></tr></thead><tbody>
     ${[['Thunder Horse','Platform','GoM','BP','crit'],['Mad Dog','Platform','GoM','BP','high'],['Atlantis','Platform','GoM','BP','high'],['Compressor B','Equipment','Atlantis','—','high'],['Na Kika','FPU','GoM','Shell','mon'],['Holstein','Spar','GoM','—','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="muted">${r[2]}</td><td class="muted">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
@@ -474,6 +471,9 @@ function assetriskTab(t){const el=document.getElementById('arbody');
   else if(t==='reliability'){el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Failure mechanism</th><th>7d surv</th><th>14d surv</th><th>Risk</th></tr></thead><tbody>
     ${[['Compressor B','bearing wear','62%','41%','high'],['Boiler 3','tube fouling','70%','55%','high'],['Pump 12','seal drift','88%','79%','mon'],['Turbine 4','—','98%','96%','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="mono">${r[2]}</td><td class="mono">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
   </tbody></table><p class="muted" style="font-size:12px;margin:12px 0 0">Twin-driven: survival / stop models (from Digital Twin).</p></div>`;}
+  else if(t==='registry'){el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Type</th><th>Region</th><th>Operator</th><th>Total risk</th></tr></thead><tbody>
+    ${[['Thunder Horse','Platform','GoM','BP','crit'],['Mad Dog','Platform','GoM','BP','high'],['Atlantis','Platform','GoM','BP','high'],['Compressor B','Equipment','Atlantis','—','high'],['Na Kika','FPU','GoM','Shell','mon'],['Holstein','Spar','GoM','—','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="muted">${r[2]}</td><td class="muted">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
+  </tbody></table></div>`;}
   else{el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Weather</th><th>Reliability</th><th>Total</th></tr></thead><tbody>
     ${[['Thunder Horse','0.86','0.30','0.79','crit'],['Mad Dog','0.64','0.20','0.58','high'],['Atlantis','0.58','0.44','0.55','high'],['Compressor B','0.22','0.71','0.63','high'],['Na Kika','0.32','0.18','0.30','mon'],['Holstein','0.19','0.12','0.17','low']].map(r=>`<tr><td>${r[0]}</td><td class="mono muted">${r[1]}</td><td class="mono muted">${r[2]}</td><td><span class="chip ${r[4]}" style="min-width:44px;text-align:center">${r[3]}</span></td></tr>`).join('')}
   </tbody></table><p class="muted" style="font-size:12px;margin:12px 0 0">Total = blend of weather exposure and equipment reliability.</p></div>`;}}
