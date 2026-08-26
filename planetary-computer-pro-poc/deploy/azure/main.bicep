@@ -411,6 +411,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
       { name: 'PCP_OPENAI_ENDPOINT', value: deployAiAgent ? openAi.properties.endpoint : '' }
       { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
       { name: 'PCP_GEOCATALOG_URI', value: geoCatalog.properties.catalogUri }
+      { name: 'PCP_GEOCATALOG_ID', value: geoCatalog.id }
     ]
     scriptContent: loadTextContent('scripts/onegrid-solution-provision.ps1')
   }

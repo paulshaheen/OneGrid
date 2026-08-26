@@ -52,8 +52,10 @@
     "openAiEndpoint": "",
     "//openAiAccountId": "Full resource id of PCP's openAi account — used to grant the chat-app identity Cognitive Services User.",
     "openAiAccountId": "",
-    "//geoCatalogUri": "PCP GeoCatalog URI (from PCP output geoCatalogUri) — passed through for the map/imagery layer.",
-    "geoCatalogUri": ""
+    "//geoCatalogUri": "PCP GeoCatalog URI (from PCP output geoCatalogUri) — passed through for the map/imagery layer and set as the Explorer webapp's GEOCATALOG_URI app setting.",
+    "geoCatalogUri": "",
+    "//geoCatalogId": "Full resource id of the GeoCatalog (from PCP output geoCatalogResourceId) — used to grant the chat-app identity the GeoCatalog data-plane role so the Explorer can browse tenant collections under managed identity.",
+    "geoCatalogId": ""
   },
 
   "foundry": {

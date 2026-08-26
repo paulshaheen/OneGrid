@@ -67,6 +67,15 @@
               },
               {
                 "value": "webApp"
+              },
+              {
+                "value": "fabricPlane"
+              },
+              {
+                "value": "oneGridApp"
+              },
+              {
+                "value": "oneGridData"
               }
             ],
             "constraints": {

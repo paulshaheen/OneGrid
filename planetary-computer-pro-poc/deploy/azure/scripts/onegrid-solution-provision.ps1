@@ -107,6 +107,7 @@ $cfg = [ordered]@{
     openAiEndpoint        = $env:PCP_OPENAI_ENDPOINT
     openAiAccountId       = $env:PCP_OPENAI_ACCOUNT_ID
     geoCatalogUri         = $env:PCP_GEOCATALOG_URI
+    geoCatalogId          = $env:PCP_GEOCATALOG_ID
   }
   foundry = [ordered]@{
     resourceGroup = $rg

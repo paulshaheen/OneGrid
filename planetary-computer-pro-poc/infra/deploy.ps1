@@ -902,6 +902,14 @@ function Phase-ChatAgent {
     "KUSTO_DATABASE=$($cfg.fabric.kqlDatabaseName)",
     "PBI_WORKSPACE=$($state.WorkspaceId)"
   )
+  # Explorer (webapp) backend wiring. The TanStack SSR child process inherits this web
+  # app's env (report-app spawns it with ...process.env), and webapp/azure-config.ts binds
+  # the Azure-backed providers ONLY when GEOCATALOG_URI is present - otherwise the Explorer
+  # silently serves the synthetic Hurricane Gabrielle sample. Point it at the live GeoCatalog
+  # + Foundry so the Explorer tab shows the real tenant collections/imagery/agent.
+  if ($cfg.pcp -and $cfg.pcp.geoCatalogUri) { $envVars += "GEOCATALOG_URI=$($cfg.pcp.geoCatalogUri)" }
+  if ($state.FoundryEndpoint) { $envVars += "FOUNDRY_ENDPOINT=$($state.FoundryEndpoint.TrimEnd('/'))" }
+  if ($cfg.foundry -and $cfg.foundry.defaultModel) { $envVars += "FOUNDRY_DEPLOYMENT=$($cfg.foundry.defaultModel)" }
   # PBI_DATASET: prefer the id from this run's semantic phase; otherwise resolve the Import
   # model by name so 'chatagent' works even when run without 'semantic' in the same invocation.
   $datasetId = $state.DatasetId
@@ -1015,6 +1023,12 @@ function Phase-ChatAgent {
   # model-outputs resolves under the app's identity (additive; PCP storage unchanged).
   if ($cfg.pcp -and $cfg.pcp.storageAccountId -and $appId) {
     az role assignment create --assignee-object-id $appId --assignee-principal-type ServicePrincipal --role "Storage Blob Data Reader" --scope $cfg.pcp.storageAccountId -o none 2>$null
+  }
+  # Grant the app identity the GeoCatalog data-plane role (GeoCatalog Administrator) so the
+  # Explorer's SSR server can browse tenant STAC collections/imagery under managed identity.
+  # Without this the webapp has GEOCATALOG_URI set but every data-plane call 403s.
+  if ($cfg.pcp -and $cfg.pcp.geoCatalogId -and $appId) {
+    az role assignment create --assignee-object-id $appId --assignee-principal-type ServicePrincipal --role "c9c97b9c-105d-4bb5-a2a7-7d15666c2484" --scope $cfg.pcp.geoCatalogId -o none 2>$null
   }
   $state.AppPrincipalId = $appId
   $state.AppUrl = "https://$fqdn"
