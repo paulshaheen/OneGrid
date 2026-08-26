@@ -141,11 +141,13 @@ Findings from `webapp/src/lib/auth/*` + `services/azure/server.ts`:
 - **App A has no user auth** — pure Managed Identity, internal Container App.
 
 **Decision for the merge:**
-1. Adopt **App B's Entra as the single front-door identity** (App A gains a real sign-in).
+1. Adopt **App B's Entra as the single front-door identity** (App A gains a real sign-in) —
+   but **wire it up LAST** (see P5). Everything before it is built on the no-auth /
+   sample-data path so auth never blocks progress.
 2. Keep **Managed Identity for every data-plane call** (Fabric KQL/DAX, GeoCatalog, Foundry) —
-   works for both apps unchanged.
-3. **Harden the gate only if** the product must restrict the console: add a `beforeLoad`
-   guard on `/_authenticated` that redirects to `/auth`. (Small, do it deliberately.)
+   works for both apps unchanged, independent of user sign-in.
+3. **Harden the gate only at the end**: add a `beforeLoad` guard on `/_authenticated` that
+   redirects to `/auth`. Kept soft (optional) until P5.
 4. **Per-user data authorization (row-level) is out of scope** unless required later — that
    needs an On-Behalf-Of token flow to Fabric/GeoCatalog, which neither app has today.
 5. Auth stays **optional/degradable**: no Entra config → sample-data demo, same as now.
@@ -194,6 +196,10 @@ React-19 line for the 3D stack (rendering is Three.js, so **no visual change**):
   re-verify bloom/postprocessing settings and WebGL context under React 19 StrictMode.
 - **P4 — Retire** the App A Node server, the reverse-proxy, and the `Explorer` iframe.
   One artifact remains.
+- **P5 — Entra auth, LAST.** With the whole product working on Managed Identity + the
+  sample-data path, wire the single Entra front door and (if required) harden the gate:
+  add the `beforeLoad` guard on `/_authenticated` → `/auth`, unify sign-in/out in the shell,
+  confirm the no-config demo still degrades gracefully.
 
 ### 8e. Risk register
 - **3D upgrade (P3)** — highest risk; isolate behind a client-only route so a regression
@@ -207,8 +213,10 @@ React-19 line for the 3D stack (rendering is Three.js, so **no visual change**):
 
 **Locked (this session):**
 - ✅ Direction = **Option 2**, full-stack: one SPA, **one backend**, one origin, one deploy.
-- ✅ Identity = **Entra/MSAL** (App B) as the single front door; **Managed Identity** for all
-  data. Per-user row-level authorization is out of scope unless later required.
+- ✅ Identity = **Entra/MSAL** (App B) as the single front door, **wired up LAST (P5)**;
+  **Managed Identity** for all data. Everything is built on the no-auth/sample-data path
+  first so auth never blocks progress. Per-user row-level authorization out of scope unless
+  later required.
 
 **Still to confirm with @paulshaheen:**
 1. Product **name** everywhere = **OneGrid** (retire "Asset Weather Ops" as a title)?
