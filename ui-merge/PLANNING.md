@@ -274,8 +274,11 @@ The unified theme adopts the **OneGrid design system** palette (`onegrid.css`, t
 darker-feel reference site) instead of the earlier lighter slate+teal:
 - Backgrounds (deep navy): `--bg #06080d` · `--surface #0a1020` · `--card #111827` · `--elev #16203a`
 - Text: `--fg #f5f8fd` · `--muted #aeb9cd` · `--faint #7d89a1`
-- **Borders are blue-tinted hairlines**: `rgba(120,160,255,.14)` / `.07` (not grey) — key to the deep look.
-- **Primary = azure** `#0a7bff` (hi `#3f96ff`), white foreground — replaces teal.
+- **Borders**: deep blue-grey hairlines `#223149` / `#18233a` (the earlier periwinkle
+  `rgba(120,160,255,…)` read as "light blue" on panels — replaced).
+- **Primary = Microsoft/Fluent Communication Blue** `#0078D4` (themeDark `#005A9E`,
+  themeDarker `#004578`), accent `#2b88d8`, white foreground — deeper and on-brand vs the
+  earlier bright azure.
 - Status: ok `#3fd08a` · caution `#f0b429` · critical `#ff5a5f`.
 These become the shadcn CSS-variable contract in P0 so both apps' surfaces match instantly.
 
