@@ -19,10 +19,19 @@ param(
   [string]$OutDir = (Join-Path $PSScriptRoot "..\dist")
 )
 $ErrorActionPreference = 'Stop'
-$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$infra = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+
+# The wizard must be a SELF-CONTAINED flat tree: deploy.ps1 (+ fabric/deploy-ui/tools/
+# config.sample.json) at the root, with report-app/chatagent/webapp as its SIBLINGS, so the
+# extracted deploy.ps1 resolves the app via its "$Here/report-app" branch. In the OneGrid
+# monorepo the app lives at ../../OGE-OneGrid; in a flat/standalone clone it sits beside infra.
+$appRoot = if (Test-Path (Join-Path $infra 'report-app')) { $infra }
+           elseif (Test-Path (Join-Path $infra '..\..\OGE-OneGrid\report-app')) { (Resolve-Path (Join-Path $infra '..\..\OGE-OneGrid')).Path }
+           else { $null }
+if (-not $appRoot) { throw "app source (report-app) not found beside infra or at ../../OGE-OneGrid - cannot build a deployable wizard." }
 
 # Directory names excluded anywhere in the tree.
-$excludeDirs  = @('.git','node_modules','data','docs-site','dist','.venv','__pycache__','.vs','bin','obj')
+$excludeDirs  = @('.git','node_modules','data','docs-site','dist','dist-sample','.venv','__pycache__','.vs','bin','obj')
 # Specific files excluded (machine/local state).
 $excludeFiles = @('config.json','last-deploy-state.json')
 
@@ -30,21 +39,36 @@ $staging = Join-Path $env:TEMP ("onegrid-wizard-" + [guid]::NewGuid().ToString('
 $stageRoot = Join-Path $staging "OneGrid-Wizard"
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 
-Write-Host "Staging lightweight wizard from $root" -ForegroundColor Cyan
-$files = Get-ChildItem $root -Recurse -File | Where-Object {
-  $rel = $_.FullName.Substring($root.Length).TrimStart('\','/')
-  $parts = $rel -split '[\\/]'
-  $dirHit  = $parts[0..($parts.Length-2)] | Where-Object { $excludeDirs -contains $_ }
-  (-not $dirHit) -and ($excludeFiles -notcontains $_.Name)
+# Copy a source root's files into $stageRoot (optionally under a subfolder), honouring the
+# exclude lists. Returns the number of files copied.
+function Stage-Tree([string]$srcRoot, [string]$destSub = '') {
+  $n = 0
+  Get-ChildItem $srcRoot -Recurse -File | Where-Object {
+    $rel = $_.FullName.Substring($srcRoot.Length).TrimStart('\','/')
+    $parts = $rel -split '[\\/]'
+    $dirHit = $parts[0..($parts.Length-2)] | Where-Object { $excludeDirs -contains $_ }
+    (-not $dirHit) -and ($excludeFiles -notcontains $_.Name)
+  } | ForEach-Object {
+    $rel = $_.FullName.Substring($srcRoot.Length).TrimStart('\','/')
+    $dst = if ($destSub) { Join-Path $stageRoot (Join-Path $destSub $rel) } else { Join-Path $stageRoot $rel }
+    New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
+    Copy-Item $_.FullName $dst -Force
+    $n++
+  }
+  return $n
 }
 
+Write-Host "Staging lightweight wizard: infra=$infra app=$appRoot" -ForegroundColor Cyan
 $copied = 0
-foreach ($f in $files) {
-  $rel = $f.FullName.Substring($root.Length).TrimStart('\','/')
-  $dst = Join-Path $stageRoot $rel
-  New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
-  Copy-Item $f.FullName $dst -Force
-  $copied++
+# 1) infra contents -> zip root (deploy.ps1, fabric, deploy-ui, tools, config.sample.json, ...)
+$copied += Stage-Tree $infra
+# 2) app folders -> zip root as siblings of deploy.ps1 (skip if the flat layout already merged them)
+if ($appRoot -ne $infra) {
+  foreach ($appDir in @('report-app','chatagent','webapp')) {
+    $src = Join-Path $appRoot $appDir
+    if (Test-Path $src) { $copied += Stage-Tree $src $appDir }
+    elseif ($appDir -ne 'webapp') { Write-Host "  WARNING: $appDir not found at $src" -ForegroundColor Yellow }
+  }
 }
 
 # Keep a placeholder so it's obvious data is seeded, not shipped.

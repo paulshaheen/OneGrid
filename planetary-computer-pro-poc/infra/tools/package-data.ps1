@@ -17,8 +17,14 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$data = Join-Path $root "data"
-if (-not (Test-Path $data)) { throw "data/ not found at $data - run from a full clone (git lfs pull) so the parquet is present." }
+# data/ lives beside this script in a flat/standalone clone, or under ../../OGE-OneGrid
+# in the OneGrid monorepo (this infra folder is planetary-computer-pro-poc/infra).
+$data = @(
+  (Join-Path $root "data"),
+  (Join-Path $root "..\..\OGE-OneGrid\data")
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $data) { throw "data/ not found beside the script or at ../../OGE-OneGrid/data - run from a full clone (git lfs pull) so the parquet is present." }
+$data = (Resolve-Path $data).Path
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $zip = Join-Path $OutDir "onegrid-data.zip"
