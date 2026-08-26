@@ -123,9 +123,95 @@ python -m http.server 5177
 ```
 No build, no dependencies — pure HTML/CSS/vanilla JS. Iterate here first.
 
-## 7. Open questions for @paulshaheen
-1. Confirm the **product name** everywhere = **OneGrid** (retire "Asset Weather Ops" as a title)?
-2. Is a **public marketing landing** in scope for the merged app, or console-only?
-3. **Auth**: standardize on **Entra/MSAL** (App B) for the whole product?
-4. Preferred **end-state stack**: consolidate on `webapp` (TanStack + shadcn + Tailwind 4)?
-5. Which **shell layout (A/B/C)** feels right after trying the prototype?
+## 8. DECISION: full Option 2 — one app, one backend
+
+Target: a **single deployable** — one React 19 SPA (TanStack Start) + **one server** +
+one origin + one identity. No iframes, no reverse-proxy, no second Node process.
+
+### 8a. Auth decision (investigated)
+
+Findings from `webapp/src/lib/auth/*` + `services/azure/server.ts`:
+- Entra/MSAL in the browser is **identity-only** (`openid profile email`) — it establishes
+  *who* the user is, not *what data* they can read.
+- **All data-plane calls use server-side Managed Identity**, never the user token
+  (`azure-config.ts`: "Tokens are never in the browser"). So auth ≠ data authorization today.
+- The console gate is **soft**: `_authenticated/route.tsx` is `ssr:false` + `<Outlet/>` with
+  **no redirect guard**; the `/auth` page exists but nothing forces it. Unconfigured →
+  sample data + no auth (the public demo).
+- **App A has no user auth** — pure Managed Identity, internal Container App.
+
+**Decision for the merge:**
+1. Adopt **App B's Entra as the single front-door identity** (App A gains a real sign-in).
+2. Keep **Managed Identity for every data-plane call** (Fabric KQL/DAX, GeoCatalog, Foundry) —
+   works for both apps unchanged.
+3. **Harden the gate only if** the product must restrict the console: add a `beforeLoad`
+   guard on `/_authenticated` that redirects to `/auth`. (Small, do it deliberately.)
+4. **Per-user data authorization (row-level) is out of scope** unless required later — that
+   needs an On-Behalf-Of token flow to Fabric/GeoCatalog, which neither app has today.
+5. Auth stays **optional/degradable**: no Entra config → sample-data demo, same as now.
+
+### 8b. Target topology (one backend)
+
+```
+OneGrid (single App Service / Container App, one origin)
+└── server.mjs  (TanStack Start / nitro)   ← the ONE server
+    ├── SSR + static  (marketing + console SPA)
+    ├── /auth/*        Entra sign-in (MSAL redirect)   [identity only]
+    ├── /api/*         data plane, Managed Identity server-side
+    │   ├── weather/risk/geocatalog   (from App B server.ts)
+    │   ├── fleet/asset/anomaly/prediction  (ported from App A server/dataApi.js — KQL+DAX)
+    │   └── chat/models               (ported from App A chatagent — Foundry)
+    └── /ws            realtime fleet pulse  (ported from App A server/realtime.js)
+```
+App A's separate Node server and the spawned `chatagent` process are **absorbed** into this
+one server as route handlers. One set of env vars, one Managed Identity, one deploy.
+
+### 8c. Front-end consolidation — pin these versions
+
+React-19 line for the 3D stack (rendering is Three.js, so **no visual change**):
+
+| Package | From (App A) | To (React 19) |
+|---|---|---|
+| `react` / `react-dom` | 18.3 | **19.2** (match App B) |
+| `@react-three/fiber` | ^8.17 | **^9** |
+| `@react-three/drei` | ^9.114 | **^10** |
+| `@react-three/postprocessing` | ^2.16 | **^3** |
+| `three` | ^0.169 | keep (compatible) |
+| styling | Tailwind 3 + theme objects | **Tailwind 4 tokens / shadcn** |
+| state/anim | zustand, framer-motion | keep (both React-19 OK) |
+
+### 8d. Phased plan (cheapest → riskiest; ship continuously)
+
+- **P0 — Shell & tokens.** Build the unified OneGrid shell (top bar + rail + one theme) in
+  App B; map App A's theme objects to the shadcn CSS variables. *(No data.)*
+- **P1 — Native port of the light App-A views** (Executive, Governance, Ontology graph —
+  SVG/DOM, no Three.js): re-mount as `/app/*` routes, restyled. Low risk.
+- **P2 — Backend absorb.** Move App A's `dataApi.js` (KQL/DAX), `realtime.js` (WS) and the
+  chatagent into `server.mjs` as `/api` + `/ws` handlers on Managed Identity. Unify the two
+  Copilots into one. *(Backend seam removed here.)*
+- **P3 — The 3D views last** (Control Room, Simulation, Maintenance): upgrade to
+  `fiber@9 / drei@10 / postprocessing@3`, mount as **client-only** routes (`ssr:false`),
+  re-verify bloom/postprocessing settings and WebGL context under React 19 StrictMode.
+- **P4 — Retire** the App A Node server, the reverse-proxy, and the `Explorer` iframe.
+  One artifact remains.
+
+### 8e. Risk register
+- **3D upgrade (P3)** — highest risk; isolate behind a client-only route so a regression
+  can't blank the app. Snapshot before/after frames to confirm parity.
+- **SSR vs client-only** — Three.js + `maplibre` + WebSocket views must be `ssr:false`.
+- **StrictMode double-invoke (React 19)** — audit WebGL/WS setup for idempotent init.
+- **Tailwind 3→4** — theme-object → CSS-var remap is the biggest mechanical surface.
+- **One Managed Identity** — must be granted every role both apps needed (Fabric, GeoCatalog, Foundry).
+
+## 9. Decisions locked & remaining questions
+
+**Locked (this session):**
+- ✅ Direction = **Option 2**, full-stack: one SPA, **one backend**, one origin, one deploy.
+- ✅ Identity = **Entra/MSAL** (App B) as the single front door; **Managed Identity** for all
+  data. Per-user row-level authorization is out of scope unless later required.
+
+**Still to confirm with @paulshaheen:**
+1. Product **name** everywhere = **OneGrid** (retire "Asset Weather Ops" as a title)?
+2. Is a **public marketing landing** in scope, or console-only?
+3. **Harden the auth gate** (force sign-in on `/app/*`), or keep it soft with sample-data demo?
+4. Which **shell layout (A/B/C)** after trying the prototype?
