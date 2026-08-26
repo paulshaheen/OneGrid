@@ -312,8 +312,18 @@ top bar, profile), ✅ App B views wired, ✅ Copilot dialog (bottom-right only)
 
 **P1 status:** ✅ Governance & Security and ✅ Ontology graph ported as native routes
 (sample data), nav flipped from *Soon* → live. ✅ Unified Overview (weather KPIs + a Digital
-Twin fleet-health strip from the report-app Executive view). Remaining *Soon*: Digital Twin
-▸ Control Room / Simulation / Maintenance (the 3D views → P3).
+Twin fleet-health strip from the report-app Executive view). ✅ Control Room (stylized twin +
+live telemetry), ✅ Failure Simulation, ✅ Maintenance, ✅ unified Asset Explorer
+(Total/Exposure/Reliability/Registry tabs). **Every nav area is now a real OneGrid-styled page
+— no `Soon` placeholders remain.** Full build passes (client + SSR).
+
+**UI merge = COMPLETE for this branch.** What remains is *infrastructure*, not UI, and needs the
+live environment (out of scope for `ui-merge-explore`):
+- **P2 — backend absorb:** wire real Fabric (KQL/DAX) + WebSocket + real Copilot (Foundry / Fabric
+  Data Agent) into one server; replace sample data. Needs the Fabric/Foundry tenant.
+- **P3 — full 3D engine:** Control Room is a faithful *styled* twin today; the real
+  react-three-fiber scene (fiber@9 / drei@10, React 19) + live telemetry is a dedicated port.
+- **P4/P5 — retire the report-app server/iframe, then wire Entra auth** (needs Entra config).
 
 **Follow-ups noted during P0:**
 - **Unified Overview (P1):** the Overview page currently shows only **App B's** Operations
