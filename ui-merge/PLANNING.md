@@ -282,6 +282,29 @@ darker-feel reference site) instead of the earlier lighter slate+teal:
 - Status: ok `#3fd08a` · caution `#f0b429` · critical `#ff5a5f`.
 These become the shadcn CSS-variable contract in P0 so both apps' surfaces match instantly.
 
+## 8i. Coverage audit + Asset Risk decision
+
+**Coverage (both sources → merged UI): console is 100% propagated.**
+- App A personas (Executive, Control-Room, Maintenance, Simulation, Ontology, Governance,
+  Chat) and Explorer (absorbed — the webapp is native now) → all present.
+- App B console routes (Overview, Live Map, Weather Events, Asset Risk, Forecast Timeline,
+  Response Posture, Thresholds, Alerts, Operations Assistant, Asset Management, Deployment)
+  → all present.
+- **Not propagated (deferred):** public **marketing** pages (Home/Solution/Architecture/
+  Security — stripped from the merged webapp, live only on pcp-marketing) and the **guided
+  tour**. Front-door concern; out of scope for now per user.
+
+**Asset Risk — resolved the Weather/Twin overlap (Option A).** There are two distinct risk
+engines: *weather exposure* (App B `/risk`: forecast × fragility × exposure) and *reliability/
+failure* (App A twin: survival/stop models). Decision:
+- New top-level **Assets** pillar = **Asset Risk** (unified) + **Registry**.
+- **Asset Risk** = per-asset view with three tabs: **Total** (blended), **Weather exposure**,
+  **Reliability** — the single asset-centric risk home.
+- **Weather** keeps the exposure analysis, retitled **Storm Exposure** (feeds Total).
+- **Digital Twin ▸ Maintenance** keeps reliability (survival models).
+- **Ontology** is now just the **Graph** (Assets moved up to its own pillar).
+- Rail: **Overview · Weather · Digital Twin · Assets · Ontology · Admin**.
+
 ## 9. Decisions locked & remaining questions
 
 **Locked (this session):**

@@ -319,7 +319,7 @@ const PILLARS = [
   { id:'weather',   label:'Weather',         icon:'≈', src:'B', ov:'weatherOv', areas:[
       {id:'map',      label:'Live Map',        icon:'◉'},
       {id:'forecast', label:'Forecast',        icon:'⌁'},                    // Events + Timeline
-      {id:'risk',     label:'Asset Risk',      icon:'▲', alerts:3},
+      {id:'exposure', label:'Storm Exposure',  icon:'△', alerts:3},          // weather-driven exposure (was "Asset Risk")
       {id:'posture',  label:'Response Posture', icon:'⛨'},
   ]},
   { id:'twin',      label:'Digital Twin',    icon:'◧', src:'A', ov:'twinOv', areas:[
@@ -327,10 +327,11 @@ const PILLARS = [
       {id:'simulation',  label:'Simulation',   icon:'⚗'},                    // alembic (real build: lucide FlaskConical)
       {id:'maintenance', label:'Maintenance',  icon:'✚', alerts:2},
   ]},
-  { id:'ontology',  label:'Ontology',        icon:IC_ONTOLOGY, src:'A', ov:'ontology', areas:[
-      {id:'ontology', label:'Graph',  icon:IC_ONTOLOGY},                     // the force-directed ontology
-      {id:'assets',   label:'Assets', icon:'▤'},                            // asset registry now lives under Ontology
+  { id:'assets',    label:'Assets',          icon:'▤', src:'A + B', ov:'assetrisk', areas:[
+      {id:'assetrisk', label:'Asset Risk', icon:'▲'},                        // unified: weather exposure + reliability
+      {id:'assets',    label:'Registry',   icon:'▤'},
   ]},
+  { id:'ontology',  label:'Ontology',        icon:IC_ONTOLOGY, single:true, src:'A', areas:[ {id:'ontology', label:'Graph', icon:IC_ONTOLOGY} ] },
 ];
 const SECONDARY = [
   { id:'admin',  label:'Admin',  icon:'⚙', collapsedByDefault:true, areas:[
@@ -429,7 +430,7 @@ V.map=()=>head('Live Map','Real-time storm track joined to your offshore estate.
 V.forecast=()=>head('Forecast','Named storms, tracks and the T-gate timeline — Events + Timeline in one place.','B')+
   tabbar('forecast',[['events','Weather Events'],['timeline','Forecast Timeline']])+`
   <div class="pad" id="fcbody"></div>`;
-V.risk=()=>head('Asset Risk','Explainable exposure score — forecast × fragility × exposure.','B')+`
+V.exposure=()=>head('Storm Exposure','Weather-driven exposure score — forecast × fragility × exposure. (Feeds the unified Asset Risk.)','B')+`
   <div class="pad grid cols-3">${gauge('Thunder Horse',.86,'crit')}${gauge('Mad Dog',.64,'high')}${gauge('Atlantis',.58,'high')}
     ${gauge('Na Kika',.32,'mon')}${gauge('Holstein',.19,'low')}${gauge('Horn Mtn',.12,'low')}</div>`;
 V.posture=()=>head('Response Posture','T-gate readiness per asset and crew.','B')+`
@@ -446,9 +447,13 @@ V.maintenance=()=>head('Maintenance','Work orders driven by the twin + survival 
   <div class="pad card"><table><thead><tr><th>Asset</th><th>Signal</th><th>Due</th><th>Sev</th></tr></thead><tbody>
     ${['Compressor B|bearing wear|26h|high','Boiler 3|survival flag|4d|high','Pump 12|drift|9d|mon'].map(r=>{const[a,s,d,c]=r.split('|');return `<tr><td>${a}</td><td class="muted">${s}</td><td class="mono">${d}</td><td><span class="chip ${c}">${c}</span></td></tr>`}).join('')}
   </tbody></table></div>`;
-V.assets=()=>head('Assets','One registry for every asset — with its risk and maintenance lenses.','A + B')+
-  tabbar('assets',[['registry','Registry'],['arisk','Risk lens'],['amaint','Maintenance lens']])+`<div class="pad" id="asbody"></div>`;
-V.ontology=()=>head('Knowledge Graph','Force-directed ontology generated from the Fabric semantic model.','A')+`
+V.assetrisk=()=>head('Asset Risk','One risk per asset — weather exposure blended with equipment reliability.','A + B')+
+  tabbar('assetrisk',[['total','Total risk'],['exposure','Weather exposure'],['reliability','Reliability']])+`<div class="pad" id="arbody"></div>`;
+V.assets=()=>head('Asset Registry','Every asset joined across both data planes.','A + B')+`
+  <div class="pad card"><table><thead><tr><th>Asset</th><th>Type</th><th>Region</th><th>Operator</th><th>Total risk</th></tr></thead><tbody>
+    ${[['Thunder Horse','Platform','GoM','BP','crit'],['Mad Dog','Platform','GoM','BP','high'],['Atlantis','Platform','GoM','BP','high'],['Compressor B','Equipment','Atlantis','—','high'],['Na Kika','FPU','GoM','Shell','mon'],['Holstein','Spar','GoM','—','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="muted">${r[2]}</td><td class="muted">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
+  </tbody></table></div>`;
+V.ontology=()=>head('Ontology','Force-directed knowledge graph generated from the Fabric semantic model.','A')+`
   <div class="pad"><div class="surface-mock graph">${graphSvg()}</div></div>`;
 V.alerts=()=>head('Alerts','Unified inbox — weather-triggered and twin-triggered.','A + B')+`
   <div class="pad card"><table><thead><tr><th>Time</th><th>Source</th><th>Asset</th><th>Message</th><th>Sev</th></tr></thead><tbody>
@@ -463,12 +468,15 @@ V.deployment=()=>head('Deployment','Ship OneGrid into your own Azure tenant.','B
 function forecastTab(t){document.getElementById('fcbody').innerHTML = t==='timeline'
   ? `<div class="card"><div class="cardtitle"><h2>T-gate timeline</h2><span class="tag">T-120h → landfall</span></div><div class="spark">${bars(30)}</div></div>`
   : `<div class="grid cols-2">${card('Hurricane Gabrielle','B','Cat 3 · NW at 12kt · cone intersects GoM estate.')}${card('Invest 94L','B','40% formation odds over 48h.')}</div>`;}
-function assetsTab(t){const el=document.getElementById('asbody');
-  if(t==='arisk'){el.innerHTML=`<div class="grid cols-3">${gauge('Thunder Horse',.86,'crit')}${gauge('Mad Dog',.64,'high')}${gauge('Atlantis',.58,'high')}</div>`;}
-  else if(t==='amaint'){el.innerHTML=V.maintenance().split('<div class="pad')[1]?'<div class="pad'+V.maintenance().split('<div class="pad')[1]:'';}
-  else{el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Type</th><th>Region</th><th>Risk</th></tr></thead><tbody>
-    ${['Thunder Horse|Platform|GoM|crit','Mad Dog|Platform|GoM|high','Atlantis|Platform|GoM|high','Na Kika|FPU|GoM|mon','Holstein|Spar|GoM|low'].map(r=>{const[a,t2,rg,c]=r.split('|');return `<tr><td>${a}</td><td class="muted">${t2}</td><td class="muted">${rg}</td><td><span class="chip ${c}">${c}</span></td></tr>`}).join('')}
-  </tbody></table></div>`;}}
+function assetriskTab(t){const el=document.getElementById('arbody');
+  if(t==='exposure'){el.innerHTML=`<div class="grid cols-3">${gauge('Thunder Horse',.86,'crit')}${gauge('Mad Dog',.64,'high')}${gauge('Atlantis',.58,'high')}${gauge('Na Kika',.32,'mon')}${gauge('Holstein',.19,'low')}${gauge('Horn Mtn',.12,'low')}</div>
+    <p class="muted" style="font-size:12px;margin:14px 0 0">Weather-driven: forecast × fragility × exposure (from the Weather section).</p>`;}
+  else if(t==='reliability'){el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Failure mechanism</th><th>7d surv</th><th>14d surv</th><th>Risk</th></tr></thead><tbody>
+    ${[['Compressor B','bearing wear','62%','41%','high'],['Boiler 3','tube fouling','70%','55%','high'],['Pump 12','seal drift','88%','79%','mon'],['Turbine 4','—','98%','96%','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="mono">${r[2]}</td><td class="mono">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
+  </tbody></table><p class="muted" style="font-size:12px;margin:12px 0 0">Twin-driven: survival / stop models (from Digital Twin).</p></div>`;}
+  else{el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Weather</th><th>Reliability</th><th>Total</th></tr></thead><tbody>
+    ${[['Thunder Horse','0.86','0.30','0.79','crit'],['Mad Dog','0.64','0.20','0.58','high'],['Atlantis','0.58','0.44','0.55','high'],['Compressor B','0.22','0.71','0.63','high'],['Na Kika','0.32','0.18','0.30','mon'],['Holstein','0.19','0.12','0.17','low']].map(r=>`<tr><td>${r[0]}</td><td class="mono muted">${r[1]}</td><td class="mono muted">${r[2]}</td><td><span class="chip ${r[4]}" style="min-width:44px;text-align:center">${r[3]}</span></td></tr>`).join('')}
+  </tbody></table><p class="muted" style="font-size:12px;margin:12px 0 0">Total = blend of weather exposure and equipment reliability.</p></div>`;}}
 
 /* helpers */
 function head(t,d,prov){return `<div class="pagehead"><div><h1>${t}</h1><p>${d}</p></div><span class="provenance">source: ${prov}</span></div>`}
@@ -491,9 +499,9 @@ function go(id){
   // wire in-view tabbars
   document.querySelectorAll('[data-tab]').forEach(a=>a.onclick=e=>{e.preventDefault();
     const[view,tab]=a.dataset.tab.split(':');document.querySelectorAll(`[data-tab^="${view}:"]`).forEach(x=>x.classList.toggle('active',x===a));
-    if(view==='forecast')forecastTab(tab); if(view==='assets')assetsTab(tab);});
+    if(view==='forecast')forecastTab(tab); if(view==='assetrisk')assetriskTab(tab);});
   if(id==='forecast')forecastTab('events');
-  if(id==='assets')assetsTab('registry');
+  if(id==='assetrisk')assetriskTab('total');
   syncRail();
   document.querySelector('.content').scrollTop=0;
 }
