@@ -222,32 +222,40 @@ simplest way to reduce rail busyness (see below). Both are wired in the prototyp
 - Icons support (never replace) labels; clear active/hover state; rail 200–280px.
 - Offer a **collapse-to-icons** toggle (tooltips) to reclaim canvas.
 
-**Overlaps combined (13 raw items → 5 pillars + 2 utility):**
+**Overlaps combined (13 raw items → 4 pillars + Admin; Alerts to the top bar):**
 
 | Raw items (A/B) | → Combined |
 |---|---|
-| Executive Overview (A) + Operations Overview (B) | **Overview** (one) |
+| Executive Overview (A) + Operations Overview (B) | **Overview** (one, bold) |
 | Weather Events (B) + Forecast Timeline (B) | **Forecast** (tabs) |
-| Asset Mgmt (A/B) + Asset Risk lens + Maintenance lens | **Assets** hub (tabs: Registry / Risk / Maintenance) |
+| Asset Mgmt (A/B) + Ontology (A) | **Ontology** pillar → *Graph* + *Assets* |
 | Operations Assistant / Copilot (B route) | **removed from rail → the chat dialog** |
+| Alerts (B) | **top-right bell + badge** (out of the rail) |
 | Thresholds + Governance + Deployment (B/A) | **Admin** (secondary, collapsed by default) |
 | Control Room + Simulation + Maintenance (A) | **Digital Twin** pillar |
-| Live Map + Forecast + Asset Risk + Response Posture (B) | **Weather & Risk** pillar |
+| Live Map + Forecast + Asset Risk + Response Posture (B) | **Weather** pillar |
 
-**Final rail structure:**
+**Final rail structure (refined):**
 ```
-PRIMARY            ⌂ Overview
-                   ≈ Weather & Risk   [badge:3]   (Live Map · Forecast · Asset Risk · Response Posture)
-                   ◧ Digital Twin     [badge:2]   (Control Room · Simulation · Maintenance)
-                   ▤ Assets                       (Registry · Risk · Maintenance lenses)
-                   ❖ Knowledge Graph
+top bar ……………………  ! Alerts [badge:5]  (near top-right, bell + count)
+PRIMARY            ⌂ Overview            (bold)
+                   ≈ Weather        [badge:3]  (Live Map · Forecast · Asset Risk · Response Posture)
+                   ◧ Digital Twin   [badge:2]  (Control Room · Simulation · Maintenance)
+                   ❖ Ontology                  (Graph · Assets)
 ── divider ──
-SECONDARY          ! Alerts  [badge:5]
-                   ⚙ Admin (collapsed)            (Thresholds · Governance & Security · Deployment)
+SECONDARY          ⚙ Admin (collapsed)         (Thresholds · Governance & Security · Deployment)
 ```
-- **Layout A**: all pillars in the rail; non-active groups auto-collapse (progressive disclosure). Group badge = Σ child alerts.
-- **Layout C (hybrid, still on table)**: top bar switches the pillar; rail shows **only that pillar's areas** → shortest, least-busy rail. Best when the option count grows.
-- **Alerts**: kept as a badge on core destinations (pillar roll-up + top-bar bell + a dedicated inbox). This is the "counts on each section where there are alerts" the user liked.
+- **"Weather"** (dropped "& Risk" — the pillar's contents make risk obvious; shorter scans better).
+- **Alerts** promoted to the **top-right bell** (with the roll-up count) instead of a rail row —
+  keeps the "counts where there are alerts" signal while de-cluttering the rail.
+- **Ontology** (renamed from "Knowledge Graph") now owns **Assets** (Graph + Registry are the
+  same entity model from two views).
+- **Overview** rendered **bold** as the anchor/home item.
+- Groups **expand/collapse with a smooth animation** (CSS `grid-template-rows 0fr↔1fr` +
+  opacity; class toggled in place so it animates), non-active groups auto-collapse.
+- **Simulation** icon = alembic ⚗ in the prototype → **lucide `FlaskConical`** in the real
+  build (the play/▶ glyph read as "video", wrong affordance).
+- **Layout C (hybrid)** remains available as the simplest-rail fallback if options grow.
 
 ## 8g. Chat / Copilot — use OneGrid's dialog (not App B's)
 
@@ -259,6 +267,17 @@ retire App B's `/copilot` route (removing it from the rail). Features to carry o
   OneGrid semantic model.
 - **Follow-up suggestion chips**, persona-aware context, `Ask the data` docked launcher.
 Backend: unify onto App A's `/api/chat` + `/api/models` (folded into the one server in P2).
+
+## 8h. Theme / design tokens — align to OneGrid design system
+
+The unified theme adopts the **OneGrid design system** palette (`onegrid.css`, the
+darker-feel reference site) instead of the earlier lighter slate+teal:
+- Backgrounds (deep navy): `--bg #06080d` · `--surface #0a1020` · `--card #111827` · `--elev #16203a`
+- Text: `--fg #f5f8fd` · `--muted #aeb9cd` · `--faint #7d89a1`
+- **Borders are blue-tinted hairlines**: `rgba(120,160,255,.14)` / `.07` (not grey) — key to the deep look.
+- **Primary = azure** `#0a7bff` (hi `#3f96ff`), white foreground — replaces teal.
+- Status: ok `#3fd08a` · caution `#f0b429` · critical `#ff5a5f`.
+These become the shadcn CSS-variable contract in P0 so both apps' surfaces match instantly.
 
 ## 9. Decisions locked & remaining questions
 

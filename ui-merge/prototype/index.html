@@ -9,16 +9,17 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg:#0b1017; --surface:#10161f; --card:#141c27; --elev:#1a2432;
-    --fg:#e7edf5; --muted:#8b98a9; --faint:#5c6a7d;
-    --border:#22303f; --border-soft:#1a2431;
-    --primary:#2dd4bf; --primary-fg:#04211d; --accent:#3b82f6;
-    --warn:#f59e0b; --danger:#ef4444; --ok:#22c55e;
-    --risk-crit:#ef4444; --risk-high:#f59e0b; --risk-mon:#38bdf8; --risk-low:#22c55e;
+    /* OneGrid design system (onegrid.css): deep navy + azure */
+    --bg:#06080d; --surface:#0a1020; --card:#111827; --elev:#16203a;
+    --fg:#f5f8fd; --muted:#aeb9cd; --faint:#7d89a1;
+    --border:rgba(120,160,255,.14); --border-soft:rgba(120,160,255,.07);
+    --primary:#0a7bff; --primary-fg:#ffffff; --accent:#3f96ff;
+    --warn:#f0b429; --danger:#ff5a5f; --ok:#3fd08a;
+    --risk-crit:#ff5a5f; --risk-high:#f0b429; --risk-mon:#3f96ff; --risk-low:#3fd08a;
     --radius:8px; --rail-w:248px;
   }
   html:not(.dark){ --bg:#f4f6f9; --surface:#fff; --card:#fff; --elev:#eef2f7; --fg:#10202f;
-    --muted:#5a6b7d; --faint:#8595a6; --border:#dde5ee; --border-soft:#e8edf3; --primary:#0d9488; --primary-fg:#fff; }
+    --muted:#5a6b7d; --faint:#8595a6; --border:#dde5ee; --border-soft:#e8edf3; --primary:#0a66d6; --primary-fg:#fff; }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
@@ -41,7 +42,7 @@
     border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(8px)}
   .brand{display:flex;align-items:center;gap:10px}
   .brand .logo{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;
-    background:linear-gradient(135deg,var(--primary),var(--accent));color:#04211d;font-weight:700;letter-spacing:-.04em;font-size:13px}
+    background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;font-weight:700;letter-spacing:-.04em;font-size:13px}
   .brand .name{font-weight:600;letter-spacing:-.01em;line-height:1.05}
   .brand .sub{font-size:10px;color:var(--muted)}
   .pillartabs{display:flex;gap:2px;padding:3px;border-radius:10px;background:color-mix(in srgb,var(--fg) 5%,transparent)}
@@ -51,7 +52,7 @@
   .iconbtn:hover{color:var(--fg);background:var(--elev)}
   .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:5px 10px}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
-  .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#2dd4bf);display:grid;place-items:center;color:#04211d;font-weight:700;font-size:12px}
+  .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
 
   /* badge (counts) */
   .badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;font-size:10px;font-weight:700;line-height:18px;text-align:center;
@@ -69,6 +70,7 @@
   .navitem{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:8px;color:var(--muted);font-size:13.5px;margin:1px 0;position:relative;white-space:nowrap}
   .navitem:hover{background:var(--elev);color:var(--fg)}
   .navitem.active{background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--fg);font-weight:600;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 35%,transparent)}
+  .navitem.strong .lbl{font-weight:700;color:var(--fg)}
   .navitem .ic{width:18px;text-align:center;opacity:.9;flex-shrink:0}
   .navitem .lbl{flex:1;overflow:hidden;text-overflow:ellipsis}
   .navitem .badge{margin-left:auto}
@@ -78,10 +80,11 @@
   .grouphdr .chev{margin-left:auto;transition:transform .15s ease;color:var(--faint);font-size:11px}
   .grouphdr.collapsed .chev{transform:rotate(-90deg)}
   .grouphdr .ic{width:18px;text-align:center;flex-shrink:0}
-  .groupkids{overflow:hidden}
+  .groupkids{display:grid;grid-template-rows:1fr;transition:grid-template-rows .24s cubic-bezier(.4,0,.2,1),opacity .18s ease;opacity:1}
+  .groupkids>.kidwrap{overflow:hidden;min-height:0}
   .groupkids .navitem{margin-left:6px;padding-left:14px}
   .groupkids .navitem:before{content:"";position:absolute;left:6px;top:0;bottom:0;width:1px;background:var(--border-soft)}
-  .collapsed + .groupkids{display:none}
+  .grouphdr.collapsed + .groupkids{grid-template-rows:0fr;opacity:0}
   .divider{height:1px;background:var(--border);margin:8px 6px}
   .rail .foot{border-top:1px solid var(--border);padding:6px 8px}
   /* collapsed-to-icons: hide labels/badges/chevrons/headers */
@@ -89,7 +92,7 @@
   body[data-railcollapsed="1"] .railhead,
   body[data-railcollapsed="1"] .chev,
   body[data-railcollapsed="1"] .navitem .badge{display:none}
-  body[data-railcollapsed="1"] .groupkids{display:block!important}
+  body[data-railcollapsed="1"] .groupkids{grid-template-rows:1fr!important;opacity:1!important}
   body[data-railcollapsed="1"] .navitem,body[data-railcollapsed="1"] .grouphdr{justify-content:center;padding-left:0;padding-right:0}
   body[data-railcollapsed="1"] .groupkids .navitem:before{display:none}
   /* per-badge dot when collapsed, so alerts still signal */
@@ -146,7 +149,7 @@
 
   /* ===== OneGrid chat dialog (ported feel from report-app ChatPanel) ===== */
   .launcher{position:fixed;right:22px;bottom:22px;z-index:60;display:flex;align-items:center;gap:9px;
-    padding:11px 16px;border-radius:999px;border:0;font-weight:600;font-size:13px;color:#04211d;
+    padding:11px 16px;border-radius:999px;border:0;font-weight:600;font-size:13px;color:#fff;
     background:linear-gradient(135deg,var(--primary),var(--accent));box-shadow:0 12px 30px rgba(0,0,0,.45)}
   .chat{position:fixed;right:22px;bottom:22px;width:396px;max-height:74vh;z-index:61;display:none;flex-direction:column;
     background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.55);overflow:hidden}
@@ -276,8 +279,8 @@
    • Asset Mgmt (A/B) surfaces as the "Assets" hub (Registry / Risk / Maintenance lenses)
    alerts:n on an area rolls up to a badge on its pillar (badges only on core destinations). */
 const PILLARS = [
-  { id:'overview',  label:'Overview',        icon:'⌂', single:true,  areas:[ {id:'overview', label:'Overview', icon:'▦'} ] },
-  { id:'weather',   label:'Weather & Risk',  icon:'≈', src:'B', areas:[
+  { id:'overview',  label:'Overview',        icon:'⌂', single:true, bold:true, areas:[ {id:'overview', label:'Overview', icon:'▦'} ] },
+  { id:'weather',   label:'Weather',         icon:'≈', src:'B', areas:[
       {id:'map',      label:'Live Map',        icon:'◉'},
       {id:'forecast', label:'Forecast',        icon:'⌁'},                    // Events + Timeline
       {id:'risk',     label:'Asset Risk',      icon:'▲', alerts:3},
@@ -285,14 +288,15 @@ const PILLARS = [
   ]},
   { id:'twin',      label:'Digital Twin',    icon:'◧', src:'A', areas:[
       {id:'controlroom', label:'Control Room', icon:'◧'},
-      {id:'simulation',  label:'Simulation',   icon:'⏵'},
+      {id:'simulation',  label:'Simulation',   icon:'⚗'},                    // alembic (real build: lucide FlaskConical)
       {id:'maintenance', label:'Maintenance',  icon:'✚', alerts:2},
   ]},
-  { id:'assets',    label:'Assets',          icon:'▤', single:true, areas:[ {id:'assets', label:'Assets', icon:'▤'} ] },
-  { id:'knowledge', label:'Knowledge Graph', icon:'❖', single:true, src:'A', areas:[ {id:'ontology', label:'Knowledge Graph', icon:'❖'} ] },
+  { id:'ontology',  label:'Ontology',        icon:'❖', src:'A', areas:[
+      {id:'ontology', label:'Graph',  icon:'❖'},                            // the force-directed ontology
+      {id:'assets',   label:'Assets', icon:'▤'},                            // asset registry now lives under Ontology
+  ]},
 ];
 const SECONDARY = [
-  { id:'alerts', label:'Alerts', icon:'!', single:true, inbox:true, alerts:5, areas:[ {id:'alerts', label:'Alerts', icon:'!'} ] },
   { id:'admin',  label:'Admin',  icon:'⚙', collapsedByDefault:true, areas:[
       {id:'thresholds', label:'Thresholds',            icon:'⚙'},
       {id:'governance', label:'Governance & Security',  icon:'⛉'},
@@ -313,7 +317,7 @@ function railGroup(p){
   const roll = areaAlerts(p);
   if (p.single){
     const a=p.areas[0], act=a.id===current;
-    return `<a class="navitem ${act?'active':''} ${p.alerts?'hasalert':''}" data-area="${a.id}" title="${p.label}">
+    return `<a class="navitem ${act?'active':''} ${p.bold?'strong':''} ${p.alerts?'hasalert':''}" data-area="${a.id}" title="${p.label}">
       <span class="ic">${p.icon}</span><span class="lbl">${p.label}</span>${p.alerts?`<span class="badge">${p.alerts}</span>`:''}</a>`;
   }
   const isCol = collapsed[p.id] ?? (p.collapsedByDefault && pillarOf(current)?.id!==p.id);
@@ -323,7 +327,7 @@ function railGroup(p){
   return `<div class="grouphdr ${isCol?'collapsed':''}" data-group="${p.id}" title="${p.label}">
       <span class="ic">${p.icon}</span><span class="lbl">${p.label}</span>
       ${roll?`<span class="badge soft">${roll}</span>`:''}<span class="chev">▾</span>
-    </div><div class="groupkids">${kids}</div>`;
+    </div><div class="groupkids"><div class="kidwrap">${kids}</div></div>`;
 }
 function renderRailA(){
   document.getElementById('rail').innerHTML =
@@ -347,7 +351,11 @@ function renderRailC(){
 function wireRail(){
   document.querySelectorAll('#rail [data-area]').forEach(a=> a.onclick=e=>{e.preventDefault();go(a.dataset.area);});
   document.querySelectorAll('#rail [data-group]').forEach(g=> g.onclick=()=>{
-    const id=g.dataset.group; collapsed[id]=!(collapsed[id] ?? (ALL.find(p=>p.id===id).collapsedByDefault && pillarOf(current)?.id!==id)); renderRail();});
+    const id=g.dataset.group;
+    const willCollapse = !g.classList.contains('collapsed');
+    collapsed[id]=willCollapse;                 // remember for later full re-renders
+    g.classList.toggle('collapsed', willCollapse);  // animate in place (CSS grid-rows transition)
+  });
 }
 function renderRail(){ document.body.dataset.layout==='C'?renderRailC():renderRailA(); }
 
