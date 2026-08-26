@@ -972,10 +972,11 @@ function Phase-ChatAgent {
     Log "  note: webapp/ not found next to report-app - the Explorer tab will 503 until it is deployed" "Yellow"
   }
   Get-ChildItem (Join-Path $Here 'governance-manifest*.json') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName $stage -Force }
-  # Root package.json drives the Oryx build + start command. When the webapp is present we
-  # also install + build it with base /webapp (its assets/routes must carry that prefix).
+  # Root package.json drives the Oryx build + start command. report-app is now backend-only
+  # (no SPA build); it just needs its runtime deps installed. The webapp is the sole frontend
+  # and is installed + built with base /webapp (its assets/routes must carry that prefix).
   $webappBuild = if ($hasWebapp) { ' && cd ../webapp && npm install --include=dev && APP_BASE_PATH=/webapp npm run build' } else { '' }
-  $rootPkg = '{"name":"onegrid-web","version":"1.0.0","private":true,"scripts":{"build":"cd report-app && npm install --include=dev && npm run build' + $webappBuild + '","start":"node report-app/server/index.js"}}'
+  $rootPkg = '{"name":"onegrid-web","version":"1.0.0","private":true,"scripts":{"build":"cd report-app && npm install' + $webappBuild + '","start":"node report-app/server/index.js"}}'
   [IO.File]::WriteAllText((Join-Path $stage 'package.json'), $rootPkg, (New-Object System.Text.UTF8Encoding($false)))
   $zip = "$stage.zip"
   if (Test-Path $zip) { Remove-Item $zip -Force }

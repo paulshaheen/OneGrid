@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
-//  Local report backend: serves the data API + realtime WebSocket, and (in
-//  production) the built SPA. Authenticates to Fabric via the signed-in az CLI.
-//  Run: npm run server   (listens on :7700; Vite dev proxies to it)
+//  Local report backend: serves the data API + realtime WebSocket, and hosts
+//  the unified webapp under /webapp (the sole frontend). Any other path
+//  redirects to /webapp/app. Authenticates to Fabric via the signed-in az CLI.
+//  Run: npm run server   (listens on :7700)
 // ---------------------------------------------------------------------------
 import http from 'node:http';
 import fs from 'node:fs';
@@ -17,7 +18,6 @@ import * as gov from './governance.js';
 import * as manuals from './manuals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIST = path.resolve(__dirname, '..', 'dist');
 const PORT = process.env.REPORT_PORT || 7700;
 const ONTOLOGY_FILE = path.resolve(__dirname, 'ontology.json');
 let _ontologyCache = null;
@@ -27,8 +27,6 @@ function loadOntology() {
   catch { _ontologyCache = { error: 'ontology.json not found — run _gen-ontology.py', nodes: [], edges: [], categories: {} }; }
   return _ontologyCache;
 }
-
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.hdr': 'application/octet-stream', '.glb': 'model/gltf-binary' };
 
 function json(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -107,19 +105,11 @@ async function handleApi(req, res, url) {
   }
 }
 
-function serveStatic(req, res, url) {
-  let rel = decodeURIComponent(url.pathname);
-  if (rel === '/') rel = '/index.html';
-  let file = path.join(DIST, rel);
-  if (!file.startsWith(DIST) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, 'index.html');
-  if (!fs.existsSync(file)) { res.writeHead(404); return res.end('build not found - run: npm run build'); }
-  const ext = path.extname(file).toLowerCase();
-  // Content-hashed assets under /assets can be cached forever; index.html (and the SPA
-  // fallback) must always revalidate so a new build is picked up without a hard refresh.
-  const isHashedAsset = /[\\/]assets[\\/]/.test(file) && ext !== '.html';
-  const cache = isHashedAsset ? 'public, max-age=31536000, immutable' : 'no-cache, no-store, must-revalidate';
-  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': cache });
-  fs.createReadStream(file).pipe(res);
+// The legacy report-app SPA has been retired; the unified webapp under /webapp
+// is now the sole frontend. Any non-API, non-/webapp request redirects there.
+function redirectToWebapp(req, res) {
+  res.writeHead(302, { Location: '/webapp/app', 'Cache-Control': 'no-store' });
+  res.end();
 }
 
 const server = http.createServer((req, res) => {
@@ -157,7 +147,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.pathname.startsWith('/api/')) return handleApi(req, res, url);
-  return serveStatic(req, res, url);
+  return redirectToWebapp(req, res);
 });
 
 attachRealtime(server);
