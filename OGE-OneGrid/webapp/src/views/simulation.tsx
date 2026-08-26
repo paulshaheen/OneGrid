@@ -1,95 +1,85 @@
-import { FlaskConical } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { ComponentType } from "react";
 
-import { AppShell, PageHeader } from "@/components/ops/AppShell";
+import { AppShell } from "@/components/ops/AppShell";
+import { MODES } from "@/report/lib/themes.js";
 
-// P1: Failure Simulation, ported from the report-app twin/Simulation view. Fast-forwards
-// an asset to its predicted breakdown using the stop + survival models. Sample curve.
-function Card({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="rounded-md border bg-card px-4 py-3">
-      <div className="label-xs">{label}</div>
-      <div className="mt-0.5 text-[15px] font-semibold">{value}</div>
-      <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>
-    </div>
-  );
-}
+type Asset = { asset_id: string; name: string; plant: string; unit: string; status: string };
 
-// A degrading-signal curve that crosses the limit at the predicted failure day.
-function SimCurve() {
-  const W = 800;
-  const H = 300;
-  const failX = 0.72; // fraction of horizon where it trips
-  const limit = 78;
-  const pts: string[] = [];
-  for (let i = 0; i <= 100; i++) {
-    const t = i / 100;
-    const base = 20 + t * 40;
-    const accel = t > 0.45 ? Math.pow((t - 0.45) / 0.55, 2) * 55 : 0;
-    const y = Math.min(100, base + accel + Math.sin(t * 22) * 2.2);
-    pts.push(`${(t * W).toFixed(1)},${(H - (y / 100) * H).toFixed(1)}`);
-  }
-  const ly = H - (limit / 100) * H;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-[300px] w-full" preserveAspectRatio="none">
-      <line
-        x1="0"
-        y1={ly}
-        x2={W}
-        y2={ly}
-        stroke="var(--color-risk-high)"
-        strokeWidth="1.5"
-        strokeDasharray="6 5"
-      />
-      <text x="8" y={ly - 6} className="fill-risk-high text-[11px]">
-        stop threshold
-      </text>
-      <polyline
-        points={pts.join(" ")}
-        fill="none"
-        stroke="var(--color-primary)"
-        strokeWidth="2.5"
-      />
-      <line
-        x1={failX * W}
-        y1="0"
-        x2={failX * W}
-        y2={H}
-        stroke="var(--color-risk-critical)"
-        strokeWidth="1.5"
-      />
-      <circle cx={failX * W} cy={H - (limit / 100) * H} r="6" fill="var(--color-risk-critical)" />
-      <text x={failX * W + 8} y="20" className="fill-risk-critical text-[12px] font-semibold">
-        Predicted failure · Day 10.1
-      </text>
-    </svg>
-  );
-}
-
+// Digital Twin · Simulation — the report-app what-if forward simulation (also embedded as a
+// tab in the asset modal). Renders the 3D degradation twin + survival curve + sensor
+// projections for a chosen at-risk asset. Client-only (pulls in the three.js engine).
 export function SimulationPage() {
+  const [Sim, setSim] = useState<ComponentType<Record<string, unknown>> | null>(null);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [selId, setSelId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
+  const sampleRef = useRef<typeof import("@/report/lib/sample.js") | null>(null);
+
+  useEffect(() => {
+    let ok = true;
+    Promise.all([
+      import("@/report/components/Simulation.jsx"),
+      import("@/report/lib/sample.js"),
+    ]).then(([sim, sample]) => {
+      if (!ok) return;
+      sampleRef.current = sample;
+      setSim(() => sim.Simulation);
+      const fa = (sample.fleetAssets() as Asset[]).filter((a) => a.status !== "ok");
+      setAssets(fa);
+      const first = fa[0]?.asset_id ?? null;
+      setSelId(first);
+    });
+    return () => {
+      ok = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selId || !sampleRef.current) return;
+    setDetail(sampleRef.current.assetDetail(selId) as Record<string, unknown>);
+  }, [selId]);
+
+  const theme = MODES.dark;
+  const sel = assets.find((a) => a.asset_id === selId) || null;
+
   return (
-    <AppShell>
-      <PageHeader
-        title="Failure Simulation"
-        description="Fast-forward an asset up to 14 days and watch the twin drive a real breakdown from the stop + survival models."
-      />
-      <div className="space-y-4 p-5">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="rounded-lg border bg-card p-4">
-            <div className="mb-3 flex items-center gap-2 text-[13px] font-semibold">
-              <FlaskConical className="size-4 text-primary" /> Compressor B — projected degradation
+    <AppShell fullHeight>
+      <div className="h-full min-h-[calc(100vh-3.5rem)] overflow-y-auto bg-[#0a0f1a] px-5 py-5 text-[#aeb9cd]">
+        <div className="mx-auto max-w-[1200px]">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-lg font-bold text-[#f5f8fd]">
+                Failure Simulation — Predictive Digital Twin
+              </h1>
+              <div className="text-xs text-[#7d89a1]">
+                Forward what-if from the live stop model + survival curve. Also available inside
+                each asset&apos;s modal (Simulation tab).
+              </div>
             </div>
-            <SimCurve />
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-[#7d89a1]">Asset</span>
+              <select
+                value={selId ?? ""}
+                onChange={(e) => setSelId(e.target.value)}
+                className="rounded-lg border border-[rgba(120,160,255,0.2)] bg-[#0f1522] px-3 py-1.5 text-sm text-[#f5f8fd] outline-none"
+              >
+                {assets.map((a) => (
+                  <option key={a.asset_id} value={a.asset_id}>
+                    {a.plant} · {a.unit} · {a.name} ({a.status})
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <div className="space-y-3">
-            <Card label="Horizon" value="14 days" sub="Projected from live state" />
-            <Card
-              label="Driver"
-              value="Stop + survival models"
-              sub="Short-term stop · long-term hazard"
-            />
-            <Card label="Predicted trip" value="Day 10.1" sub="Bearing wear · root cause" />
-            <Card label="Feedback" value="👍 / 👎" sub="Rate each predicted failure" />
-          </div>
+
+          {Sim && sel && detail ? (
+            <Sim theme={theme} asset={sel} detail={detail} />
+          ) : (
+            <div className="grid h-[60vh] place-items-center text-sm text-slate-400">
+              Loading simulation…
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

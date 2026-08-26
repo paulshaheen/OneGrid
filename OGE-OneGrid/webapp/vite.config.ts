@@ -18,5 +18,19 @@ export default defineConfig({
     viteReact(),
   ],
   // MapLibre ships its own web worker; pre-bundling it breaks worker loading in dev.
-  optimizeDeps: { exclude: ["maplibre-gl"] },
+  // Pre-bundle the report-app 3D/chart/animation deps so the lazily-loaded personas
+  // (Asset Explorer, Simulation, Control Room) don't trigger a first-load optimizer
+  // reload when their routes are first opened.
+  optimizeDeps: {
+    exclude: ["maplibre-gl"],
+    include: [
+      "recharts",
+      "framer-motion",
+      "three",
+      "@react-three/fiber",
+      "@react-three/drei",
+      "@react-three/postprocessing",
+      "postprocessing",
+    ],
+  },
 });

@@ -4,7 +4,7 @@ import { Environment, ContactShadows, Html, OrbitControls, Line } from '@react-t
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
-import { statusOf } from './report-compat.js';
+import { statusOf } from '../lib/format.js';
 import { EquipmentGeometry, equipmentType } from './Equipment.jsx';
 import { NATION, STATES } from './usaGeo.js';
 import { WORLD } from './worldGeo.js';
