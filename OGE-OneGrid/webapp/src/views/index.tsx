@@ -4,7 +4,6 @@ import { useRouter } from "@tanstack/react-router";
 import { ArrowRight, Boxes, Cpu, Sparkles, Waves, Wrench } from "lucide-react";
 
 import { AppShell } from "@/components/ops/AppShell";
-import { OpsMap } from "@/components/ops/OpsMap";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { StatCell } from "@/components/ops/RiskBadge";
 import { postureQuery, useOpsSnapshot } from "@/lib/hooks/use-ops-data";
@@ -62,7 +61,7 @@ function StackBar({ segments }: { segments: { value: number; color: string }[] }
 export function OverviewPage() {
   const router = useRouter();
   const base = useOpsBase();
-  const { assets, risks, riskMap, event, metrics } = useOpsSnapshot(base, 72);
+  const { assets, risks, event, metrics } = useOpsSnapshot(base, 72);
   const postures = useQuery(postureQuery(base)).data ?? [];
   const [twin, setTwin] = useState<Twin | null>(null);
 
@@ -196,303 +195,302 @@ export function OverviewPage() {
 
   return (
     <AppShell fullHeight>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1600px] space-y-4 p-5">
-          {/* hero status band */}
-          <div
-            className="flex flex-wrap items-center gap-4 rounded-lg border p-4"
-            style={{
-              background: `linear-gradient(90deg, ${statusColor}14, transparent 60%)`,
-              borderLeft: `3px solid ${statusColor}`,
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <span className="relative flex size-3">
-                {statusKey !== "normal" && (
+      <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-[1600px] space-y-4 p-5">
+            {/* hero status band */}
+            <div
+              className="flex flex-wrap items-center gap-4 rounded-lg border p-4"
+              style={{
+                background: `linear-gradient(90deg, ${statusColor}14, transparent 60%)`,
+                borderLeft: `3px solid ${statusColor}`,
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="relative flex size-3">
+                  {statusKey !== "normal" && (
+                    <span
+                      className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+                      style={{ background: statusColor }}
+                    />
+                  )}
                   <span
-                    className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+                    className="relative inline-flex size-3 rounded-full"
                     style={{ background: statusColor }}
                   />
-                )}
-                <span
-                  className="relative inline-flex size-3 rounded-full"
-                  style={{ background: statusColor }}
-                />
-              </span>
-              <div>
-                <div className="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
-                  Estate Command
-                </div>
-                <div className="text-xl leading-tight font-semibold" style={{ color: statusColor }}>
-                  {statusLabel}
+                </span>
+                <div>
+                  <div className="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
+                    Estate Command
+                  </div>
+                  <div
+                    className="text-xl leading-tight font-semibold"
+                    style={{ color: statusColor }}
+                  >
+                    {statusLabel}
+                  </div>
                 </div>
               </div>
-            </div>
-            <p className="min-w-[280px] flex-1 text-[13px] text-muted-foreground">{summary}</p>
-            <div className="flex items-center gap-2">
-              {event?.cycleShift && (
-                <span className="num rounded-sm border px-2 py-1 text-[11px] text-muted-foreground">
-                  {event.cycleShift.shiftMi} mi {event.cycleShift.shiftDirection} · {event.cycleId}{" "}
-                  {event ? relativeTime(event.updatedAtIso) : ""}
-                </span>
-              )}
-              <OpsLink
-                to="/copilot"
-                className="inline-flex items-center gap-2 rounded-sm border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/15"
-              >
-                <Sparkles className="size-3.5" /> Operations assistant
-              </OpsLink>
-            </div>
-          </div>
-
-          {/* combined estate KPIs */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <StatCell
-              label="Total Assets"
-              value={totalAssets}
-              sub={`${assets.length} infra · ${twin?.assets.length ?? "—"} equipment`}
-            />
-            <StatCell
-              label="Estate Critical"
-              value={estateCritical}
-              tone="critical"
-              sub={`${stormCrit} storm · ${equipCrit} equipment`}
-            />
-            <StatCell
-              label="Storm-Exposed"
-              value={metrics.exposed}
-              tone="high"
-              sub="elevated or higher"
-            />
-            <StatCell
-              label="Equipment At-Risk"
-              value={equipRisk}
-              tone="elevated"
-              sub="watch or critical"
-            />
-            <StatCell
-              label="Open Work Orders"
-              value={twin?.openWo ?? "—"}
-              sub="digital-twin fleet"
-            />
-            <StatCell
-              label="First Storm Impact"
-              value={metrics.firstImpactHours != null ? `${metrics.firstImpactHours} h` : "—"}
-              sub="earliest asset onset"
-            />
-          </div>
-
-          {/* two domains at a glance */}
-          <div className="grid gap-4 xl:grid-cols-2">
-            {/* weather / storm exposure */}
-            <div className="panel overflow-hidden">
-              <div className="flex items-center justify-between border-b px-4 py-2.5">
-                <div className="flex items-center gap-2 text-[13px] font-semibold">
-                  <Waves className="size-4" style={{ color: "#5aa9ff" }} /> Storm Exposure · Weather
-                </div>
-                <OpsLink to="/map" className="text-[11px] text-primary hover:underline">
-                  Live Map →
+              <p className="min-w-[280px] flex-1 text-[13px] text-muted-foreground">{summary}</p>
+              <div className="flex items-center gap-2">
+                {event?.cycleShift && (
+                  <span className="num rounded-sm border px-2 py-1 text-[11px] text-muted-foreground">
+                    {event.cycleShift.shiftMi} mi {event.cycleShift.shiftDirection} ·{" "}
+                    {event.cycleId} {event ? relativeTime(event.updatedAtIso) : ""}
+                  </span>
+                )}
+                <OpsLink
+                  to="/copilot"
+                  className="inline-flex items-center gap-2 rounded-sm border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/15"
+                >
+                  <Sparkles className="size-3.5" /> Operations assistant
                 </OpsLink>
               </div>
-              <div className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_200px]">
-                <div className="space-y-3">
-                  {event && (
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-md border bg-card px-2 py-2">
-                        <div className="num text-lg leading-none font-semibold">
-                          Cat {event.currentCategory}
+            </div>
+
+            {/* combined estate KPIs */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <StatCell
+                label="Total Assets"
+                value={totalAssets}
+                sub={`${assets.length} infra · ${twin?.assets.length ?? "—"} equipment`}
+              />
+              <StatCell
+                label="Estate Critical"
+                value={estateCritical}
+                tone="critical"
+                sub={`${stormCrit} storm · ${equipCrit} equipment`}
+              />
+              <StatCell
+                label="Storm-Exposed"
+                value={metrics.exposed}
+                tone="high"
+                sub="elevated or higher"
+              />
+              <StatCell
+                label="Equipment At-Risk"
+                value={equipRisk}
+                tone="elevated"
+                sub="watch or critical"
+              />
+              <StatCell
+                label="Open Work Orders"
+                value={twin?.openWo ?? "—"}
+                sub="digital-twin fleet"
+              />
+              <StatCell
+                label="First Storm Impact"
+                value={metrics.firstImpactHours != null ? `${metrics.firstImpactHours} h` : "—"}
+                sub="earliest asset onset"
+              />
+            </div>
+
+            {/* two domains at a glance */}
+            <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
+              {/* weather / storm exposure */}
+              <div className="panel overflow-hidden">
+                <div className="flex items-center justify-between border-b px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-[13px] font-semibold">
+                    <Waves className="size-4" style={{ color: "#5aa9ff" }} /> Storm Exposure ·
+                    Weather
+                  </div>
+                  <OpsLink to="/map" className="text-[11px] text-primary hover:underline">
+                    Live Map →
+                  </OpsLink>
+                </div>
+                <div className="p-4">
+                  <div className="space-y-3">
+                    {event && (
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-md border bg-card px-2 py-2">
+                          <div className="num text-lg leading-none font-semibold">
+                            Cat {event.currentCategory}
+                          </div>
+                          <div className="label-xs mt-1">{event.name}</div>
                         </div>
-                        <div className="label-xs mt-1">{event.name}</div>
+                        <div className="rounded-md border bg-card px-2 py-2">
+                          <div className="num text-lg leading-none font-semibold">
+                            {event.currentWindMph}
+                          </div>
+                          <div className="label-xs mt-1">mph wind</div>
+                        </div>
+                        <div className="rounded-md border bg-card px-2 py-2">
+                          <div className="num text-lg leading-none font-semibold">
+                            {Math.round(event.movementMph)}
+                          </div>
+                          <div className="label-xs mt-1">mph {event.movementDeg}°</div>
+                        </div>
                       </div>
-                      <div className="rounded-md border bg-card px-2 py-2">
-                        <div className="num text-lg leading-none font-semibold">
-                          {event.currentWindMph}
-                        </div>
-                        <div className="label-xs mt-1">mph wind</div>
+                    )}
+                    <div>
+                      <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Exposure across {assets.length} infrastructure assets</span>
+                        <span className="num">{metrics.exposed} exposed</span>
                       </div>
-                      <div className="rounded-md border bg-card px-2 py-2">
-                        <div className="num text-lg leading-none font-semibold">
-                          {Math.round(event.movementMph)}
-                        </div>
-                        <div className="label-xs mt-1">mph {event.movementDeg}°</div>
+                      <StackBar segments={weatherSegs} />
+                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                        {weatherSegs.map((s) => (
+                          <span
+                            key={s.level}
+                            className="inline-flex items-center gap-1 text-[11px]"
+                          >
+                            <span className="size-2 rounded-full" style={{ background: s.color }} />
+                            <span className="text-muted-foreground">{RISK_LABEL[s.level]}</span>
+                            <span className="num">{s.value}</span>
+                          </span>
+                        ))}
                       </div>
                     </div>
-                  )}
+                    <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                      {postureRollup.map((p) => (
+                        <span
+                          key={p.lvl}
+                          className="num rounded-sm border px-2 py-1 text-[11px]"
+                          style={{
+                            color:
+                              STATUS_COLOR[
+                                p.lvl === 4 ? "critical" : p.lvl === 3 ? "high" : "elevated"
+                              ],
+                          }}
+                        >
+                          {p.lvl === 4 ? "Evacuate" : p.lvl === 3 ? "Down-man" : "Prepare"} {p.n}
+                        </span>
+                      ))}
+                      <span className="num ml-auto text-[11px] text-muted-foreground">
+                        POB {pob.current.toLocaleString()} / {pob.normal.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* digital twin / equipment health */}
+              <div className="panel overflow-hidden">
+                <div className="flex items-center justify-between border-b px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-[13px] font-semibold">
+                    <Boxes className="size-4" style={{ color: "#a986ff" }} /> Equipment Health ·
+                    Digital Twin
+                  </div>
+                  <OpsLink to="/control-room" className="text-[11px] text-primary hover:underline">
+                    Control Room →
+                  </OpsLink>
+                </div>
+                <div className="space-y-3 p-4">
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="rounded-md border bg-card px-2 py-2">
+                      <div className="num text-lg leading-none font-semibold">
+                        {twin?.healthAvg ?? "—"}%
+                      </div>
+                      <div className="label-xs mt-1">fleet health</div>
+                    </div>
+                    <div className="rounded-md border bg-card px-2 py-2">
+                      <div className="num text-lg leading-none font-semibold">
+                        {twin?.tags ?? "—"}
+                      </div>
+                      <div className="label-xs mt-1">tags live</div>
+                    </div>
+                    <div className="rounded-md border bg-card px-2 py-2">
+                      <div className="num text-lg leading-none font-semibold text-risk-high">
+                        {twin?.anomalies ?? "—"}
+                      </div>
+                      <div className="label-xs mt-1">anomalies</div>
+                    </div>
+                    <div className="rounded-md border bg-card px-2 py-2">
+                      <div className="num text-lg leading-none font-semibold">
+                        {twin?.trips ?? "—"}
+                      </div>
+                      <div className="label-xs mt-1">trips · 14d</div>
+                    </div>
+                  </div>
                   <div>
                     <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>Exposure across {assets.length} infrastructure assets</span>
-                      <span className="num">{metrics.exposed} exposed</span>
+                      <span>Condition across {twin?.assets.length ?? 0} equipment assets</span>
+                      <span className="num">{equipRisk} at risk</span>
                     </div>
-                    <StackBar segments={weatherSegs} />
+                    <StackBar segments={equipSegs} />
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                      {weatherSegs.map((s) => (
+                      {equipSegs.map((s) => (
                         <span key={s.level} className="inline-flex items-center gap-1 text-[11px]">
                           <span className="size-2 rounded-full" style={{ background: s.color }} />
-                          <span className="text-muted-foreground">{RISK_LABEL[s.level]}</span>
+                          <span className="text-muted-foreground capitalize">
+                            {s.level === "ok" ? "Healthy" : s.level}
+                          </span>
                           <span className="num">{s.value}</span>
                         </span>
                       ))}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                    {postureRollup.map((p) => (
-                      <span
-                        key={p.lvl}
-                        className="num rounded-sm border px-2 py-1 text-[11px]"
-                        style={{
-                          color:
-                            STATUS_COLOR[
-                              p.lvl === 4 ? "critical" : p.lvl === 3 ? "high" : "elevated"
-                            ],
-                        }}
-                      >
-                        {p.lvl === 4 ? "Evacuate" : p.lvl === 3 ? "Down-man" : "Prepare"} {p.n}
-                      </span>
-                    ))}
-                    <span className="num ml-auto text-[11px] text-muted-foreground">
-                      POB {pob.current.toLocaleString()} / {pob.normal.toLocaleString()}
-                    </span>
+                  <div className="flex flex-wrap gap-2 border-t pt-3">
+                    <OpsLink
+                      to="/control-room"
+                      className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
+                    >
+                      <Cpu className="size-3.5" /> Control Room
+                    </OpsLink>
+                    <OpsLink
+                      to="/maintenance"
+                      className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
+                    >
+                      <Wrench className="size-3.5" /> Maintenance
+                    </OpsLink>
+                    <OpsLink
+                      to="/simulation"
+                      className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
+                    >
+                      <Sparkles className="size-3.5" /> Simulation
+                    </OpsLink>
                   </div>
-                </div>
-                <div className="h-[180px] overflow-hidden rounded-md border sm:h-auto">
-                  <OpsMap
-                    className="h-full min-h-[160px] w-full"
-                    assets={assets}
-                    risks={riskMap}
-                    event={event}
-                    layers={{ assets: true, track: true, wind: true }}
-                    onSelect={() => router.navigate({ to: `${base}/map` })}
-                  />
                 </div>
               </div>
             </div>
 
-            {/* digital twin / equipment health */}
+            {/* blended top-of-estate priorities */}
             <div className="panel overflow-hidden">
               <div className="flex items-center justify-between border-b px-4 py-2.5">
-                <div className="flex items-center gap-2 text-[13px] font-semibold">
-                  <Boxes className="size-4" style={{ color: "#a986ff" }} /> Equipment Health ·
-                  Digital Twin
-                </div>
-                <OpsLink to="/control-room" className="text-[11px] text-primary hover:underline">
-                  Control Room →
+                <span className="text-[13px] font-semibold">Top of estate — act now</span>
+                <OpsLink to="/asset-explorer" className="text-[11px] text-primary hover:underline">
+                  Asset Explorer →
                 </OpsLink>
               </div>
-              <div className="space-y-3 p-4">
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="rounded-md border bg-card px-2 py-2">
-                    <div className="num text-lg leading-none font-semibold">
-                      {twin?.healthAvg ?? "—"}%
-                    </div>
-                    <div className="label-xs mt-1">fleet health</div>
-                  </div>
-                  <div className="rounded-md border bg-card px-2 py-2">
-                    <div className="num text-lg leading-none font-semibold">
-                      {twin?.tags ?? "—"}
-                    </div>
-                    <div className="label-xs mt-1">tags live</div>
-                  </div>
-                  <div className="rounded-md border bg-card px-2 py-2">
-                    <div className="num text-lg leading-none font-semibold text-risk-high">
-                      {twin?.anomalies ?? "—"}
-                    </div>
-                    <div className="label-xs mt-1">anomalies</div>
-                  </div>
-                  <div className="rounded-md border bg-card px-2 py-2">
-                    <div className="num text-lg leading-none font-semibold">
-                      {twin?.trips ?? "—"}
-                    </div>
-                    <div className="label-xs mt-1">trips · 14d</div>
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>Condition across {twin?.assets.length ?? 0} equipment assets</span>
-                    <span className="num">{equipRisk} at risk</span>
-                  </div>
-                  <StackBar segments={equipSegs} />
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                    {equipSegs.map((s) => (
-                      <span key={s.level} className="inline-flex items-center gap-1 text-[11px]">
-                        <span className="size-2 rounded-full" style={{ background: s.color }} />
-                        <span className="text-muted-foreground capitalize">
-                          {s.level === "ok" ? "Healthy" : s.level}
-                        </span>
-                        <span className="num">{s.value}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 border-t pt-3">
-                  <OpsLink
-                    to="/control-room"
-                    className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
+              <div className="divide-y">
+                {priorities.map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => router.navigate({ to: p.to })}
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/40"
                   >
-                    <Cpu className="size-3.5" /> Control Room
-                  </OpsLink>
-                  <OpsLink
-                    to="/maintenance"
-                    className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
-                  >
-                    <Wrench className="size-3.5" /> Maintenance
-                  </OpsLink>
-                  <OpsLink
-                    to="/simulation"
-                    className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
-                  >
-                    <Sparkles className="size-3.5" /> Simulation
-                  </OpsLink>
-                </div>
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ background: p.color }}
+                    />
+                    <span className="w-52 shrink-0 truncate text-[13px] font-medium">{p.name}</span>
+                    <span
+                      className="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap"
+                      style={{
+                        color: p.domain === "infrastructure" ? "#5aa9ff" : "#a986ff",
+                        background: `${p.domain === "infrastructure" ? "#5aa9ff" : "#a986ff"}1a`,
+                      }}
+                    >
+                      {p.domain === "infrastructure" ? "Infrastructure" : "Equipment"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                      {p.concern}
+                    </span>
+                    <span
+                      className="num shrink-0 text-[11px] font-semibold"
+                      style={{ color: p.color }}
+                    >
+                      {p.levelLabel}
+                    </span>
+                    <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+                  </button>
+                ))}
+                {priorities.length === 0 && (
+                  <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                    Estate stable — no critical or high-severity items across either domain.
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-
-          {/* blended top-of-estate priorities */}
-          <div className="panel overflow-hidden">
-            <div className="flex items-center justify-between border-b px-4 py-2.5">
-              <span className="text-[13px] font-semibold">Top of estate — act now</span>
-              <OpsLink to="/asset-explorer" className="text-[11px] text-primary hover:underline">
-                Asset Explorer →
-              </OpsLink>
-            </div>
-            <div className="divide-y">
-              {priorities.map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => router.navigate({ to: p.to })}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/40"
-                >
-                  <span
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={{ background: p.color }}
-                  />
-                  <span className="w-52 shrink-0 truncate text-[13px] font-medium">{p.name}</span>
-                  <span
-                    className="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap"
-                    style={{
-                      color: p.domain === "infrastructure" ? "#5aa9ff" : "#a986ff",
-                      background: `${p.domain === "infrastructure" ? "#5aa9ff" : "#a986ff"}1a`,
-                    }}
-                  >
-                    {p.domain === "infrastructure" ? "Infrastructure" : "Equipment"}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-                    {p.concern}
-                  </span>
-                  <span
-                    className="num shrink-0 text-[11px] font-semibold"
-                    style={{ color: p.color }}
-                  >
-                    {p.levelLabel}
-                  </span>
-                  <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-                </button>
-              ))}
-              {priorities.length === 0 && (
-                <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
-                  Estate stable — no critical or high-severity items across either domain.
-                </div>
-              )}
             </div>
           </div>
         </div>
