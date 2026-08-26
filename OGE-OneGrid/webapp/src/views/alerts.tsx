@@ -119,7 +119,7 @@ export function AlertsPage() {
             {actionError}
           </div>
         )}
-        <div className="panel grid grid-cols-2 divide-x sm:grid-cols-4">
+        <div className="panel grid grid-cols-2 sm:grid-cols-4">
           {counts.map((c) => (
             <button
               key={c.s}
