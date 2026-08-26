@@ -209,10 +209,66 @@ React-19 line for the 3D stack (rendering is Three.js, so **no visual change**):
 - **Tailwind 3→4** — theme-object → CSS-var remap is the biggest mechanical surface.
 - **One Managed Identity** — must be granted every role both apps needed (Fabric, GeoCatalog, Foundry).
 
+## 8f. Navigation IA — cleaned rail (research-backed)
+
+Left rail (**Layout A**) is the chosen model; **Hybrid C stays on the table** as the
+simplest way to reduce rail busyness (see below). Both are wired in the prototype.
+
+**UX research applied** (NN/g *Left-Side Vertical Navigation*; SaaS sidebar UX 2026):
+- Vertical nav *can* hold many items **only if** grouped + progressively disclosed.
+- Group related links; **separate primary work areas from utility/admin** (top vs bottom).
+- **Progressive disclosure**: collapsible groups; auto-collapse the non-active group.
+- **Badges sparingly** — only on core destinations; here they **roll up** to the pillar.
+- Icons support (never replace) labels; clear active/hover state; rail 200–280px.
+- Offer a **collapse-to-icons** toggle (tooltips) to reclaim canvas.
+
+**Overlaps combined (13 raw items → 5 pillars + 2 utility):**
+
+| Raw items (A/B) | → Combined |
+|---|---|
+| Executive Overview (A) + Operations Overview (B) | **Overview** (one) |
+| Weather Events (B) + Forecast Timeline (B) | **Forecast** (tabs) |
+| Asset Mgmt (A/B) + Asset Risk lens + Maintenance lens | **Assets** hub (tabs: Registry / Risk / Maintenance) |
+| Operations Assistant / Copilot (B route) | **removed from rail → the chat dialog** |
+| Thresholds + Governance + Deployment (B/A) | **Admin** (secondary, collapsed by default) |
+| Control Room + Simulation + Maintenance (A) | **Digital Twin** pillar |
+| Live Map + Forecast + Asset Risk + Response Posture (B) | **Weather & Risk** pillar |
+
+**Final rail structure:**
+```
+PRIMARY            ⌂ Overview
+                   ≈ Weather & Risk   [badge:3]   (Live Map · Forecast · Asset Risk · Response Posture)
+                   ◧ Digital Twin     [badge:2]   (Control Room · Simulation · Maintenance)
+                   ▤ Assets                       (Registry · Risk · Maintenance lenses)
+                   ❖ Knowledge Graph
+── divider ──
+SECONDARY          ! Alerts  [badge:5]
+                   ⚙ Admin (collapsed)            (Thresholds · Governance & Security · Deployment)
+```
+- **Layout A**: all pillars in the rail; non-active groups auto-collapse (progressive disclosure). Group badge = Σ child alerts.
+- **Layout C (hybrid, still on table)**: top bar switches the pillar; rail shows **only that pillar's areas** → shortest, least-busy rail. Best when the option count grows.
+- **Alerts**: kept as a badge on core destinations (pillar roll-up + top-bar bell + a dedicated inbox). This is the "counts on each section where there are alerts" the user liked.
+
+## 8g. Chat / Copilot — use OneGrid's dialog (not App B's)
+
+Decision: adopt **App A's `ChatPanel`** as the single assistant (it's cleaner and richer),
+retire App B's `/copilot` route (removing it from the rail). Features to carry over:
+- **Model selector** grouped by vendor (Azure OpenAI / Anthropic / …), persisted.
+- **Provider toggle**: Azure Foundry ↔ Copilot.
+- **Data-Agent mode**: answer from the published **Fabric Data Agent** grounded in the
+  OneGrid semantic model.
+- **Follow-up suggestion chips**, persona-aware context, `Ask the data` docked launcher.
+Backend: unify onto App A's `/api/chat` + `/api/models` (folded into the one server in P2).
+
 ## 9. Decisions locked & remaining questions
 
 **Locked (this session):**
 - ✅ Direction = **Option 2**, full-stack: one SPA, **one backend**, one origin, one deploy.
+- ✅ Navigation = **left rail (Layout A)**, cleaned per §8f (5 pillars + Alerts + Admin,
+  grouped with progressive disclosure, alert badges rolled up to the pillar). **Hybrid C
+  stays on the table** as the simplest-rail option.
+- ✅ Copilot = **OneGrid's `ChatPanel` dialog** (model selector, provider toggle, Data-Agent
+  mode, suggestions); App B's `/copilot` route retired.
 - ✅ Identity = **Entra/MSAL** (App B) as the single front door, **wired up LAST (P5)**;
   **Managed Identity** for all data. Everything is built on the no-auth/sample-data path
   first so auth never blocks progress. Per-user row-level authorization out of scope unless
@@ -222,4 +278,6 @@ React-19 line for the 3D stack (rendering is Three.js, so **no visual change**):
 1. Product **name** everywhere = **OneGrid** (retire "Asset Weather Ops" as a title)?
 2. Is a **public marketing landing** in scope, or console-only?
 3. **Harden the auth gate** (force sign-in on `/app/*`), or keep it soft with sample-data demo?
-4. Which **shell layout (A/B/C)** after trying the prototype?
+4. Final call: **Layout A** (grouped rail) vs **Layout C** (hybrid) — compare in the prototype.
+5. Does the **Assets hub** (Registry/Risk/Maintenance as lenses) feel right, or keep Risk under
+   Weather and Maintenance under Twin only?
