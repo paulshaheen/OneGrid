@@ -239,12 +239,12 @@ export function OverviewPage() {
                     {event.cycleId} {event ? relativeTime(event.updatedAtIso) : ""}
                   </span>
                 )}
-                <OpsLink
-                  to="/copilot"
+                <button
+                  onClick={() => window.dispatchEvent(new Event("onegrid-ask"))}
                   className="inline-flex items-center gap-2 rounded-sm border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/15"
                 >
                   <Sparkles className="size-3.5" /> Operations assistant
-                </OpsLink>
+                </button>
               </div>
             </div>
 
