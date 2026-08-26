@@ -1,190 +1,371 @@
-import { useEffect, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { ContactShadows, OrbitControls } from "@react-three/drei";
-import * as THREE from "three";
-import { Activity, Cpu } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
-import { AppShell, PageHeader } from "@/components/ops/AppShell";
+import { AppShell } from "@/components/ops/AppShell";
+import {
+  buildFacilityModel,
+  fleetAssets,
+  sampleNarrative,
+  useSampleRealtime,
+} from "@/three/sample-facility";
+import { counts, fmt, statusOf, timeAgo } from "@/three/report-compat";
 
-// P3: a real react-three-fiber 3D digital twin (fiber@9 / drei@10 on React 19).
-// A compressor skid you can orbit, with an anomaly pulse pinned to the bearing.
-// Sample telemetry until wired to the live WebSocket in P2.
-const TELEMETRY = [
-  { k: "Vibration", v: "7.8 mm/s", tone: "high", state: "high" },
-  { k: "Bearing temp", v: "96 °C", tone: "monitor", state: "watch" },
-  { k: "Discharge press", v: "61 bar", tone: "normal", state: "ok" },
-  { k: "Flow", v: "12,400 m³/h", tone: "normal", state: "ok" },
-  { k: "Speed", v: "8,950 rpm", tone: "normal", state: "ok" },
-];
-const TONE: Record<string, string> = {
-  high: "bg-risk-high/20 text-risk-high",
-  monitor: "bg-risk-monitor/20 text-risk-monitor",
-  normal: "bg-muted text-muted-foreground",
+// The Control Room renders the REAL report-app 3D twin (Facility.jsx): a holographic
+// US globe with country geometry and plant pins, drill-in to per-unit textured PBR
+// equipment trains, with per-second streaming historian values. The floating chrome
+// (pulse bar, live-alert rail, breadcrumb, asset live panel) is ported from the
+// report-app ControlRoom persona and reskinned to the OneGrid dark theme.
+
+// Facility only reads theme.accent; the panel/heading/sub class strings drive our chrome.
+const theme = {
+  mode: "dark" as const,
+  accent: "#3f96ff",
+  three: {},
+  heading: "text-slate-100",
+  sub: "text-slate-400",
+  panel:
+    "rounded-xl border border-white/10 bg-[#0c1424]/85 backdrop-blur shadow-2xl shadow-black/40",
+  panelSolid: "rounded-lg border border-white/5 bg-[#111b30]",
 };
 
-function metal(color: string, m = 0.45, r = 0.5) {
-  return <meshStandardMaterial color={color} metalness={m} roughness={r} />;
-}
+type Asset = {
+  asset_id: string;
+  name: string;
+  plant: string;
+  unit: string;
+  category: string;
+  status: string;
+  running_tag: string;
+  tags: { tag: string; role?: string; units?: string; desc?: string }[];
+};
 
-function CompressorSkid() {
+function StatusDot({ status }: { status: string }) {
   return (
-    <group position={[0, 0.35, 0]} rotation={[0, -0.5, 0]}>
-      {/* base skid */}
-      <mesh position={[0, -0.5, 0]} receiveShadow castShadow>
-        <boxGeometry args={[4.4, 0.3, 1.9]} />
-        {metal("#39445a", 0.5, 0.55)}
-      </mesh>
-      {/* motor */}
-      <mesh position={[-1.25, 0.15, 0]} castShadow>
-        <boxGeometry args={[1.4, 1.05, 1.05]} />
-        {metal("#5b6675", 0.55, 0.4)}
-      </mesh>
-      {/* coupling */}
-      <mesh position={[-0.4, 0.15, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.14, 0.14, 0.55, 24]} />
-        {metal("#8b98a9", 0.7, 0.3)}
-      </mesh>
-      {/* bearing housing (anomaly zone) */}
-      <mesh position={[-0.02, 0.15, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.24, 0.24, 0.34, 24]} />
-        {metal("#9aa6b6", 0.7, 0.25)}
-      </mesh>
-      {/* compressor body */}
-      <mesh position={[0.95, 0.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.62, 0.62, 1.9, 40]} />
-        {metal("#6b7686", 0.5, 0.35)}
-      </mesh>
-      {/* end cap */}
-      <mesh position={[1.95, 0.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[0.66, 0.66, 0.18, 40]} />
-        {metal("#7c8797", 0.6, 0.3)}
-      </mesh>
-      {/* piping */}
-      <mesh position={[1.7, 0.85, 0.45]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.09, 0.09, 1.4, 16]} />
-        {metal("#465063", 0.6, 0.45)}
-      </mesh>
-      <mesh position={[1.7, 0.85, -0.45]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.09, 0.09, 1.4, 16]} />
-        {metal("#465063", 0.6, 0.45)}
-      </mesh>
-    </group>
+    <span
+      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+      style={{ background: statusOf(status).color }}
+    />
   );
 }
-
-function AnomalyPulse() {
-  const ref = useRef<THREE.Mesh>(null);
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-    if (ref.current) {
-      ref.current.scale.setScalar(1 + Math.sin(t * 3) * 0.22);
-      (ref.current.material as THREE.MeshBasicMaterial).opacity =
-        0.28 + (Math.sin(t * 3) + 1) * 0.12;
-    }
-  });
-  // bearing zone is at group offset (~ -0.02, 0.5, 0) in world space after skid transform
-  return (
-    <group position={[0.05, 0.5, 0.35]}>
-      <mesh ref={ref}>
-        <sphereGeometry args={[0.5, 24, 24]} />
-        <meshBasicMaterial color="#ff5a5f" transparent opacity={0.35} depthWrite={false} />
-      </mesh>
-      <pointLight color="#ff7a5f" intensity={2.2} distance={3} />
-    </group>
-  );
+function Divider() {
+  return <span className="h-6 w-px bg-white/10" />;
 }
-
-function Scene() {
+function Stat({
+  label,
+  value,
+  color,
+  sub,
+}: {
+  label: string;
+  value: React.ReactNode;
+  color?: string;
+  sub?: string;
+}) {
   return (
-    <>
-      <color attach="background" args={["#0a1020"]} />
-      <hemisphereLight args={["#a7c4ee", "#141b2b", 1.1]} />
-      <ambientLight intensity={0.5} />
-      <directionalLight
-        position={[5, 7, 4]}
-        intensity={1.8}
-        castShadow
-        shadow-mapSize={[1024, 1024]}
-      />
-      <directionalLight position={[-4, 4, 6]} intensity={0.8} />
-      <pointLight position={[-4, 3, -3]} color="#2b88d8" intensity={1.8} />
-      <CompressorSkid />
-      <AnomalyPulse />
-      <ContactShadows position={[0, -0.16, 0]} opacity={0.5} blur={2.6} scale={9} far={4} />
-      <OrbitControls
-        autoRotate
-        autoRotateSpeed={0.7}
-        enablePan={false}
-        minDistance={4.5}
-        maxDistance={12}
-        maxPolarAngle={Math.PI / 2.05}
-      />
-    </>
+    <div className="text-center">
+      <div className="text-sm font-bold tabular-nums" style={{ color }}>
+        {value}
+      </div>
+      <div className={`text-[10px] uppercase tracking-wide ${theme.sub}`}>
+        {label}
+        {sub ? <span className="normal-case opacity-70"> {sub}</span> : null}
+      </div>
+    </div>
   );
 }
 
 export function ControlRoomPage() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const model = useMemo(() => buildFacilityModel(), []);
+  const assets = useMemo(() => fleetAssets(), []) as Asset[];
+  const narrative = useMemo(() => sampleNarrative(), []);
+  const { connected, pulse, values, subscribe } = useSampleRealtime();
+
+  const [sel, setSel] = useState<Asset | null>(null);
+  const [activePlant, setActivePlant] = useState<string | null>(null);
+  // Deep-link support: /app/control-room?plant=Riverton drills straight into a site.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search).get("plant");
+    if (p) setActivePlant(p);
+  }, []);
+  const [tagQuery, setTagQuery] = useState("");
+  // Facility.jsx pulls in three/drei/postprocessing — load it client-side only (SSR-safe).
+  const [mod, setMod] = useState<{
+    Facility: React.ComponentType<Record<string, unknown>>;
+    plantGenTags: (p: unknown) => string[];
+  } | null>(null);
+
+  useEffect(() => {
+    let ok = true;
+    import("@/three/Facility.jsx").then((m) => {
+      if (ok) setMod(m as never);
+    });
+    return () => {
+      ok = false;
+    };
+  }, []);
+  useEffect(() => {
+    setTagQuery("");
+  }, [sel?.asset_id]);
+
+  const tags = useMemo(() => (sel?.tags || []).map((t) => t.tag), [sel]);
+  const plantObj = (model?.plants || []).find((p: { name: string }) => p.name === activePlant);
+  const genTags = useMemo(
+    () => (activePlant && plantObj && mod?.plantGenTags ? mod.plantGenTags(plantObj) : []),
+    [activePlant, plantObj, mod],
+  );
+  useEffect(() => {
+    subscribe([...new Set([...tags, ...genTags])]);
+  }, [tags, genTags, subscribe]);
+
+  const enterPlant = (name: string) => {
+    setSel(null);
+    setActivePlant(name);
+  };
+  const backToSites = () => {
+    setSel(null);
+    setActivePlant(null);
+  };
+
+  const c = counts(assets || []);
+  const alerts = (narrative?.briefing || []).slice(0, 12);
+  const plantCrit = plantObj
+    ? (plantObj.unitList || []).reduce(
+        (s: number, u: { assets?: { status: string }[] }) =>
+          s + (u.assets || []).filter((a) => a.status === "critical").length,
+        0,
+      )
+    : 0;
+  const Facility = mod?.Facility;
 
   return (
-    <AppShell>
-      <PageHeader
-        title="Control Room"
-        description="Live 3D digital twin streaming historian values, with anomalies pinned to the exact physical zone."
-      />
-      <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <div className="relative h-[460px] overflow-hidden rounded-lg border bg-surface-raised">
-          {mounted ? (
-            <Canvas shadows camera={{ position: [5.5, 3, 6.5], fov: 42 }} dpr={[1, 2]}>
-              <Scene />
-            </Canvas>
+    <AppShell fullHeight>
+      <div className="relative h-full min-h-[calc(100vh-3.5rem)] w-full overflow-hidden bg-[#0a1120]">
+        <div className="absolute inset-0">
+          {Facility ? (
+            <Facility
+              model={model}
+              theme={theme}
+              selected={sel?.asset_id}
+              onSelect={(n: Asset & { kind?: string }) => setSel(n.kind === "asset" ? n : null)}
+              activePlant={activePlant}
+              onEnterPlant={enterPlant}
+              values={values}
+            />
           ) : (
-            <div className="grid h-full place-items-center text-sm text-muted-foreground">
-              Loading 3D twin…
+            <div className="grid h-full place-items-center text-sm text-slate-400">
+              Building facility twin…
             </div>
           )}
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border bg-card/80 px-2.5 py-1.5 text-[11px] text-muted-foreground backdrop-blur">
-            Compressor B · live twin · drag to orbit
+        </div>
+
+        {/* top pulse bar */}
+        <div className="pointer-events-none absolute left-4 right-4 top-4 z-30 flex items-center justify-between">
+          <div className={`pointer-events-auto flex items-center gap-4 px-4 py-2.5 ${theme.panel}`}>
+            <div className="flex items-center gap-2">
+              <StatusDot status={pulse?.live ? "ok" : "watch"} />
+              <span className={`text-sm font-semibold ${theme.heading}`}>
+                {pulse?.live ? "LIVE" : "HISTORICAL"}
+              </span>
+            </div>
+            <Divider />
+            <Stat label="Healthy" value={c.ok ?? "—"} color="#2fd07a" />
+            <Stat label="Watch" value={c.watch ?? "—"} color="#ffcc4d" />
+            <Stat label="Critical" value={c.critical ?? "—"} color="#ff5470" />
+            <Divider />
+            <Stat label="Tags" value={pulse?.totalTags || model?.counts?.tags || "—"} />
+            <Stat label="Events/min" value={pulse ? Math.round(pulse.eventsPerMin) : "—"} />
+            <Stat label="Last data" value={pulse?.lastTs ? timeAgo(pulse.lastTs) : "—"} />
+          </div>
+          <div className={`pointer-events-auto flex items-center gap-2 px-3 py-2 ${theme.panel}`}>
+            <span
+              className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-rose-400"}`}
+            />
+            <span className={`text-xs ${theme.sub}`}>
+              {connected ? "stream connected" : "reconnecting…"}
+            </span>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-lg border bg-card">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <div className="flex items-center gap-2 text-[13px] font-semibold">
-                <Cpu className="size-4 text-primary" /> Compressor B
-              </div>
-              <span className="rounded-full bg-risk-high/20 px-2 py-0.5 text-[11px] font-semibold text-risk-high">
-                anomaly
-              </span>
-            </div>
-            <ul>
-              {TELEMETRY.map((t) => (
-                <li
-                  key={t.k}
-                  className="flex items-center gap-3 border-t px-4 py-2.5 text-[13px] first:border-t-0"
+        {/* breadcrumb */}
+        <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
+          <div
+            className={`pointer-events-auto flex items-center gap-2 px-3 py-2 text-sm ${theme.panel}`}
+          >
+            <button
+              onClick={backToSites}
+              className={`font-semibold ${activePlant ? theme.sub : theme.heading} transition hover:opacity-80`}
+            >
+              US Fleet Map
+            </button>
+            {activePlant && (
+              <>
+                <span className={theme.sub}>›</span>
+                <span
+                  className="inline-flex items-center gap-1.5 font-semibold"
+                  style={{ color: plantCrit ? "#ff5470" : "#2fd07a" }}
                 >
-                  <Activity className="size-3.5 text-muted-foreground" />
-                  <span className="flex-1">{t.k}</span>
-                  <span className="num">{t.v}</span>
-                  <span
-                    className={`w-14 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold ${TONE[t.tone]}`}
-                  >
-                    {t.state}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-lg border bg-card p-4">
-            <div className="mb-1 text-[13px] font-semibold">Root cause</div>
-            <p className="text-[13px] text-muted-foreground">
-              Stop model predicts a trip in ~26h; the survival model attributes it to bearing wear.
-              Recommend inspection at the next weather window (T-72h).
-            </p>
+                  <StatusDot status={plantCrit ? "critical" : "ok"} />
+                  {activePlant}
+                </span>
+                <button
+                  onClick={backToSites}
+                  className="ml-1 rounded-md px-2 py-0.5 text-xs"
+                  style={{
+                    background: `${theme.accent}18`,
+                    color: theme.accent,
+                    border: `1px solid ${theme.accent}44`,
+                  }}
+                >
+                  ← all sites
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* live alert rail */}
+        <div className="pointer-events-none absolute bottom-4 left-4 top-20 z-30 flex w-[300px] max-w-[80vw] flex-col">
+          <div className={`pointer-events-auto flex flex-col overflow-hidden ${theme.panel}`}>
+            <div
+              className={`border-b border-white/5 px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest ${theme.sub}`}
+            >
+              Live Alert Stream
+            </div>
+            <div className="space-y-1.5 overflow-y-auto p-2">
+              {alerts.map(
+                (
+                  a: { asset: string; level: string; severity: string; headline: string },
+                  i: number,
+                ) => (
+                  <div key={i} className={`px-3 py-2 ${theme.panelSolid}`}>
+                    <div className="flex items-center gap-1.5">
+                      <StatusDot status={a.level === "critical" ? "critical" : "watch"} />
+                      <span className={`truncate text-xs font-semibold ${theme.heading}`}>
+                        {a.asset}
+                      </span>
+                      <span
+                        className="ml-auto text-[10px] font-bold"
+                        style={{ color: a.level === "critical" ? "#ff5470" : "#ffcc4d" }}
+                      >
+                        {a.severity}
+                      </span>
+                    </div>
+                    <div className={`mt-0.5 line-clamp-2 text-[11px] ${theme.sub}`}>
+                      {a.headline}
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* asset live panel */}
+        {sel && (
+          <div
+            className={`absolute bottom-4 right-4 top-20 z-30 flex w-[380px] max-w-[90vw] flex-col overflow-hidden ${theme.panel} duration-200 animate-in slide-in-from-right`}
+          >
+            <div className="flex items-start justify-between border-b border-white/10 p-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <StatusDot status={sel.status} />
+                  <h3 className={`font-bold ${theme.heading}`}>{sel.name}</h3>
+                </div>
+                <div className={`mt-0.5 text-xs ${theme.sub}`}>
+                  {sel.plant} · {sel.unit} · {sel.category}
+                </div>
+              </div>
+              <button
+                onClick={() => setSel(null)}
+                className={`text-2xl leading-none ${theme.sub} hover:opacity-70`}
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-2 overflow-y-auto p-3">
+              <div className="relative pb-1">
+                <input
+                  value={tagQuery}
+                  onChange={(e) => setTagQuery(e.target.value)}
+                  placeholder="Search tags…"
+                  className={`w-full rounded-lg px-3 py-1.5 text-sm text-slate-100 outline-none ${theme.panelSolid}`}
+                />
+              </div>
+              {(() => {
+                const q = tagQuery.trim().toLowerCase();
+                const list = (sel.tags || []).filter(
+                  (t) => !q || `${t.desc || ""} ${t.tag || ""}`.toLowerCase().includes(q),
+                );
+                return (
+                  <>
+                    <div className={`px-1 text-[11px] uppercase tracking-wider ${theme.sub}`}>
+                      {q ? `${list.length} of ${tags.length}` : tags.length} live tags
+                    </div>
+                    {list.slice(0, 120).map((t) => {
+                      const live = values[t.tag];
+                      const v = live?.value;
+                      const ts = live?.ts;
+                      const streaming = !!live && connected && pulse?.live;
+                      const justChanged = !!live && Date.now() - (live.changedAt || 0) < 3500;
+                      return (
+                        <div
+                          key={t.tag}
+                          className={`flex items-center gap-3 p-2.5 ${theme.panelSolid}`}
+                          style={
+                            justChanged
+                              ? { boxShadow: `inset 0 0 0 1px ${theme.accent}66` }
+                              : undefined
+                          }
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className={`truncate text-xs font-medium ${theme.heading}`}>
+                              {t.desc || t.tag}
+                            </div>
+                            <div className={`truncate font-mono text-[10px] ${theme.sub}`}>
+                              {t.tag}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div
+                              className="flex items-center justify-end gap-1 text-lg font-bold tabular-nums"
+                              style={{ color: streaming ? theme.accent : undefined }}
+                            >
+                              {v != null ? fmt(v, 2) : "—"}
+                              {streaming && (
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full bg-emerald-400 ${justChanged ? "animate-ping" : "animate-pulse"}`}
+                                />
+                              )}
+                            </div>
+                            <div className={`text-[10px] ${theme.sub}`}>
+                              {t.units || ""} {ts ? `· ${timeAgo(ts)}` : ""}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {q && list.length === 0 && (
+                      <div className={`py-6 text-center text-sm ${theme.sub}`}>
+                        No tags match “{tagQuery}”.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* hint */}
+        {!sel && Facility && (
+          <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2">
+            <div className={`px-3 py-1.5 text-xs ${theme.sub}`}>
+              {activePlant
+                ? "drag to orbit · click lit equipment for live tags · grey = modeled (no telemetry)"
+                : "drag to pan · scroll to zoom · click a plant pin to enter"}
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );
