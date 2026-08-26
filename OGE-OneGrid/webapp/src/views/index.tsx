@@ -1,164 +1,239 @@
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { ArrowRight, Boxes, Filter, Sparkles, TrendingUp, X } from "lucide-react";
+import { useRouter } from "@tanstack/react-router";
+import { ArrowRight, Boxes, Cpu, Sparkles, Waves, Wrench } from "lucide-react";
 
-import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { AppShell } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
-import { AssetDetailPanel } from "@/components/ops/AssetDetailPanel";
-import { DataOnboarding } from "@/components/ops/DataOnboarding";
-import { RiskBadge, StatCell } from "@/components/ops/RiskBadge";
-import { SkeletonRows } from "@/components/ops/Skeleton";
-import {
-  alertsQuery,
-  postureQuery,
-  thresholdRulesQuery,
-  useOpsSnapshot,
-} from "@/lib/hooks/use-ops-data";
-import { POSTURE_LEVEL_LABEL } from "@/lib/services/posture";
-import { evaluateRules } from "@/lib/services/thresholds";
-import { ASSET_TYPE_LABEL, RISK_LABEL, relativeTime, riskColorVar } from "@/lib/format";
-import type { AssetType, PostureLevel, RiskLevel } from "@/lib/domain/types";
-import { cn } from "@/lib/utils";
+import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
+import { StatCell } from "@/components/ops/RiskBadge";
+import { postureQuery, useOpsSnapshot } from "@/lib/hooks/use-ops-data";
+import { RISK_LABEL, RISK_ORDER, relativeTime, riskColorVar } from "@/lib/format";
+import type { PostureLevel, RiskLevel } from "@/lib/domain/types";
 
-const LEVEL_FILTERS: RiskLevel[] = ["critical", "high", "elevated", "monitor"];
-const TYPE_FILTERS: AssetType[] = [
-  "offshore_platform",
-  "pipeline",
-  "well",
-  "refinery",
-  "lng_terminal",
-  "port",
-];
+// Overview — the OneGrid Estate Command deck: the single highest-level read that fuses
+// BOTH intelligence domains (weather storm-exposure + digital-twin equipment condition)
+// into one situational picture. Above Asset Explorer: no per-asset register — a synthesized
+// status, combined KPIs, a summary card per domain (real data), and the blended top actions.
 
-const POSTURE_TONE: Record<PostureLevel, RiskLevel> = {
-  0: "normal",
-  1: "monitor",
-  2: "elevated",
-  3: "high",
-  4: "critical",
+const EQUIP_COLOR = { critical: "#ff5470", watch: "#ffcc4d", ok: "#2fd07a" } as const;
+const STATUS_COLOR = {
+  critical: "#ff5470",
+  high: "#ff8c42",
+  elevated: "#ffcc4d",
+  normal: "#2fd07a",
 };
 
-function Chip({
-  active,
-  onClick,
-  children,
-  color,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  color?: string;
-}) {
+type TwinAsset = {
+  asset_id: string;
+  name: string;
+  plant: string;
+  unit: string;
+  status: "ok" | "watch" | "critical";
+  health: number;
+  anom_n: number;
+  max_z: number;
+};
+type Twin = {
+  healthAvg: number;
+  crit: number;
+  watch: number;
+  ok: number;
+  tags: number;
+  anomalies: number;
+  trips: number;
+  openWo: number;
+  assets: TwinAsset[];
+};
+
+function StackBar({ segments }: { segments: { value: number; color: string }[] }) {
+  const total = segments.reduce((s, x) => s + x.value, 0) || 1;
   return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "rounded-sm border px-2 py-1 text-[11px] whitespace-nowrap transition-colors",
-        active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60",
+    <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-border">
+      {segments.map((s, i) =>
+        s.value > 0 ? (
+          <div key={i} style={{ width: `${(s.value / total) * 100}%`, background: s.color }} />
+        ) : null,
       )}
-      style={active && color ? { borderColor: color, color } : undefined}
-    >
-      {children}
-    </button>
+    </div>
   );
 }
 
 export function OverviewPage() {
+  const router = useRouter();
   const base = useOpsBase();
-  const { assets, risks, riskMap, event, metrics, isLoading } = useOpsSnapshot(base, 72);
-  const alerts = useQuery(alertsQuery(base)).data ?? [];
+  const { assets, risks, riskMap, event, metrics } = useOpsSnapshot(base, 72);
   const postures = useQuery(postureQuery(base)).data ?? [];
-  const rules = useQuery(thresholdRulesQuery(base)).data ?? [];
+  const [twin, setTwin] = useState<Twin | null>(null);
 
-  const [selected, setSelected] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<string | null>(null);
-  const [levelFilter, setLevelFilter] = useState<Set<RiskLevel>>(new Set());
-  const [typeFilter, setTypeFilter] = useState<Set<AssetType>>(new Set());
-  const [coneOnly, setConeOnly] = useState(false);
+  useEffect(() => {
+    let ok = true;
+    import("@/report/lib/sample.js").then((m) => {
+      if (!ok) return;
+      const fh = m.fleetHealth();
+      const fa = m.fleetAssets() as TwinAsset[];
+      const pd = m.predictionsDetail();
+      const wo = m.workOrdersSummary();
+      const fm = m.facilityModel();
+      setTwin({
+        healthAvg: Math.round(fh.health.avg),
+        crit: fa.filter((a) => a.status === "critical").length,
+        watch: fa.filter((a) => a.status === "watch").length,
+        ok: fa.filter((a) => a.status === "ok").length,
+        tags: fm.counts.tags,
+        anomalies: fh.anomalies.rows ?? 0,
+        trips: pd.counts.critical + pd.counts.high,
+        openWo: wo.open,
+        assets: fa,
+      });
+    });
+    return () => {
+      ok = false;
+    };
+  }, []);
 
-  const toggle = <T,>(set: Set<T>, v: T): Set<T> => {
-    const next = new Set(set);
-    if (next.has(v)) next.delete(v);
-    else next.add(v);
-    return next;
+  // ---- estate-wide synthesis --------------------------------------------
+  const stormCrit = metrics.critical;
+  const equipCrit = twin?.crit ?? 0;
+  const equipRisk = (twin?.crit ?? 0) + (twin?.watch ?? 0);
+  const totalAssets = assets.length + (twin?.assets.length ?? 0);
+  const estateCritical = stormCrit + equipCrit;
+
+  const statusKey: keyof typeof STATUS_COLOR =
+    estateCritical > 0 ? "critical" : metrics.exposed > 0 || equipRisk > 0 ? "elevated" : "normal";
+  const statusLabel =
+    statusKey === "critical" ? "Critical" : statusKey === "elevated" ? "Elevated" : "All clear";
+  const statusColor = STATUS_COLOR[statusKey];
+
+  const summary = useMemo(() => {
+    const parts: string[] = [];
+    if (event) {
+      parts.push(
+        `${event.name} (Cat ${event.currentCategory}) is tracking the estate — ${metrics.exposed} assets exposed, first impact ${metrics.firstImpactHours != null ? `in ${metrics.firstImpactHours} h` : "pending"}.`,
+      );
+    } else {
+      parts.push("No active weather system in the current forecast cycle.");
+    }
+    if (twin) {
+      const worst = [...twin.assets]
+        .filter((a) => a.status !== "ok")
+        .sort((a, b) => a.health - b.health)[0];
+      parts.push(
+        `Digital twin: fleet health ${twin.healthAvg}%, ${twin.crit} critical asset${twin.crit === 1 ? "" : "s"}${worst ? ` (${worst.unit} ${worst.name})` : ""}, ${twin.trips} predicted trip${twin.trips === 1 ? "" : "s"} over 14 days.`,
+      );
+    }
+    return parts.join(" ");
+  }, [event, metrics, twin]);
+
+  // ---- blended top-of-estate priorities ---------------------------------
+  type Prio = {
+    key: string;
+    name: string;
+    domain: "infrastructure" | "equipment";
+    color: string;
+    levelLabel: string;
+    concern: string;
+    rank: number;
+    to: string;
   };
-  const filtersActive = levelFilter.size > 0 || typeFilter.size > 0 || coneOnly;
-  const clearFilters = () => {
-    setLevelFilter(new Set());
-    setTypeFilter(new Set());
-    setConeOnly(false);
-  };
+  const priorities = useMemo<Prio[]>(() => {
+    const infra: Prio[] = risks
+      .filter((r) => r.level === "critical" || r.level === "high")
+      .map((r) => {
+        const a = assets.find((x) => x.id === r.assetId);
+        return {
+          key: `i:${r.assetId}`,
+          name: a?.name ?? r.assetId,
+          domain: "infrastructure" as const,
+          color: riskColorVar(r.level),
+          levelLabel: RISK_LABEL[r.level],
+          concern:
+            r.forecastWindMph >= 74
+              ? `${r.forecastWindMph} mph wind${r.hoursToImpact != null ? ` · ${r.hoursToImpact}h to impact` : ""}`
+              : `${a?.region ?? ""} · ${r.hoursToImpact != null ? `${r.hoursToImpact}h to impact` : "monitoring"}`,
+          rank: r.level === "critical" ? 4 : 3,
+          to: `${base}/risk`,
+        };
+      });
+    const equip: Prio[] = (twin?.assets ?? [])
+      .filter((a) => a.status !== "ok")
+      .map((a) => ({
+        key: `e:${a.asset_id}`,
+        name: `${a.unit} ${a.name}`,
+        domain: "equipment" as const,
+        color: EQUIP_COLOR[a.status],
+        levelLabel: a.status === "critical" ? "Critical" : "Watch",
+        concern: `${a.plant} · ${a.anom_n} anomalies · peak z ${a.max_z} · ${a.health}% health`,
+        rank: a.status === "critical" ? 4 : 2,
+        to: `${base}/asset-explorer?open=${encodeURIComponent(a.asset_id)}`,
+      }));
+    return [...infra, ...equip].sort((a, b) => b.rank - a.rank).slice(0, 8);
+  }, [risks, assets, twin, base]);
 
-  /** One filter predicate feeds both the map and every table on the page. */
-  const filteredAssets = useMemo(
-    () =>
-      assets.filter((a) => {
-        const r = riskMap.get(a.id);
-        if (typeFilter.size && !typeFilter.has(a.type)) return false;
-        if (levelFilter.size && !(r && levelFilter.has(r.level))) return false;
-        if (coneOnly && !r?.insideCone) return false;
-        return true;
-      }),
-    [assets, riskMap, typeFilter, levelFilter, coneOnly],
-  );
-  const filteredIds = useMemo(() => new Set(filteredAssets.map((a) => a.id)), [filteredAssets]);
-
-  const ranked = useMemo(
-    () => risks.filter((r) => filteredIds.has(r.assetId)).sort((a, b) => b.score - a.score),
-    [risks, filteredIds],
-  );
-
-  const postureById = useMemo(() => new Map(postures.map((p) => [p.assetId, p])), [postures]);
-  const assetById = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
-  const selectedAsset = selected ? (assetById.get(selected) ?? null) : null;
-
-  const breaches = useMemo(() => evaluateRules(rules, assets, risks), [rules, assets, risks]);
-  const breachCritical = breaches.filter((b) => b.severity === "critical").length;
-
+  // ---- weather posture rollup -------------------------------------------
   const postureRollup = ([4, 3, 2] as PostureLevel[]).map((lvl) => ({
     lvl,
-    n: postures.filter((p) => p.level === lvl && filteredIds.has(p.assetId)).length,
+    n: postures.filter((p) => p.level === lvl).length,
   }));
-  const pob = postures
-    .filter((p) => filteredIds.has(p.assetId))
-    .reduce(
-      (acc, p) => ({
-        current: acc.current + (p.pobCurrent ?? 0),
-        normal: acc.normal + (p.pobNormal ?? 0),
-      }),
-      { current: 0, normal: 0 },
-    );
+  const pob = postures.reduce(
+    (acc, p) => ({
+      current: acc.current + (p.pobCurrent ?? 0),
+      normal: acc.normal + (p.pobNormal ?? 0),
+    }),
+    { current: 0, normal: 0 },
+  );
 
-  const openAlerts = alerts.filter((a) => a.status !== "resolved");
+  const weatherSegs = RISK_ORDER.map((l) => ({
+    value: risks.filter((r) => r.level === l).length,
+    color: riskColorVar(l),
+    level: l,
+  }));
+  const equipSegs = (["critical", "watch", "ok"] as const).map((s) => ({
+    value: twin ? (s === "critical" ? twin.crit : s === "watch" ? twin.watch : twin.ok) : 0,
+    color: EQUIP_COLOR[s],
+    level: s,
+  }));
 
   return (
     <AppShell fullHeight>
-      <div className="flex min-h-0 flex-col xl:h-full">
-        {/* Metric strip */}
-        <div className="shrink-0 border-b bg-surface">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-3">
-            <div>
-              <h1 className="text-base font-semibold tracking-tight">
-                {event?.name ?? "No active event"} — 72 hour outlook
-              </h1>
-              {event ? (
-                <p className="num mt-0.5 text-[11px] text-muted-foreground">
-                  {event.status} · moving {Math.round(event.movementMph)} mph · {event.cycleId}{" "}
-                  updated {relativeTime(event.updatedAtIso)}
-                </p>
-              ) : (
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  No active system in the current forecast cycle
-                </p>
-              )}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[1600px] space-y-4 p-5">
+          {/* hero status band */}
+          <div
+            className="flex flex-wrap items-center gap-4 rounded-lg border p-4"
+            style={{
+              background: `linear-gradient(90deg, ${statusColor}14, transparent 60%)`,
+              borderLeft: `3px solid ${statusColor}`,
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="relative flex size-3">
+                {statusKey !== "normal" && (
+                  <span
+                    className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+                    style={{ background: statusColor }}
+                  />
+                )}
+                <span
+                  className="relative inline-flex size-3 rounded-full"
+                  style={{ background: statusColor }}
+                />
+              </span>
+              <div>
+                <div className="text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
+                  Estate Command
+                </div>
+                <div className="text-xl leading-tight font-semibold" style={{ color: statusColor }}>
+                  {statusLabel}
+                </div>
+              </div>
             </div>
+            <p className="min-w-[280px] flex-1 text-[13px] text-muted-foreground">{summary}</p>
             <div className="flex items-center gap-2">
               {event?.cycleShift && (
-                <span className="num inline-flex items-center gap-1.5 rounded-sm border border-risk-high/40 bg-risk-high/10 px-2 py-1 text-[11px] text-risk-high">
-                  <TrendingUp className="size-3.5" />
-                  {event.cycleShift.shiftMi} mi {event.cycleShift.shiftDirection} since{" "}
-                  {event.cycleShift.previousCycle}
+                <span className="num rounded-sm border px-2 py-1 text-[11px] text-muted-foreground">
+                  {event.cycleShift.shiftMi} mi {event.cycleShift.shiftDirection} · {event.cycleId}{" "}
+                  {event ? relativeTime(event.updatedAtIso) : ""}
                 </span>
               )}
               <OpsLink
@@ -169,368 +244,256 @@ export function OverviewPage() {
               </OpsLink>
             </div>
           </div>
-          <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+
+          {/* combined estate KPIs */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <StatCell
-              label="Assets monitored"
-              value={metrics.monitored}
-              sub="Across the asset register"
+              label="Total Assets"
+              value={totalAssets}
+              sub={`${assets.length} infra · ${twin?.assets.length ?? "—"} equipment`}
             />
             <StatCell
-              label="Assets exposed"
+              label="Estate Critical"
+              value={estateCritical}
+              tone="critical"
+              sub={`${stormCrit} storm · ${equipCrit} equipment`}
+            />
+            <StatCell
+              label="Storm-Exposed"
               value={metrics.exposed}
-              sub="Elevated risk or higher"
+              tone="high"
+              sub="elevated or higher"
             />
             <StatCell
-              label="Inside forecast cone"
-              value={metrics.insideCone}
-              sub="Projected impact corridor"
-            />
-            <StatCell label="High risk" value={metrics.high} tone="high" sub="Score 62–79" />
-            <StatCell label="Critical" value={metrics.critical} tone="critical" sub="Score 80+" />
-            <StatCell
-              label="Threshold breaches"
-              value={breaches.length}
-              tone={breachCritical > 0 ? "critical" : "high"}
-              sub={`${breachCritical} at critical severity`}
+              label="Equipment At-Risk"
+              value={equipRisk}
+              tone="elevated"
+              sub="watch or critical"
             />
             <StatCell
-              label="First expected impact"
-              value={metrics.firstImpactHours === null ? "—" : `${metrics.firstImpactHours} h`}
-              sub="Earliest asset onset"
+              label="Open Work Orders"
+              value={twin?.openWo ?? "—"}
+              sub="digital-twin fleet"
+            />
+            <StatCell
+              label="First Storm Impact"
+              value={metrics.firstImpactHours != null ? `${metrics.firstImpactHours} h` : "—"}
+              sub="earliest asset onset"
             />
           </div>
-        </div>
 
-        {/* Digital Twin · fleet health — blends the report-app Executive view */}
-        <div className="shrink-0 border-b bg-surface px-4 py-3">
-          <div className="mb-2 flex items-center gap-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            <Boxes className="size-3.5 text-primary" /> Digital Twin · fleet health
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-md border bg-card px-4 py-3">
-              <div className="label-xs">Fleet health</div>
-              <div className="num text-2xl leading-none font-semibold">92%</div>
-              <div className="mt-1 text-[11px] text-muted-foreground">+0.4% vs yesterday</div>
-            </div>
-            <div className="rounded-md border bg-card px-4 py-3">
-              <div className="label-xs">Assets streaming</div>
-              <div className="num text-2xl leading-none font-semibold">48</div>
-              <div className="mt-1 text-[11px] text-muted-foreground">live historian</div>
-            </div>
-            <div className="rounded-md border bg-card px-4 py-3">
-              <div className="label-xs">Open anomalies</div>
-              <div className="num text-2xl leading-none font-semibold text-risk-high">2</div>
-              <div className="mt-1 text-[11px] text-muted-foreground">Compressor B · Boiler 3</div>
-            </div>
-            <div className="rounded-md border bg-card px-4 py-3">
-              <div className="label-xs">Predicted trips · 14d</div>
-              <div className="num text-2xl leading-none font-semibold">3</div>
-              <div className="mt-1 text-[11px] text-muted-foreground">survival model</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filter bar — drives the map and every table below */}
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b bg-panel px-4 py-2">
-          <Filter className="size-3.5 text-muted-foreground" />
-          {LEVEL_FILTERS.map((l) => (
-            <Chip
-              key={l}
-              active={levelFilter.has(l)}
-              color={riskColorVar(l)}
-              onClick={() => setLevelFilter((s) => toggle(s, l))}
-            >
-              {RISK_LABEL[l]}
-              <span className="num ml-1 opacity-70">
-                {risks.filter((r) => r.level === l).length}
-              </span>
-            </Chip>
-          ))}
-          <span className="mx-1 h-4 w-px bg-border" />
-          {TYPE_FILTERS.map((t) => (
-            <Chip
-              key={t}
-              active={typeFilter.has(t)}
-              onClick={() => setTypeFilter((s) => toggle(s, t))}
-            >
-              {ASSET_TYPE_LABEL[t]}
-            </Chip>
-          ))}
-          <span className="mx-1 h-4 w-px bg-border" />
-          <Chip active={coneOnly} onClick={() => setConeOnly((v) => !v)}>
-            Inside cone only
-          </Chip>
-          {filtersActive && (
-            <button
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3" /> Clear
-            </button>
-          )}
-          <span className="num ml-auto text-[11px] text-muted-foreground">
-            {filteredAssets.length} of {assets.length} assets in view
-          </span>
-        </div>
-
-        {/* Command-center body — every pane scrolls inside itself */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-border xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="grid min-h-0 grid-rows-[auto_auto] gap-px bg-border xl:grid-rows-[minmax(0,1.35fr)_minmax(0,1fr)]">
-            <div className="relative h-[440px] min-h-0 bg-background lg:h-[520px] xl:h-auto">
-              <OpsMap
-                className="h-full w-full"
-                assets={filteredAssets}
-                risks={riskMap}
-                event={event}
-                layers={{ assets: true, track: true, wind: true, uncertainty: true }}
-                selectedId={selected}
-                highlightIds={hovered ? [hovered] : []}
-                onSelect={setSelected}
-              />
-              {assets.length === 0 && (
-                <div className="absolute inset-0 z-10">
-                  <DataOnboarding className="h-full bg-background/35 backdrop-blur-[1px]" />
+          {/* two domains at a glance */}
+          <div className="grid gap-4 xl:grid-cols-2">
+            {/* weather / storm exposure */}
+            <div className="panel overflow-hidden">
+              <div className="flex items-center justify-between border-b px-4 py-2.5">
+                <div className="flex items-center gap-2 text-[13px] font-semibold">
+                  <Waves className="size-4" style={{ color: "#5aa9ff" }} /> Storm Exposure · Weather
                 </div>
-              )}
-            </div>
-
-            <div className="flex h-[420px] min-h-0 flex-col bg-background xl:h-auto">
-              <div className="flex shrink-0 items-center justify-between border-b px-4 py-2">
-                <span className="label-xs">Highest exposure — ranked</span>
-                <OpsLink to="/risk" className="text-[11px] text-primary hover:underline">
-                  Full asset risk register
+                <OpsLink to="/map" className="text-[11px] text-primary hover:underline">
+                  Live Map →
                 </OpsLink>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 z-10 bg-surface">
-                    <tr className="text-left text-[11px] text-muted-foreground">
-                      <th className="px-4 py-2 font-medium">Asset</th>
-                      <th className="px-3 py-2 font-medium">Type</th>
-                      <th className="px-3 py-2 font-medium">Risk</th>
-                      <th className="px-3 py-2 font-medium">Posture</th>
-                      <th className="px-3 py-2 font-medium">ETA</th>
-                      <th className="px-4 py-2 font-medium">Primary threat</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isLoading && ranked.length === 0 && <SkeletonRows rows={8} cols={6} />}
-                    {ranked.slice(0, 80).map((r) => {
-                      const asset = assetById.get(r.assetId);
-                      if (!asset) return null;
-                      const p = postureById.get(r.assetId);
-                      return (
-                        <tr
-                          key={r.assetId}
-                          className={cn(
-                            "cursor-pointer border-t hover:bg-accent/50",
-                            selected === r.assetId && "bg-accent/70",
-                          )}
-                          onClick={() => setSelected(r.assetId)}
-                          onMouseEnter={() => setHovered(r.assetId)}
-                          onMouseLeave={() => setHovered(null)}
-                        >
-                          <td className="px-4 py-1.5 font-medium">{asset.name}</td>
-                          <td className="px-3 py-1.5 text-muted-foreground">
-                            {ASSET_TYPE_LABEL[asset.type]}
-                          </td>
-                          <td className="px-3 py-1.5">
-                            <RiskBadge level={r.level} score={r.score} />
-                          </td>
-                          <td className="px-3 py-1.5">
-                            {p && p.level > 0 ? (
-                              <span
-                                className="text-[11px]"
-                                style={{ color: riskColorVar(POSTURE_TONE[p.level]) }}
-                              >
-                                {POSTURE_LEVEL_LABEL[p.level]}
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="num px-3 py-1.5">{r.hoursToImpact ?? "—"} h</td>
-                          <td className="px-4 py-1.5 text-muted-foreground">
-                            {r.forecastWindMph >= 74
-                              ? `${r.forecastWindMph} mph sustained wind`
-                              : `${r.rainfallIn} in rainfall`}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!isLoading && ranked.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                          No assets match the current filters.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Right rail */}
-          <div className="min-h-0 bg-background xl:overflow-y-auto">
-            {selectedAsset ? (
-              <AssetDetailPanel
-                asset={selectedAsset}
-                risk={riskMap.get(selectedAsset.id)}
-                event={event}
-                allAssets={assets}
-                onClose={() => setSelected(null)}
-                onSelect={setSelected}
-              />
-            ) : (
-              <div className="divide-y">
-                <div className="p-4">
-                  <div className="label-xs mb-2 flex items-center gap-1.5">
-                    <Sparkles className="size-3.5 text-primary" /> Operational summary
-                  </div>
-                  {event ? (
-                    <>
-                      <p className="text-xs leading-relaxed">
-                        <strong>{event.name}</strong> is the active system for the current forecast
-                        cycle. <strong>{metrics.insideCone} facilities</strong> sit inside the
-                        projected corridor and <strong>{metrics.exposed} assets</strong> carry
-                        elevated risk or higher.{" "}
-                        <strong>{breaches.length} configured thresholds</strong> are breached this
-                        cycle
-                        {metrics.firstImpactHours !== null
-                          ? `, with first onset in ${metrics.firstImpactHours} hours`
-                          : ""}
-                        .
-                      </p>
-                      {event.cycleShift && (
-                        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                          {event.cycleShift.summary}
-                        </p>
-                      )}
-                      <div className="mt-2 text-[10px] text-muted-foreground">
-                        Grounded in the {event.cycleId} forecast cycle, asset register, threshold
-                        rules and risk model.
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      No active weather event in the current forecast cycle. When the weather
-                      provider reports a system in the operating region, a grounded summary of
-                      exposed facilities and breached thresholds appears here.
-                    </p>
-                  )}
-                </div>
-
-                <div className="p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="label-xs">Response posture</span>
-                    <OpsLink to="/posture" className="text-[11px] text-primary hover:underline">
-                      Open gate board
-                    </OpsLink>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {postureRollup.map((p) => (
-                      <div key={p.lvl} className="rounded-sm border px-2 py-2">
-                        <div
-                          className="text-[10px]"
-                          style={{ color: riskColorVar(POSTURE_TONE[p.lvl]) }}
-                        >
-                          {POSTURE_LEVEL_LABEL[p.lvl]}
+              <div className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_200px]">
+                <div className="space-y-3">
+                  {event && (
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-md border bg-card px-2 py-2">
+                        <div className="num text-lg leading-none font-semibold">
+                          Cat {event.currentCategory}
                         </div>
-                        <div className="num mt-0.5 text-lg leading-none font-semibold">{p.n}</div>
+                        <div className="label-xs mt-1">{event.name}</div>
                       </div>
-                    ))}
+                      <div className="rounded-md border bg-card px-2 py-2">
+                        <div className="num text-lg leading-none font-semibold">
+                          {event.currentWindMph}
+                        </div>
+                        <div className="label-xs mt-1">mph wind</div>
+                      </div>
+                      <div className="rounded-md border bg-card px-2 py-2">
+                        <div className="num text-lg leading-none font-semibold">
+                          {Math.round(event.movementMph)}
+                        </div>
+                        <div className="label-xs mt-1">mph {event.movementDeg}°</div>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>Exposure across {assets.length} infrastructure assets</span>
+                      <span className="num">{metrics.exposed} exposed</span>
+                    </div>
+                    <StackBar segments={weatherSegs} />
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                      {weatherSegs.map((s) => (
+                        <span key={s.level} className="inline-flex items-center gap-1 text-[11px]">
+                          <span className="size-2 rounded-full" style={{ background: s.color }} />
+                          <span className="text-muted-foreground">{RISK_LABEL[s.level]}</span>
+                          <span className="num">{s.value}</span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="num mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>Personnel on board</span>
-                    <span className="text-foreground">
-                      {pob.current} / {pob.normal}
+                  <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                    {postureRollup.map((p) => (
+                      <span
+                        key={p.lvl}
+                        className="num rounded-sm border px-2 py-1 text-[11px]"
+                        style={{
+                          color:
+                            STATUS_COLOR[
+                              p.lvl === 4 ? "critical" : p.lvl === 3 ? "high" : "elevated"
+                            ],
+                        }}
+                      >
+                        {p.lvl === 4 ? "Evacuate" : p.lvl === 3 ? "Down-man" : "Prepare"} {p.n}
+                      </span>
+                    ))}
+                    <span className="num ml-auto text-[11px] text-muted-foreground">
+                      POB {pob.current.toLocaleString()} / {pob.normal.toLocaleString()}
                     </span>
                   </div>
                 </div>
-
-                <div className="p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="label-xs">Threshold breaches</span>
-                    <OpsLink to="/thresholds" className="text-[11px] text-primary hover:underline">
-                      Configure
-                    </OpsLink>
-                  </div>
-                  <ul className="space-y-1.5">
-                    {breaches.slice(0, 5).map((b, i) => (
-                      <li
-                        key={`${b.ruleId}-${b.assetId}-${i}`}
-                        className="text-[11px] leading-snug"
-                      >
-                        <button
-                          className="text-left hover:underline"
-                          onClick={() => setSelected(b.assetId)}
-                          onMouseEnter={() => setHovered(b.assetId)}
-                          onMouseLeave={() => setHovered(null)}
-                        >
-                          <span className="font-medium">
-                            {assetById.get(b.assetId)?.name ?? b.assetId}
-                          </span>
-                          <span className="text-muted-foreground"> — {b.ruleName}</span>
-                        </button>
-                      </li>
-                    ))}
-                    {breaches.length === 0 && (
-                      <li className="text-[11px] text-muted-foreground">
-                        No thresholds breached this cycle.
-                      </li>
-                    )}
-                  </ul>
+                <div className="h-[180px] overflow-hidden rounded-md border sm:h-auto">
+                  <OpsMap
+                    className="h-full min-h-[160px] w-full"
+                    assets={assets}
+                    risks={riskMap}
+                    event={event}
+                    layers={{ assets: true, track: true, wind: true }}
+                    onSelect={() => router.navigate({ to: `${base}/map` })}
+                  />
                 </div>
+              </div>
+            </div>
 
-                <div>
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="label-xs">Active alerts</span>
-                    <OpsLink to="/alerts" className="text-[11px] text-primary hover:underline">
-                      All alerts
-                    </OpsLink>
-                  </div>
-                  <ul className="divide-y border-t">
-                    {openAlerts.slice(0, 6).map((a) => (
-                      <li key={a.id} className="px-4 py-2.5">
-                        <div className="flex items-start gap-2">
-                          <span
-                            className="mt-1.5 size-1.5 shrink-0 rounded-full"
-                            style={{
-                              backgroundColor: riskColorVar(
-                                a.severity === "critical"
-                                  ? "critical"
-                                  : a.severity === "warning"
-                                    ? "high"
-                                    : "monitor",
-                              ),
-                            }}
-                          />
-                          <div>
-                            <div className="text-xs leading-snug font-medium">{a.title}</div>
-                            <div className="mt-0.5 text-[10px] text-muted-foreground">
-                              {a.owner} · {relativeTime(a.createdAtIso)}
-                            </div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                    {openAlerts.length === 0 && (
-                      <li className="px-4 py-6 text-center text-[11px] text-muted-foreground">
-                        No active alerts.
-                      </li>
-                    )}
-                  </ul>
+            {/* digital twin / equipment health */}
+            <div className="panel overflow-hidden">
+              <div className="flex items-center justify-between border-b px-4 py-2.5">
+                <div className="flex items-center gap-2 text-[13px] font-semibold">
+                  <Boxes className="size-4" style={{ color: "#a986ff" }} /> Equipment Health ·
+                  Digital Twin
                 </div>
-
-                <OpsLink
-                  to="/timeline"
-                  className="flex items-center gap-1 px-4 py-3 text-[11px] text-primary hover:underline"
-                >
-                  Scrub the forecast timeline <ArrowRight className="size-3" />
+                <OpsLink to="/control-room" className="text-[11px] text-primary hover:underline">
+                  Control Room →
                 </OpsLink>
               </div>
-            )}
+              <div className="space-y-3 p-4">
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="rounded-md border bg-card px-2 py-2">
+                    <div className="num text-lg leading-none font-semibold">
+                      {twin?.healthAvg ?? "—"}%
+                    </div>
+                    <div className="label-xs mt-1">fleet health</div>
+                  </div>
+                  <div className="rounded-md border bg-card px-2 py-2">
+                    <div className="num text-lg leading-none font-semibold">
+                      {twin?.tags ?? "—"}
+                    </div>
+                    <div className="label-xs mt-1">tags live</div>
+                  </div>
+                  <div className="rounded-md border bg-card px-2 py-2">
+                    <div className="num text-lg leading-none font-semibold text-risk-high">
+                      {twin?.anomalies ?? "—"}
+                    </div>
+                    <div className="label-xs mt-1">anomalies</div>
+                  </div>
+                  <div className="rounded-md border bg-card px-2 py-2">
+                    <div className="num text-lg leading-none font-semibold">
+                      {twin?.trips ?? "—"}
+                    </div>
+                    <div className="label-xs mt-1">trips · 14d</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Condition across {twin?.assets.length ?? 0} equipment assets</span>
+                    <span className="num">{equipRisk} at risk</span>
+                  </div>
+                  <StackBar segments={equipSegs} />
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                    {equipSegs.map((s) => (
+                      <span key={s.level} className="inline-flex items-center gap-1 text-[11px]">
+                        <span className="size-2 rounded-full" style={{ background: s.color }} />
+                        <span className="text-muted-foreground capitalize">
+                          {s.level === "ok" ? "Healthy" : s.level}
+                        </span>
+                        <span className="num">{s.value}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 border-t pt-3">
+                  <OpsLink
+                    to="/control-room"
+                    className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
+                  >
+                    <Cpu className="size-3.5" /> Control Room
+                  </OpsLink>
+                  <OpsLink
+                    to="/maintenance"
+                    className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
+                  >
+                    <Wrench className="size-3.5" /> Maintenance
+                  </OpsLink>
+                  <OpsLink
+                    to="/simulation"
+                    className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] font-medium hover:bg-accent/50"
+                  >
+                    <Sparkles className="size-3.5" /> Simulation
+                  </OpsLink>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* blended top-of-estate priorities */}
+          <div className="panel overflow-hidden">
+            <div className="flex items-center justify-between border-b px-4 py-2.5">
+              <span className="text-[13px] font-semibold">Top of estate — act now</span>
+              <OpsLink to="/asset-explorer" className="text-[11px] text-primary hover:underline">
+                Asset Explorer →
+              </OpsLink>
+            </div>
+            <div className="divide-y">
+              {priorities.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => router.navigate({ to: p.to })}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/40"
+                >
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: p.color }}
+                  />
+                  <span className="w-52 shrink-0 truncate text-[13px] font-medium">{p.name}</span>
+                  <span
+                    className="shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap"
+                    style={{
+                      color: p.domain === "infrastructure" ? "#5aa9ff" : "#a986ff",
+                      background: `${p.domain === "infrastructure" ? "#5aa9ff" : "#a986ff"}1a`,
+                    }}
+                  >
+                    {p.domain === "infrastructure" ? "Infrastructure" : "Equipment"}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                    {p.concern}
+                  </span>
+                  <span
+                    className="num shrink-0 text-[11px] font-semibold"
+                    style={{ color: p.color }}
+                  >
+                    {p.levelLabel}
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+                </button>
+              ))}
+              {priorities.length === 0 && (
+                <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                  Estate stable — no critical or high-severity items across either domain.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
