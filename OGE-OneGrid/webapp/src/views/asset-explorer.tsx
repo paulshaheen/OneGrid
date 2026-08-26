@@ -118,6 +118,15 @@ export function AssetExplorerPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["infra", "equip"]));
   const [selected, setSelected] = useState<string | null>("infra");
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<"weather" | "pdm">("weather");
+  const activeDomain: Domain = tab === "weather" ? "infrastructure" : "equipment";
+
+  useEffect(() => {
+    const rootId = tab === "weather" ? "infra" : "equip";
+    setSelected(rootId);
+    setExpanded(new Set([rootId]));
+    setQ("");
+  }, [tab]);
 
   useEffect(() => {
     let ok = true;
@@ -331,6 +340,22 @@ export function AssetExplorerPage() {
               </p>
             </div>
           </div>
+          <div className="ml-auto inline-flex overflow-hidden rounded-md border">
+            {(
+              [
+                ["weather", "Weather"],
+                ["pdm", "Predictive Maintenance"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setTab(v)}
+                className={`px-3 py-1.5 text-xs font-semibold transition-colors ${tab === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent/50"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
@@ -348,7 +373,10 @@ export function AssetExplorerPage() {
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-              {tree.map((n) => renderNode(n, 0))}
+              {(() => {
+                const root = activeDomain === "infrastructure" ? tree[0] : tree[1];
+                return root ? renderNode(root, 0) : null;
+              })()}
             </div>
           </div>
 
@@ -451,66 +479,72 @@ export function AssetExplorerPage() {
                   </div>
                 </div>
 
-                {sel.domain === "infrastructure" && (
-                  <div className="panel h-[300px] overflow-hidden">
-                    <OpsMap
-                      className="h-full w-full"
-                      assets={assets}
-                      risks={riskMap}
-                      event={event}
-                      layers={{ assets: true, track: true, wind: true }}
-                      highlightIds={highlightInfraIds}
-                      onSelect={(id) => id && setSelected(`i:${id}`)}
-                    />
-                  </div>
-                )}
-
-                <div className="panel overflow-hidden">
-                  <div className="border-b px-4 py-2.5 text-[13px] font-semibold">
-                    Issues in this {sel.kind}{" "}
-                    {problemLeaves.length > 0 && `(${problemLeaves.length})`}
-                  </div>
-                  {problemLeaves.length === 0 ? (
-                    <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
-                      No open issues here — everything nominal.
-                    </div>
-                  ) : (
-                    <div className="divide-y">
-                      {problemLeaves.map((l) => (
-                        <button
-                          key={l.id}
-                          onClick={() => {
-                            setSelected(l.id);
-                            if (l.domain === "equipment") setModalAsset(l.equip!);
-                          }}
-                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/40"
-                        >
-                          <span
-                            className="size-2.5 shrink-0 rounded-full"
-                            style={{ background: SEV_COLOR[l.sev] }}
-                          />
-                          <span className="w-56 shrink-0 truncate text-[13px] font-medium">
-                            {l.label}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
-                            {l.domain === "infrastructure"
-                              ? `${l.infra!.asset.region} · ${l.infra!.risk?.hoursToImpact != null ? `${l.infra!.risk!.hoursToImpact}h to impact` : "monitoring"}`
-                              : `${l.equip!.plant} · Unit ${l.equip!.unit} · ${l.equip!.category}`}
-                          </span>
-                          <span
-                            className="num shrink-0 text-[11px] font-semibold"
-                            style={{ color: SEV_COLOR[l.sev] }}
-                          >
-                            {l.domain === "infrastructure"
-                              ? RISK_LABEL[l.sev as RiskLevel]
-                              : l.sev === "critical"
-                                ? "Critical"
-                                : "Watch"}
-                          </span>
-                        </button>
-                      ))}
+                <div
+                  className={
+                    sel.domain === "infrastructure" ? "grid gap-4 xl:grid-cols-2 [&>*]:min-w-0" : ""
+                  }
+                >
+                  {sel.domain === "infrastructure" && (
+                    <div className="panel h-[420px] overflow-hidden xl:order-2">
+                      <OpsMap
+                        className="h-full w-full"
+                        assets={assets}
+                        risks={riskMap}
+                        event={event}
+                        layers={{ assets: true, track: true, wind: true }}
+                        highlightIds={highlightInfraIds}
+                        onSelect={(id) => id && setSelected(`i:${id}`)}
+                      />
                     </div>
                   )}
+
+                  <div className="panel overflow-hidden xl:order-1">
+                    <div className="border-b px-4 py-2.5 text-[13px] font-semibold">
+                      Issues in this {sel.kind}{" "}
+                      {problemLeaves.length > 0 && `(${problemLeaves.length})`}
+                    </div>
+                    {problemLeaves.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                        No open issues here — everything nominal.
+                      </div>
+                    ) : (
+                      <div className="divide-y">
+                        {problemLeaves.map((l) => (
+                          <button
+                            key={l.id}
+                            onClick={() => {
+                              setSelected(l.id);
+                              if (l.domain === "equipment") setModalAsset(l.equip!);
+                            }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/40"
+                          >
+                            <span
+                              className="size-2.5 shrink-0 rounded-full"
+                              style={{ background: SEV_COLOR[l.sev] }}
+                            />
+                            <span className="w-56 shrink-0 truncate text-[13px] font-medium">
+                              {l.label}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+                              {l.domain === "infrastructure"
+                                ? `${l.infra!.asset.region} · ${l.infra!.risk?.hoursToImpact != null ? `${l.infra!.risk!.hoursToImpact}h to impact` : "monitoring"}`
+                                : `${l.equip!.plant} · Unit ${l.equip!.unit} · ${l.equip!.category}`}
+                            </span>
+                            <span
+                              className="num shrink-0 text-[11px] font-semibold"
+                              style={{ color: SEV_COLOR[l.sev] }}
+                            >
+                              {l.domain === "infrastructure"
+                                ? RISK_LABEL[l.sev as RiskLevel]
+                                : l.sev === "critical"
+                                  ? "Critical"
+                                  : "Watch"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
