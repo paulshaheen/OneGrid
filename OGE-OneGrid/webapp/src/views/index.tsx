@@ -301,31 +301,33 @@ export function OverviewPage() {
   return (
     <AppShell fullHeight>
       <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-        {/* header + view toggle */}
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-5 py-3">
-          <div>
-            <h1 className="text-sm font-semibold">Overview</h1>
-            <p className="text-[11px] text-muted-foreground">
-              The estate at a glance — click any asset to drill in.
-            </p>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            <button
-              onClick={() => window.dispatchEvent(new Event("onegrid-ask"))}
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/15"
-            >
-              <Sparkles className="size-3.5" /> Operations assistant
-            </button>
-            <div className="inline-flex overflow-hidden rounded-md border">
-              {(["register", "fleet"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent/50"}`}
-                >
-                  {v === "register" ? "Register" : "Fleet Overview"}
-                </button>
-              ))}
+        {/* header + view toggle — boxed to match the tile column width */}
+        <div className="shrink-0 pt-4">
+          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-3 px-4">
+            <div>
+              <h1 className="text-sm font-semibold">Overview</h1>
+              <p className="text-[11px] text-muted-foreground">
+                The estate at a glance — click any asset to drill in.
+              </p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => window.dispatchEvent(new Event("onegrid-ask"))}
+                className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/15"
+              >
+                <Sparkles className="size-3.5" /> Operations assistant
+              </button>
+              <div className="inline-flex overflow-hidden rounded-md border">
+                {(["register", "fleet"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={`px-3 py-1.5 text-xs font-semibold transition-colors ${view === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent/50"}`}
+                  >
+                    {v === "register" ? "Register" : "Fleet Overview"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -350,7 +352,7 @@ export function OverviewPage() {
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-[1600px] space-y-4 p-4">
+            <div className="mx-auto max-w-[1600px] space-y-4 px-4 pt-3 pb-4">
               {/* estate-command hero */}
               <div
                 className="flex flex-wrap items-center gap-4 rounded-lg border p-4"
