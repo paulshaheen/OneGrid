@@ -162,6 +162,12 @@ export function AppShell({
     if (activeGroupId) setOpenId(activeGroupId);
   }, [activeGroupId]);
 
+  useEffect(() => {
+    const open = () => setCopilotOpen(true);
+    window.addEventListener("onegrid-ask", open);
+    return () => window.removeEventListener("onegrid-ask", open);
+  }, []);
+
   const onAlerts = isActive("/alerts");
 
   return (
