@@ -12,6 +12,14 @@ function parse(path) {
   return { p, params: new URLSearchParams(qs || "") };
 }
 
+// Runtime switch: when the OneGrid report-app backend is serving this webapp
+// (deployed mode) the SSR shell sets window.__APP_CONFIG__.reportApiEnabled, so
+// every persona reads live Fabric/Eventhouse/PBI data through the same-origin
+// /api. Standalone / marketing builds leave it unset and use the sample provider.
+function backendEnabled() {
+  return typeof window !== "undefined" && !!window.__APP_CONFIG__ && !!window.__APP_CONFIG__.reportApiEnabled;
+}
+
 // Central resolver: path -> sample data (exact shapes from the original dataApi).
 export function resolve(path) {
   const { p, params } = parse(path);
@@ -44,11 +52,25 @@ export function resolve(path) {
 }
 
 export async function getJson(path) {
+  if (backendEnabled()) {
+    const res = await fetch(path, { headers: { Accept: "application/json" } });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+    return res.json();
+  }
   const data = resolve(path);
   if (data === null) throw new Error(`${path} -> 404 (no sample provider)`);
   return data;
 }
-export async function postJson() {
+export async function postJson(path, body) {
+  if (backendEnabled()) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+    return res.json().catch(() => ({ ok: true }));
+  }
   // feedback / chat / ask-ontology are no-ops in the sample environment.
   return { ok: true };
 }

@@ -137,6 +137,10 @@ function RuntimeConfigScript() {
     geoCatalogUrl: process.env["GEOCATALOG_URI"] ?? "",
     foundryEndpoint: process.env["FOUNDRY_ENDPOINT"] ?? "",
     foundryDeployment: process.env["FOUNDRY_DEPLOYMENT"] ?? "",
+    // When the OneGrid report-app backend is serving this webapp (deployed mode) it
+    // sets REPORT_API_ENABLED=1, so the ported personas read live Fabric/Eventhouse/
+    // PBI data through the same-origin /api instead of the deterministic sample set.
+    reportApiEnabled: process.env["REPORT_API_ENABLED"] === "1",
   };
   const json = JSON.stringify(config).replace(/</g, "\\u003c");
   return <script dangerouslySetInnerHTML={{ __html: `window.__APP_CONFIG__=${json}` }} />;

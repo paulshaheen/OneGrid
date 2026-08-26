@@ -910,6 +910,10 @@ function Phase-ChatAgent {
   if ($cfg.pcp -and $cfg.pcp.geoCatalogUri) { $envVars += "GEOCATALOG_URI=$($cfg.pcp.geoCatalogUri)" }
   if ($state.FoundryEndpoint) { $envVars += "FOUNDRY_ENDPOINT=$($state.FoundryEndpoint.TrimEnd('/'))" }
   if ($cfg.foundry -and $cfg.foundry.defaultModel) { $envVars += "FOUNDRY_DEPLOYMENT=$($cfg.foundry.defaultModel)" }
+  # The report-app server that hosts this web app also serves the live /api data
+  # plane; flag it so the ported Explorer personas read real Fabric/Eventhouse/PBI
+  # data instead of the in-browser sample set.
+  $envVars += "REPORT_API_ENABLED=1"
   # PBI_DATASET: prefer the id from this run's semantic phase; otherwise resolve the Import
   # model by name so 'chatagent' works even when run without 'semantic' in the same invocation.
   $datasetId = $state.DatasetId
