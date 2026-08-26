@@ -44,16 +44,16 @@ type Entry = Group | Item;
 
 const NAV: Entry[] = [
   { kind: "item", to: "/", label: "Overview", icon: LayoutGrid, bold: true },
-  { kind: "item", to: "/assets", label: "Asset Explorer", icon: Layers },
+  { kind: "item", to: "/asset-explorer", label: "Asset Explorer", icon: Layers },
   {
     kind: "group",
     id: "twin",
     label: "Digital Twin",
     icon: Boxes,
     children: [
-      { label: "Control Room", icon: Cpu, soon: true },
-      { label: "Simulation", icon: FlaskConical, soon: true },
-      { label: "Maintenance", icon: Wrench, alerts: 2, soon: true },
+      { to: "/control-room", label: "Control Room", icon: Cpu },
+      { to: "/simulation", label: "Simulation", icon: FlaskConical },
+      { to: "/maintenance", label: "Maintenance", icon: Wrench, alerts: 2 },
     ],
   },
   {
