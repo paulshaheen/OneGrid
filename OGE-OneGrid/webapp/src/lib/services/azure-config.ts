@@ -17,12 +17,15 @@ export type ServiceConfig = {
   foundryEndpoint: string;
   /** Chat deployment name on the Foundry endpoint, e.g. gpt-5-mini */
   foundryDeployment: string;
+  /** True when the OneGrid report-app backend (Fabric Real-Time Intelligence / Power BI) is serving this webapp and its /api is live. */
+  reportApiEnabled: boolean;
 };
 
 type RuntimeConfig = {
   geoCatalogUrl?: string;
   foundryEndpoint?: string;
   foundryDeployment?: string;
+  reportApiEnabled?: boolean;
 };
 
 declare global {
@@ -45,7 +48,16 @@ export function getServiceConfig(): ServiceConfig {
     geoCatalogUrl: read("geoCatalogUrl", "GEOCATALOG_URI", "VITE_GEOCATALOG_URL"),
     foundryEndpoint: read("foundryEndpoint", "FOUNDRY_ENDPOINT", "VITE_FOUNDRY_ENDPOINT"),
     foundryDeployment: read("foundryDeployment", "FOUNDRY_DEPLOYMENT", "VITE_FOUNDRY_DEPLOYMENT"),
+    reportApiEnabled: readReportApiEnabled(),
   };
+}
+
+/** True when the report-app /api data plane is wired (window flag in the browser, REPORT_API_ENABLED=1 server-side). */
+function readReportApiEnabled(): boolean {
+  const runtime = typeof window !== "undefined" ? window.__APP_CONFIG__?.reportApiEnabled : undefined;
+  if (typeof runtime === "boolean") return runtime;
+  if (typeof process !== "undefined") return process.env?.["REPORT_API_ENABLED"] === "1";
+  return false;
 }
 
 /**

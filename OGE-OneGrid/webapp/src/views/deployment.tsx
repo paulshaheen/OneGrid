@@ -4,6 +4,7 @@ import { Boxes, Check, CloudSun, Database, ExternalLink, Shield, Sparkles } from
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { layersQuery } from "@/lib/hooks/use-ops-data";
+import { isEntraConfigured } from "@/lib/auth/config";
 import { getServiceConfig } from "@/lib/services/azure-config";
 import { getDataPlaneStatus } from "@/lib/services/azure/server";
 
@@ -18,6 +19,14 @@ function hostOf(url: string): string {
     return url;
   }
 }
+
+type ReportApiStatus = {
+  ok: boolean;
+  configured?: boolean;
+  capacityPaused?: boolean;
+  connectionError?: boolean;
+  message?: string;
+};
 
 const ROLES: [string, string][] = [
   ["Viewer", "Read-only access to dashboards, map and alerts"],
@@ -45,10 +54,37 @@ export function DeploymentPage() {
 
   const geoCatalogWired = Boolean(cfg.geoCatalogUrl);
   const foundryWired = Boolean(cfg.foundryEndpoint);
+  const reportApiEnabled = cfg.reportApiEnabled;
+  // The report-app backend is only *actually* connected when its /api/status probe
+  // returns ok:true (the Fabric capacity answered). REPORT_API_ENABLED alone just
+  // routes the personas to the live /api — it does not prove reachability, so we
+  // verify rather than trust the flag.
+  const reportStatus = useQuery({
+    queryKey: [base, "report-api-status"],
+    enabled: reportApiEnabled,
+    staleTime: 60 * 1000,
+    queryFn: async (): Promise<ReportApiStatus> => {
+      const res = await fetch("/api/status", { headers: { Accept: "application/json" } });
+      return (await res.json()) as ReportApiStatus;
+    },
+  });
+  const reportApiLive = reportApiEnabled && reportStatus.data?.ok === true;
+  const reportApiLabel = !reportApiEnabled
+    ? "Not configured"
+    : reportStatus.isLoading
+      ? "Checking…"
+      : reportStatus.data?.ok
+        ? "Connected"
+        : reportStatus.data?.configured === false
+          ? "No Fabric target"
+          : reportStatus.data?.capacityPaused
+            ? "Capacity paused"
+            : "Unreachable";
   const uploadWired = status.data?.uploadConfigured ?? false;
   const auroraEndpointWired = status.data?.auroraEndpointConfigured ?? false;
   const auroraModelDeployed = status.data?.auroraModelDeployed ?? false;
   const auroraAdapterConnected = status.data?.auroraAdapterConnected ?? false;
+  const entraWired = isEntraConfigured();
 
   const services: {
     name: string;
@@ -57,6 +93,13 @@ export function DeploymentPage() {
     endpoint?: string;
     statusLabel?: string;
   }[] = [
+    {
+      name: "Identity & sign-in (Microsoft Entra ID)",
+      detail: entraWired
+        ? "Directory sign-in with your tenant's MFA and conditional access"
+        : "Set ENTRA_CLIENT_ID and ENTRA_TENANT_ID to require directory sign-in — the console runs open until then",
+      wired: entraWired,
+    },
     {
       name: "Geospatial catalog (Planetary Computer Pro)",
       detail: "STAC collections and imagery for the operating region",
@@ -70,6 +113,17 @@ export function DeploymentPage() {
         : "Grounded natural-language answers",
       wired: foundryWired,
       endpoint: cfg.foundryEndpoint ? hostOf(cfg.foundryEndpoint) : undefined,
+    },
+    {
+      name: "Operational data plane (Fabric Real-Time Intelligence)",
+      detail: !reportApiEnabled
+        ? "Serving the deterministic sample estate — deploy the OneGrid report backend to wire live Fabric Eventhouse / Power BI data"
+        : reportApiLive
+          ? "Live fleet health, work orders, anomalies and telemetry via the OneGrid /api"
+          : reportStatus.data?.message ||
+            "The report API is enabled but the Fabric backend did not answer — check the identity has access to the capacity and semantic model",
+      wired: reportApiLive,
+      statusLabel: reportApiLabel,
     },
     {
       name: "Data storage & upload",
