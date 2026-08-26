@@ -18,7 +18,6 @@ import {
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   UserCog,
   Wind,
   Wrench,
@@ -248,14 +247,6 @@ export function AppShell({
               <span className="size-1.5 rounded-full bg-emerald-400" />
               Fabric live · GoM tenant
             </span>
-
-            <button
-              onClick={() => setCopilotOpen(true)}
-              className="hidden items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground sm:inline-flex"
-            >
-              <Sparkles className="size-3.5" />
-              Ask the data
-            </button>
 
             {/* Alerts: open the inbox; if already there, go back to the previous page */}
             <OpsLink

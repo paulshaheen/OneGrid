@@ -307,6 +307,16 @@ failure* (App A twin: survival/stop models). Decision:
 
 ## 9. Decisions locked & remaining questions
 
+**P0 status (built in the real `webapp`):** ✅ tokens, ✅ OneGrid shell (rail IA, logo,
+top bar, profile), ✅ App B views wired, ✅ Copilot dialog (bottom-right only), ✅ build passes.
+
+**Follow-ups noted during P0:**
+- **Unified Overview (P1):** the Overview page currently shows only **App B's** Operations
+  Overview. Merge it with **App A's Executive** overview (fleet health / twin KPIs / predicted
+  trips) into one blended Overview.
+- Unified **Asset Explorer** tabs (Total/Exposure/Reliability/Registry) — currently links to the real registry page.
+- Rail **collapse-to-icons** toggle (deferred).
+
 **Locked (this session):**
 - ✅ Direction = **Option 2**, full-stack: one SPA, **one backend**, one origin, one deploy.
 - ✅ Navigation = **left rail (Layout A)**, cleaned per §8f (5 pillars + Alerts + Admin,
