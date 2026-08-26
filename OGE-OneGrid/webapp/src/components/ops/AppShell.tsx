@@ -27,12 +27,20 @@ import {
 
 import { cn } from "@/lib/utils";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
+import { CopilotDock } from "@/components/ops/CopilotDock";
 
 // ---- Unified OneGrid IA. App A areas (Digital Twin, Ontology, Governance) are
 // `soon` placeholders until they're ported from the report-app in P1/P3. ----
 type Leaf = { to?: string; label: string; icon: LucideIcon; alerts?: number; soon?: boolean };
 type Group = { kind: "group"; id: string; label: string; icon: LucideIcon; children: Leaf[] };
-type Item = { kind: "item"; to?: string; label: string; icon: LucideIcon; bold?: boolean; soon?: boolean };
+type Item = {
+  kind: "item";
+  to?: string;
+  label: string;
+  icon: LucideIcon;
+  bold?: boolean;
+  soon?: boolean;
+};
 type Entry = Group | Item;
 
 const NAV: Entry[] = [
@@ -139,6 +147,7 @@ export function AppShell({
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   const href = (to: string) => (to === "/" ? base : `${base}${to}`);
   const isActive = (to?: string) =>
@@ -168,13 +177,17 @@ export function AppShell({
         <div className="flex h-14 items-center gap-2.5 border-b px-4">
           <span
             className="grid size-8 place-items-center rounded-md"
-            style={{ background: "linear-gradient(135deg, var(--color-primary), oklch(0.5 0.145 251))" }}
+            style={{
+              background: "linear-gradient(135deg, var(--color-primary), oklch(0.5 0.145 251))",
+            }}
           >
             <OneGridMark className="size-5" />
           </span>
           <div className="leading-tight">
             <div className="text-[13px] font-semibold tracking-tight">OneGrid</div>
-            <div className="text-[10px] text-muted-foreground">Asset &amp; weather intelligence</div>
+            <div className="text-[10px] text-muted-foreground">
+              Asset &amp; weather intelligence
+            </div>
           </div>
         </div>
 
@@ -182,7 +195,7 @@ export function AppShell({
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
           {NAV.map((e) =>
             e.kind === "item" ? (
-              <NavLeaf key={e.label} leaf={e} bold={e.bold} isActive={isActive} />
+              <NavLeaf key={e.label} leaf={e} bold={e.bold ?? false} isActive={isActive} />
             ) : (
               <NavGroup
                 key={e.id}
@@ -236,13 +249,13 @@ export function AppShell({
               Fabric live · GoM tenant
             </span>
 
-            <OpsLink
-              to="/copilot"
+            <button
+              onClick={() => setCopilotOpen(true)}
               className="hidden items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-accent hover:text-foreground sm:inline-flex"
             >
               <Sparkles className="size-3.5" />
               Ask the data
-            </OpsLink>
+            </button>
 
             {/* Alerts: open the inbox; if already there, go back to the previous page */}
             <OpsLink
@@ -274,7 +287,9 @@ export function AppShell({
               <button
                 onClick={() => setProfileOpen((o) => !o)}
                 className="grid size-8 place-items-center rounded-full text-[12px] font-bold text-white"
-                style={{ background: "linear-gradient(135deg, var(--color-primary), oklch(0.62 0.13 249))" }}
+                style={{
+                  background: "linear-gradient(135deg, var(--color-primary), oklch(0.62 0.13 249))",
+                }}
                 aria-label="Your profile"
               >
                 PS
@@ -286,13 +301,18 @@ export function AppShell({
                     <div className="flex items-center gap-2.5 p-2">
                       <span
                         className="grid size-9 place-items-center rounded-full text-[12px] font-bold text-white"
-                        style={{ background: "linear-gradient(135deg, var(--color-primary), oklch(0.62 0.13 249))" }}
+                        style={{
+                          background:
+                            "linear-gradient(135deg, var(--color-primary), oklch(0.62 0.13 249))",
+                        }}
                       >
                         PS
                       </span>
                       <div className="leading-tight">
                         <div className="text-[13px] font-semibold">Paul Shaheen</div>
-                        <div className="text-[11px] text-muted-foreground">paul.shaheen@contoso.com</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          paul.shaheen@contoso.com
+                        </div>
                       </div>
                     </div>
                     <div className="my-1 border-t" />
@@ -340,6 +360,7 @@ export function AppShell({
           {children}
         </main>
       </div>
+      <CopilotDock open={copilotOpen} setOpen={setCopilotOpen} />
     </div>
   );
 }
@@ -421,7 +442,12 @@ function NavGroup({
             {roll}
           </span>
         ) : null}
-        <ChevronDown className={cn("size-3.5 text-muted-foreground transition-transform", !open && "-rotate-90")} />
+        <ChevronDown
+          className={cn(
+            "size-3.5 text-muted-foreground transition-transform",
+            !open && "-rotate-90",
+          )}
+        />
       </button>
       {open && (
         <div className="mt-0.5 ml-3 space-y-0.5 border-l pl-1">
