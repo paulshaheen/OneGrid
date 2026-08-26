@@ -7,11 +7,6 @@
 
 targetScope = 'resourceGroup'
 
-// The Microsoft Graph Bicep extension lets this template create the Entra app
-// registration the web app signs in with, using the credentials of whoever runs
-// the deployment. See bicepconfig.json for the extension version pin.
-extension microsoftGraphV1
-
 // ------------------------------------------------------------------------------------
 // Parameters
 // ------------------------------------------------------------------------------------
@@ -38,21 +33,6 @@ param geoCatalogTier string = 'Basic'
 
 @description('Deploy a sample-data storage account and a user-assigned managed identity for the managed-identity ingestion path (bring-your-own-data scenario).')
 param deploySampleStorage bool = true
-
-@description('Deploy the web app on an Azure App Service (Linux, Node). The site is created configured for Node; application code is published separately (CI/CD or `az webapp up`) and its managed identity is granted the GeoCatalog / storage / Foundry data-plane roles.')
-param deployWebApp bool = true
-
-@description('App Service plan SKU for the web app (e.g. F1, B1, P0v3, P1v3).')
-param appServiceSku string = 'B1'
-
-@description('Microsoft Entra SPA app registration (client) ID the web app uses for MSAL sign-in. This is a public identifier, not a secret. Leave blank to have the deployment register the app automatically (see autoRegisterEntraApp).')
-param entraClientId string = ''
-
-@description('Microsoft Entra tenant (directory) ID for sign-in. This is a public identifier, not a secret. Leave blank to use the tenant the deployment runs in.')
-param entraTenantId string = ''
-
-@description('Automatically register the Microsoft Entra SPA app the web app signs in with, wiring its client ID into the site. Requires the person running the deployment to have rights to create app registrations (Application Administrator or Application.ReadWrite.All). Turn off to supply entraClientId yourself.')
-param autoRegisterEntraApp bool = true
 
 @description('Deploy an Azure OpenAI (Microsoft Foundry) account + model deployment for agentic / reasoning GeoAI scenarios against the GeoCatalog.')
 param deployAiAgent bool = true
@@ -133,18 +113,6 @@ var namePrefix = 'pcpro'
 // here in the template — uniqueString() is an ARM function and is not available in
 // createUiDefinition.json, so name generation must live in the template.
 var effectiveGeoCatalogName = empty(geoCatalogName) ? toLower('pcpro${uniqueString(resourceGroup().id)}') : geoCatalogName
-var appServicePlanName = '${namePrefix}-plan-${amlSuffix}'
-var webAppName = 'pcpro-web-${amlSuffix}'
-// Default App Service hostname. Used for the Entra SPA redirect URIs so the app
-// registration does not depend on the web app resource (avoids a dependency
-// cycle with the app settings that consume the registration's client ID).
-var webAppHost = '${webAppName}.azurewebsites.net'
-// Decide whether the template registers the Entra app itself.
-var registerEntraApp = deployWebApp && autoRegisterEntraApp
-// The client/tenant the web app actually signs in with: the auto-registered app
-// when enabled, otherwise the values supplied as parameters.
-var effectiveEntraClientId = registerEntraApp ? entraApp.appId : entraClientId
-var effectiveEntraTenantId = empty(entraTenantId) ? tenant().tenantId : entraTenantId
 var sampleStorageName = toLower('pcpro${uniqueString(resourceGroup().id)}')
 var ingestIdentityName = '${namePrefix}-ingest-identity'
 var sampleContainerName = 'sample-assets'
@@ -155,15 +123,9 @@ var modelOutputsContainerName = 'model-outputs'
 // Storage Blob Data Reader — lets the ingestion managed identity read blobs for ingestion.
 var storageBlobDataReaderRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
 
-// Storage Blob Data Contributor — lets the web app's managed identity WRITE Aurora
-// weather model outputs to the sample storage account (the storm-impact workflow uploads
-// its forecast artifacts to the model-outputs container).
+// Storage Blob Data Contributor — lets the Aurora job's managed identity WRITE its scratch
+// channel SAS and the published weather-events.json to the sample storage account.
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-
-// GeoCatalog Administrator — GeoCatalog data-plane role (read/write/delete collections,
-// items, and configuration). Granted to the web app's managed identity so the backend
-// API routes can create collections and ingest items.
-var geoCatalogAdminRoleId = 'c9c97b9c-105d-4bb5-a2a7-7d15666c2484'
 
 // Azure OpenAI (Foundry) agent.
 var openAiName = toLower('pcpro-oai-${uniqueString(resourceGroup().id)}')
@@ -310,31 +272,6 @@ resource blobReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
-// Grant the web app's managed identity WRITE access to the sample storage account so the
-// backend API routes can upload Aurora weather-model outputs to the model-outputs
-// container using managed identity (no account keys).
-resource appBlobContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deploySampleStorage && deployWebApp) {
-  name: guid(sampleStorage.id, webAppName, storageBlobDataContributorRoleId)
-  scope: sampleStorage
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
-    principalId: deployWebApp ? webApp.identity.principalId : ''
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// Grant the web app's managed identity the GeoCatalog Administrator data-plane role so the
-// backend API routes can create collections and ingest items on behalf of the app.
-resource appGeoCatalogAdminRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployWebApp) {
-  name: guid(geoCatalog.id, webAppName, geoCatalogAdminRoleId)
-  scope: geoCatalog
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', geoCatalogAdminRoleId)
-    principalId: deployWebApp ? webApp.identity.principalId : ''
-    principalType: 'ServicePrincipal'
-  }
-}
-
 // ------------------------------------------------------------------------------------
 // Optional: OneGrid Fabric-plane identity + read grant (additive seam)
 // A user-assigned managed identity for the OneGrid Fabric plane, granted Storage Blob
@@ -456,17 +393,6 @@ resource openAiDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024
   }
 }
 
-// Grant the web app's managed identity key-less access to Azure OpenAI (Foundry).
-resource openAiWebAppRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAiAgent && deployWebApp) {
-  name: guid(openAi.id, webAppName, cognitiveServicesOpenAiUserRoleId)
-  scope: openAi
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAiUserRoleId)
-    principalId: deployWebApp ? webApp.identity.principalId : ''
-    principalType: 'ServicePrincipal'
-  }
-}
-
 // Grant the interactive deployer the same role so they can call Foundry with their sign-in.
 resource openAiDeployerRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAiAgent) {
   name: guid(openAi.id, deployer().objectId, cognitiveServicesOpenAiUserRoleId)
@@ -545,16 +471,6 @@ resource auroraEndpoint 'Microsoft.MachineLearningServices/workspaces/onlineEndp
   }
   properties: {
     authMode: 'AADToken'
-  }
-}
-
-resource auroraWebAppRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAuroraModel && deployWebApp) {
-  name: guid(amlWorkspace.id, webAppName, azureMLDataScientistRoleId)
-  scope: amlWorkspace
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureMLDataScientistRoleId)
-    principalId: deployWebApp ? webApp.identity.principalId : ''
-    principalType: 'ServicePrincipal'
   }
 }
 
@@ -743,142 +659,6 @@ resource auroraJob 'Microsoft.App/jobs@2024-03-01' = if (deployAuroraJob) {
 }
 
 // ------------------------------------------------------------------------------------
-// Microsoft Entra app registration for MSAL sign-in.
-// Created with the Microsoft Graph Bicep extension, which runs as the identity that
-// launches the deployment — so anyone with rights to register apps (Application
-// Administrator / Application.ReadWrite.All) gets a working sign-in with no manual
-// portal step. It is a single-tenant SPA whose only redirect URIs are the web app's
-// default hostname; MSAL requests just openid/profile/email (delegated, no admin
-// consent). The client ID flows into the ENTRA_CLIENT_ID app setting below.
-// ------------------------------------------------------------------------------------
-resource entraApp 'Microsoft.Graph/applications@v1.0' = if (registerEntraApp) {
-  uniqueName: 'pcpro-web-${amlSuffix}'
-  displayName: 'Planetary Computer Pro Ops (${amlSuffix})'
-  signInAudience: 'AzureADMyOrg'
-  spa: {
-    redirectUris: [
-      'https://${webAppHost}/auth/callback'
-    ]
-  }
-  web: {
-    logoutUrl: 'https://${webAppHost}/'
-  }
-}
-
-// Service principal (enterprise app) in this tenant so users can consent and sign in.
-resource entraAppSp 'Microsoft.Graph/servicePrincipals@v1.0' = if (registerEntraApp) {
-  appId: entraApp.appId
-}
-
-// ------------------------------------------------------------------------------------
-// Web app: Azure App Service (Linux, Node) hosting the Planetary Computer Pro web app.
-// The site is created configured for Node 22; application code is published separately
-// (CI/CD or `az webapp up`), which Oryx builds (npm install + npm run build) and starts
-// with `node server.mjs`. The site's system-assigned managed identity is granted the
-// GeoCatalog / storage / Foundry data-plane roles above so the backend API routes call
-// your Azure services with managed identity (no keys).
-// ------------------------------------------------------------------------------------
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployWebApp) {
-  name: appServicePlanName
-  location: location
-  kind: 'linux'
-  sku: {
-    name: appServiceSku
-  }
-  properties: {
-    reserved: true
-  }
-}
-
-resource webApp 'Microsoft.Web/sites@2023-12-01' = if (deployWebApp) {
-  name: webAppName
-  location: location
-  kind: 'app,linux'
-  identity: {
-    type: 'SystemAssigned'
-  }
-  properties: {
-    serverFarmId: appServicePlan.id
-    httpsOnly: true
-    siteConfig: {
-      linuxFxVersion: 'NODE|22-lts'
-      appCommandLine: 'node server.mjs'
-      ftpsState: 'Disabled'
-      minTlsVersion: '1.2'
-      http20Enabled: true
-      appSettings: [
-        {
-          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
-          value: 'true'
-        }
-        {
-          name: 'WEBSITE_NODE_DEFAULT_VERSION'
-          value: '~22'
-        }
-        {
-          name: 'GEOCATALOG_URI'
-          value: geoCatalog.properties.catalogUri
-        }
-        {
-          name: 'GEOCATALOG_API_VERSION'
-          value: '2026-04-15'
-        }
-        {
-          name: 'ENTRA_TENANT_ID'
-          value: effectiveEntraTenantId
-        }
-        {
-          name: 'ENTRA_CLIENT_ID'
-          value: effectiveEntraClientId
-        }
-        {
-          name: 'FOUNDRY_ENDPOINT'
-          value: deployAiAgent ? openAi.properties.endpoint : ''
-        }
-        {
-          name: 'FOUNDRY_DEPLOYMENT'
-          value: deployAiAgent ? openAiDeploymentName : ''
-        }
-        {
-          name: 'AURORA_ENDPOINT'
-          value: deployAuroraModel ? auroraEndpoint.properties.scoringUri : ''
-        }
-        {
-          name: 'AURORA_MODEL_DEPLOYED'
-          value: string(deployAuroraDeployment)
-        }
-        {
-          name: 'SAMPLE_CONTAINER_URL'
-          value: deploySampleStorage ? '${sampleStorage.properties.primaryEndpoints.blob}${sampleContainerName}' : ''
-        }
-        {
-          name: 'UPLOAD_CONTAINER_URL'
-          value: deploySampleStorage ? '${sampleStorage.properties.primaryEndpoints.blob}${modelOutputsContainerName}' : ''
-        }
-        {
-          name: 'UPLOAD_CONTAINER_NAME'
-          value: modelOutputsContainerName
-        }
-      ]
-    }
-  }
-}
-
-resource webAppAuth 'Microsoft.Web/sites/config@2023-12-01' = if (deployWebApp) {
-  parent: webApp
-  name: 'authsettingsV2'
-  properties: {
-    platform: {
-      enabled: false
-    }
-    globalValidation: {
-      requireAuthentication: false
-      unauthenticatedClientAction: 'AllowAnonymous'
-    }
-  }
-}
-
-// ------------------------------------------------------------------------------------
 // Outputs
 // ------------------------------------------------------------------------------------
 output geoCatalogResourceId string = geoCatalog.id
@@ -907,17 +687,6 @@ output auroraAcrName string = (deployAuroraJob && empty(auroraJobImage)) ? auror
 output auroraImageBuildCommand string = (deployAuroraJob && empty(auroraJobImage)) ? 'az acr build -r ${auroraAcrName} -t aurora-pipeline:${auroraJobImageTag} aurora' : 'not-applicable'
 output ingestIdentityClientId string = deploySampleStorage ? ingestIdentity.properties.clientId : 'not-deployed'
 output ingestIdentityObjectId string = deploySampleStorage ? ingestIdentity.properties.principalId : 'not-deployed'
-output webAppName string = deployWebApp ? webAppName : 'not-deployed'
-@description('Public URL of the web app. Deploy application code with `az webapp up` (or CI/CD) from the webapp/ folder; Oryx runs npm install + npm run build and starts `node server.mjs`.')
-output webAppUrl string = deployWebApp ? 'https://${webApp.properties.defaultHostName}' : 'not-deployed'
-@description('Entra client (application) ID the web app signs in with — either the auto-registered app or the entraClientId parameter.')
-output entraClientId string = deployWebApp ? effectiveEntraClientId : 'not-deployed'
-@description('Entra tenant (directory) ID the web app signs in with.')
-output entraTenantId string = effectiveEntraTenantId
-@description('Whether the deployment registered the Entra app automatically. When false, set entraClientId (and grant the SPA redirect URI below) yourself.')
-output entraAppAutoRegistered bool = registerEntraApp
-@description('SPA redirect URI the Entra app must trust. Auto-registered when entraAppAutoRegistered is true; add it manually otherwise.')
-output entraRedirectUri string = deployWebApp ? 'https://${webAppHost}/auth/callback' : 'not-deployed'
 
 // ------------------------------------------------------------------------------------
 // OneGrid Fabric-plane outputs (additive). Fabric can't be provisioned by ARM, so these

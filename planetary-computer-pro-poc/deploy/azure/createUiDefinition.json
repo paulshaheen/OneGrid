@@ -6,7 +6,7 @@
     "config": {
       "isWizard": false,
       "basics": {
-        "description": "Deploy a Microsoft Planetary Computer Pro **GeoCatalog** plus optional components: the **web app** on an Azure App Service (Linux, Node), sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, and the Microsoft Aurora weather model on a GPU Foundry endpoint. The GeoCatalog is always deployed; choose the rest. [Learn more](https://github.com/paulshaheen/OneGrid).",
+        "description": "Deploy a Microsoft Planetary Computer Pro **GeoCatalog** plus optional components: sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, the Microsoft Aurora weather model on a GPU Foundry endpoint, and the **OneGrid web app** (Fabric plane + chat/report Container App). The GeoCatalog is always deployed; choose the rest. [Learn more](https://github.com/paulshaheen/OneGrid).",
         "location": {
           "label": "Region",
           "toolTip": "GeoCatalog is available in these regions during Preview.",
@@ -66,9 +66,6 @@
                 "value": "aiAgent"
               },
               {
-                "value": "webApp"
-              },
-              {
                 "value": "fabricPlane"
               },
               {
@@ -85,11 +82,6 @@
                   "label": "Sample storage + ingestion identity",
                   "value": "sampleStorage",
                   "description": "Storage account and managed identity for the bring-your-own-data ingestion path."
-                },
-                {
-                  "label": "Web app (Azure App Service, Node)",
-                  "value": "webApp",
-                  "description": "The Planetary Computer Pro web app on an Azure App Service (Linux, Node). Its managed identity is granted GeoCatalog / storage / Foundry data-plane roles; sign-in uses your Microsoft Entra identity. Application code is published separately with CI/CD or `az webapp up`. Configure it on the Web app tab."
                 },
                 {
                   "label": "AI agent (Azure OpenAI / Foundry)",
@@ -123,81 +115,6 @@
                 }
               ]
             }
-          }
-        ]
-      },
-      {
-        "name": "webAppConfig",
-        "label": "Web app",
-        "elements": [
-          {
-            "name": "webAppNotSelected",
-            "type": "Microsoft.Common.InfoBox",
-            "visible": "[not(contains(steps('components').selected, 'webApp'))]",
-            "options": {
-              "icon": "Info",
-              "text": "The web app is not selected. These settings are ignored."
-            }
-          },
-          {
-            "name": "webAppInfo",
-            "type": "Microsoft.Common.InfoBox",
-            "visible": "[contains(steps('components').selected, 'webApp')]",
-            "options": {
-              "icon": "Info",
-              "text": "An Azure App Service (Linux, Node) is created configured for the web app. Publish application code afterwards with 'az webapp up' from the webapp/ folder (or CI/CD) - Oryx runs npm install + npm run build and starts 'node server.mjs'. Sign-in uses Microsoft Entra: leave 'Register the sign-in app automatically' on and the deployment creates the app registration for you (you need rights to register apps). Turn it off to supply your own Entra IDs below."
-            }
-          },
-          {
-            "name": "autoRegisterEntraApp",
-            "type": "Microsoft.Common.CheckBox",
-            "label": "Register the sign-in app automatically",
-            "defaultValue": true,
-            "toolTip": "Create the Microsoft Entra SPA app registration during deployment and wire its client ID into the web app. Requires you (the person deploying) to have rights to register apps (Application Administrator or Application.ReadWrite.All). Turn off to enter an existing app registration's IDs below.",
-            "visible": "[contains(steps('components').selected, 'webApp')]"
-          },
-          {
-            "name": "appServiceSku",
-            "type": "Microsoft.Common.DropDown",
-            "label": "App Service plan SKU",
-            "defaultValue": "B1 (Basic)",
-            "toolTip": "Compute tier for the App Service plan hosting the web app.",
-            "constraints": {
-              "allowedValues": [
-                { "label": "F1 (Free)", "value": "F1" },
-                { "label": "B1 (Basic)", "value": "B1" },
-                { "label": "P0v3 (Premium)", "value": "P0v3" },
-                { "label": "P1v3 (Premium)", "value": "P1v3" }
-              ],
-              "required": false
-            },
-            "visible": "[contains(steps('components').selected, 'webApp')]"
-          },
-          {
-            "name": "entraTenantId",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Entra tenant ID (optional)",
-            "defaultValue": "",
-            "toolTip": "Directory (tenant) ID for MSAL sign-in. Public identifier (not a secret). Leave blank to use the tenant you deploy into.",
-            "constraints": {
-              "required": false,
-              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-              "validationMessage": "Enter a GUID, e.g. 00000000-0000-0000-0000-000000000000, or leave blank."
-            },
-            "visible": "[and(contains(steps('components').selected, 'webApp'), not(steps('webAppConfig').autoRegisterEntraApp))]"
-          },
-          {
-            "name": "entraClientId",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Entra client (application) ID (optional)",
-            "defaultValue": "",
-            "toolTip": "Application (client) ID of the SPA app registration used for MSAL sign-in. Public identifier (not a secret). Required when automatic registration is turned off.",
-            "constraints": {
-              "required": false,
-              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-              "validationMessage": "Enter a GUID, e.g. 00000000-0000-0000-0000-000000000000, or leave blank."
-            },
-            "visible": "[and(contains(steps('components').selected, 'webApp'), not(steps('webAppConfig').autoRegisterEntraApp))]"
           }
         ]
       },
@@ -402,11 +319,6 @@
       "location": "[location()]",
       "geoCatalogName": "[basics('geoCatalogName')]",
       "deploySampleStorage": "[contains(steps('components').selected, 'sampleStorage')]",
-      "deployWebApp": "[contains(steps('components').selected, 'webApp')]",
-      "appServiceSku": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').appServiceSku, 'B1')]",
-      "entraTenantId": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').entraTenantId, '')]",
-      "entraClientId": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').entraClientId, '')]",
-      "autoRegisterEntraApp": "[if(contains(steps('components').selected, 'webApp'), steps('webAppConfig').autoRegisterEntraApp, false)]",
       "deployAiAgent": "[contains(steps('components').selected, 'aiAgent')]",
       "deployAuroraModel": "[contains(steps('components').selected, 'auroraModel')]",
       "openAiDeploymentName": "[if(contains(steps('components').selected, 'aiAgent'), steps('aiConfig').aiAgentSection.openAiDeploymentName, 'gpt-5-mini')]",
