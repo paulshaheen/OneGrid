@@ -910,6 +910,17 @@ function Phase-ChatAgent {
   if ($cfg.pcp -and $cfg.pcp.geoCatalogUri) { $envVars += "GEOCATALOG_URI=$($cfg.pcp.geoCatalogUri)" }
   if ($state.FoundryEndpoint) { $envVars += "FOUNDRY_ENDPOINT=$($state.FoundryEndpoint.TrimEnd('/'))" }
   if ($cfg.foundry -and $cfg.foundry.defaultModel) { $envVars += "FOUNDRY_DEPLOYMENT=$($cfg.foundry.defaultModel)" }
+  # Storage wiring for the Explorer's "Data storage & upload" card: SAMPLE_CONTAINER_URL
+  # (read sample assets) and UPLOAD_CONTAINER_URL/NAME (upload target). Built from the PCP
+  # blob endpoint + container names the ARM template passes through config.
+  if ($cfg.pcp -and $cfg.pcp.blobEndpoint) {
+    $blob = $cfg.pcp.blobEndpoint.TrimEnd('/')
+    if ($cfg.pcp.sampleContainer)       { $envVars += "SAMPLE_CONTAINER_URL=$blob/$($cfg.pcp.sampleContainer)" }
+    if ($cfg.pcp.modelOutputsContainer) { $envVars += "UPLOAD_CONTAINER_URL=$blob/$($cfg.pcp.modelOutputsContainer)"; $envVars += "UPLOAD_CONTAINER_NAME=$($cfg.pcp.modelOutputsContainer)" }
+  }
+  # Aurora weather inference card: point the Explorer at the ARM-provisioned scoring endpoint.
+  if ($cfg.pcp -and $cfg.pcp.auroraEndpoint) { $envVars += "AURORA_ENDPOINT=$($cfg.pcp.auroraEndpoint)" }
+  if ($cfg.pcp -and $cfg.pcp.auroraDeployed) { $envVars += "AURORA_MODEL_DEPLOYED=$($cfg.pcp.auroraDeployed)" }
   # The report-app server that hosts this web app also serves the live /api data
   # plane; flag it so the ported Explorer personas read real Fabric/Eventhouse/PBI
   # data instead of the in-browser sample set.

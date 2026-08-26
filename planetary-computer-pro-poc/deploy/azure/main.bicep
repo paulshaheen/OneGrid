@@ -349,6 +349,9 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
       { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
       { name: 'PCP_GEOCATALOG_URI', value: geoCatalog.properties.catalogUri }
       { name: 'PCP_GEOCATALOG_ID', value: geoCatalog.id }
+      { name: 'PCP_SAMPLE_CONTAINER', value: sampleContainerName }
+      { name: 'PCP_AURORA_ENDPOINT', value: deployAuroraModel ? auroraEndpoint.properties.scoringUri : '' }
+      { name: 'PCP_AURORA_DEPLOYED', value: string(deployAuroraDeployment) }
     ]
     scriptContent: loadTextContent('scripts/onegrid-solution-provision.ps1')
   }
