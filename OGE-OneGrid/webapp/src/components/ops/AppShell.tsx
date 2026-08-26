@@ -13,6 +13,8 @@ import {
   LogOut,
   Map as MapIcon,
   Network,
+  PanelLeftClose,
+  PanelLeftOpen,
   ServerCog,
   Settings,
   ShieldAlert,
@@ -154,6 +156,24 @@ export function AppShell({
   const base = useOpsBase();
   const [profileOpen, setProfileOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem("og.nav.collapsed") === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const toggleCollapsed = () =>
+    setCollapsed((v) => {
+      const n = !v;
+      try {
+        localStorage.setItem("og.nav.collapsed", n ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return n;
+    });
 
   const href = (to: string) => (to === "/" ? base : `${base}${to}`);
   const isActive = (to?: string) =>
@@ -184,9 +204,16 @@ export function AppShell({
         fullHeight ? "min-h-screen xl:h-screen xl:overflow-hidden" : "min-h-screen",
       )}
     >
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
+      <aside
+        className={cn(
+          "sticky top-0 hidden h-screen shrink-0 flex-col bg-sidebar lg:flex",
+          collapsed ? "w-16" : "w-60",
+        )}
+      >
         {/* Brand */}
-        <div className="flex h-14 items-center gap-2.5 border-b px-4">
+        <div
+          className={cn("flex h-14 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}
+        >
           <span
             className="grid size-8 place-items-center rounded-md"
             style={{
@@ -195,19 +222,27 @@ export function AppShell({
           >
             <OneGridMark className="size-5" />
           </span>
-          <div className="leading-tight">
-            <div className="text-[13px] font-semibold tracking-tight">OneGrid</div>
-            <div className="text-[10px] text-muted-foreground">
-              Asset &amp; weather intelligence
+          {!collapsed && (
+            <div className="leading-tight">
+              <div className="text-[13px] font-semibold tracking-tight">OneGrid</div>
+              <div className="text-[10px] text-muted-foreground">
+                Asset &amp; weather intelligence
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Rail */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
           {NAV.map((e) =>
             e.kind === "item" ? (
-              <NavLeaf key={e.label} leaf={e} bold={e.bold ?? false} isActive={isActive} />
+              <NavLeaf
+                key={e.label}
+                leaf={e}
+                bold={e.bold ?? false}
+                isActive={isActive}
+                collapsed={collapsed}
+              />
             ) : (
               <NavGroup
                 key={e.id}
@@ -215,6 +250,7 @@ export function AppShell({
                 open={openId === e.id}
                 onToggle={() => setOpenId((v) => (v === e.id ? null : e.id))}
                 isActive={isActive}
+                collapsed={collapsed}
               />
             ),
           )}
@@ -226,20 +262,42 @@ export function AppShell({
             open={openId === ADMIN.id}
             onToggle={() => setOpenId((v) => (v === ADMIN.id ? null : ADMIN.id))}
             isActive={isActive}
+            collapsed={collapsed}
           />
         </nav>
 
         <div className="border-t p-3 text-[11px] text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="size-1.5 rounded-full bg-emerald-400" />
-            Tenant deployment
-          </div>
-          <div className="mt-1">Data reflects the current forecast cycle</div>
+          {collapsed ? (
+            <div className="flex justify-center" title="Tenant deployment · live">
+              <span className="size-2 rounded-full bg-emerald-400" />
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="size-1.5 rounded-full bg-emerald-400" />
+                Tenant deployment
+              </div>
+              <div className="mt-1">Data reflects the current forecast cycle</div>
+            </>
+          )}
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-surface/95 px-4 backdrop-blur">
+          {/* Collapse the side menu (desktop) */}
+          <button
+            onClick={toggleCollapsed}
+            className="hidden size-8 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:grid"
+            aria-label={collapsed ? "Expand menu" : "Collapse menu"}
+            title={collapsed ? "Expand menu" : "Collapse menu"}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="size-4" />
+            ) : (
+              <PanelLeftClose className="size-4" />
+            )}
+          </button>
           {/* Mobile nav */}
           <div className="lg:hidden">
             <select
@@ -374,14 +432,47 @@ function NavLeaf({
   bold,
   nested,
   isActive,
+  collapsed,
 }: {
   leaf: Leaf;
   bold?: boolean;
   nested?: boolean;
   isActive: (to?: string) => boolean;
+  collapsed?: boolean;
 }) {
   const rowCls = "flex items-center gap-2.5 rounded-sm px-2.5 py-2 text-[13px] transition-colors";
   const pad = nested ? "pl-3.5" : "";
+
+  if (collapsed) {
+    if (leaf.soon) {
+      return (
+        <div
+          className="flex items-center justify-center rounded-sm py-2 text-muted-foreground/55"
+          title={`${leaf.label} — coming soon`}
+        >
+          <leaf.icon className="size-5" />
+        </div>
+      );
+    }
+    const active = isActive(leaf.to);
+    return (
+      <OpsLink
+        to={leaf.to as string}
+        title={leaf.label}
+        className={cn(
+          "relative flex items-center justify-center rounded-sm py-2 transition-colors",
+          active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
+            : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
+        )}
+      >
+        <leaf.icon className="size-5" />
+        {leaf.alerts ? (
+          <span className="absolute top-1 right-1.5 size-1.5 rounded-full bg-destructive" />
+        ) : null}
+      </OpsLink>
+    );
+  }
 
   if (leaf.soon) {
     return (
@@ -426,13 +517,36 @@ function NavGroup({
   open,
   onToggle,
   isActive,
+  collapsed,
 }: {
   group: Group;
   open: boolean;
   onToggle: () => void;
   isActive: (to?: string) => boolean;
+  collapsed?: boolean;
 }) {
   const roll = group.children.reduce((s, c) => s + (c.alerts ?? 0), 0);
+  if (collapsed) {
+    const firstTo = group.children[0]?.to;
+    const anyActive = group.children.some((c) => isActive(c.to));
+    return (
+      <OpsLink
+        to={(firstTo ?? "/") as string}
+        title={group.label}
+        className={cn(
+          "relative flex items-center justify-center rounded-sm py-2 transition-colors",
+          anyActive
+            ? "bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
+            : "text-foreground hover:bg-sidebar-accent/60",
+        )}
+      >
+        <group.icon className="size-5" />
+        {roll ? (
+          <span className="absolute top-1 right-1.5 size-1.5 rounded-full bg-destructive" />
+        ) : null}
+      </OpsLink>
+    );
+  }
   return (
     <div>
       <button
