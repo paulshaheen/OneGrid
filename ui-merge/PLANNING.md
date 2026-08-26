@@ -310,6 +310,11 @@ failure* (App A twin: survival/stop models). Decision:
 **P0 status (built in the real `webapp`):** ✅ tokens, ✅ OneGrid shell (rail IA, logo,
 top bar, profile), ✅ App B views wired, ✅ Copilot dialog (bottom-right only), ✅ build passes.
 
+**P1 status:** ✅ Governance & Security and ✅ Ontology graph ported as native routes
+(sample data), nav flipped from *Soon* → live. ✅ Unified Overview (weather KPIs + a Digital
+Twin fleet-health strip from the report-app Executive view). Remaining *Soon*: Digital Twin
+▸ Control Room / Simulation / Maintenance (the 3D views → P3).
+
 **Follow-ups noted during P0:**
 - **Unified Overview (P1):** the Overview page currently shows only **App B's** Operations
   Overview. Merge it with **App A's Executive** overview (fleet health / twin KPIs / predicted
