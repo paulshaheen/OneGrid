@@ -166,7 +166,7 @@ export function PosturePage() {
             {actionError}
           </div>
         )}
-        <div className="panel grid grid-cols-2 divide-x md:grid-cols-6">
+        <div className="panel grid grid-cols-2 md:grid-cols-6">
           {levelCounts.map((c) => (
             <div key={c.lvl} className="px-4 py-3">
               <div className="label-xs" style={{ color: riskColorVar(LEVEL_TONE[c.lvl]) }}>

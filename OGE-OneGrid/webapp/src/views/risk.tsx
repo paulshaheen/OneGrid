@@ -56,7 +56,7 @@ export function RiskPage() {
       />
       <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-4">
-          <div className="panel grid grid-cols-2 divide-x sm:grid-cols-5">
+          <div className="panel grid grid-cols-2 sm:grid-cols-5">
             {counts.map((c) => (
               <button
                 key={c.level}

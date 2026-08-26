@@ -74,7 +74,7 @@ export function EventsPage() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 divide-x divide-y sm:grid-cols-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4">
               {[
                 ["Current position", coords(event.lat, event.lon)],
                 ["Sustained wind", `${event.currentWindMph} mph`],

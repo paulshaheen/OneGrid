@@ -45,7 +45,7 @@ export function StatCell({
   tone?: RiskLevel;
 }) {
   return (
-    <div className="flex flex-col gap-1 border-l px-4 py-3 first:border-l-0">
+    <div className="flex flex-col gap-1 rounded-md border bg-card px-4 py-3">
       <span className="label-xs">{label}</span>
       <span
         className="num text-2xl leading-none font-semibold"

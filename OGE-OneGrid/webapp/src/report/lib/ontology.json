@@ -1,0 +1,2012 @@
+{
+  "generatedAt": "2026-08-14T19:40:59.069876+00:00",
+  "source": "semantic-main",
+  "title": "OneGrid Knowledge Graph",
+  "categories": {
+    "dimension": {
+      "label": "Dimension",
+      "color": "#5aa9ff",
+      "blurb": "Master data \u2014 the things we monitor"
+    },
+    "bridge": {
+      "label": "Bridge",
+      "color": "#a78bfa",
+      "blurb": "Maps sensors to the equipment they measure"
+    },
+    "telemetry": {
+      "label": "Telemetry",
+      "color": "#37e0d0",
+      "blurb": "Raw + modeled sensor readings"
+    },
+    "event": {
+      "label": "Events",
+      "color": "#ffcc4d",
+      "blurb": "Outages, condition rounds & work"
+    },
+    "ml": {
+      "label": "ML Scoring",
+      "color": "#ff8c42",
+      "blurb": "Predictive model outputs"
+    },
+    "advisory": {
+      "label": "Advisory",
+      "color": "#ff5470",
+      "blurb": "Alerts, watch signals & diagnoses"
+    },
+    "narrative": {
+      "label": "Narrative",
+      "color": "#8ea3bd",
+      "blurb": "Generated analyst summaries"
+    }
+  },
+  "nodes": [
+    {
+      "id": "anomaly_advisories",
+      "label": "Anomaly Advisories",
+      "table": "anomaly_advisories",
+      "source": "[ml].[anomaly_advisories]",
+      "category": "advisory",
+      "role": "leaf",
+      "grain": "one row per anomaly episode",
+      "description": "SmartSignal anomaly episodes per tag \u2014 peak z-score, direction, duration and an advisory message.",
+      "columns": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "Tag",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "first_seen",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "last_seen",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "peak_abs_z",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "mean_abs_z",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "n_breach_bins",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "latest_value",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "baseline_median",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "baseline_mad",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "anomaly_direction",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "mw_bin",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "duration_h",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "severity",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "advisory_message",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "scored_at",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "notebook_run_id",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "root_cause",
+      "label": "Root Cause",
+      "table": "root_cause",
+      "source": "[ml].[root_cause]",
+      "category": "advisory",
+      "role": "leaf",
+      "grain": "one row per diagnosed fault",
+      "description": "Diagnosed failure mechanisms per asset/tag with likely cause narrative, confidence and recommended action.",
+      "columns": [
+        {
+          "name": "scoring_date",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "descriptor",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "root_cause",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "failure_mechanism",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "contributing_tags",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "contributing_tag_names",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "recommended_action",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "generated_at",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "confidence",
+          "type": "double",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "watchlist",
+      "label": "Watchlist",
+      "table": "watchlist",
+      "source": "[ml].[watchlist]",
+      "category": "advisory",
+      "role": "leaf",
+      "grain": "one row per watched signal",
+      "description": "Ranked watch signals per asset \u2014 descriptor, normal range, trend and recommended action, contributing to asset risk.",
+      "columns": [
+        {
+          "name": "model_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "scoring_date",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "feature",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "tag_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "descriptor",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "engineering_units",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "current_value",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "baseline_mean",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "baseline_std",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "normal_range_low",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "normal_range_high",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "risk_contribution",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "trend_direction",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "trend_slope_per_day",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "recommended_action",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "recommendation_text",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "watch_horizon_days",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "model_run_timestamp",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "notebook_run_id",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "bridge_pi_tag_to_asset",
+      "label": "Tag \u2192 Asset Bridge",
+      "table": "bridge_pi_tag_to_asset",
+      "source": "[gold].[bridge_pi_tag_to_asset]",
+      "category": "bridge",
+      "role": "hub",
+      "grain": "one row per PI tag",
+      "description": "Maps each PI sensor tag to the asset/equipment it belongs to \u2014 the join that turns raw tags into asset context.",
+      "columns": [
+        {
+          "name": "Tag",
+          "type": "string",
+          "key": "pk"
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "tag_role",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "downtime_relevance",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "eng_units",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "tag_description",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "selected_tags",
+      "label": "Selected Tags",
+      "table": "selected_tags",
+      "source": "[ml].[selected_tags]",
+      "category": "bridge",
+      "role": "leaf",
+      "grain": "one row per model-selected tag",
+      "description": "The curated set of tags chosen as features for the predictive models.",
+      "columns": [
+        {
+          "name": "tag_asset_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "Tag",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "sensor_source",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "tag_description",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "eng_units",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "tag_role",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "downtime_relevance",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "corr_4h",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "corr_8h",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "corr_24h",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "abs_corr_4h",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "abs_corr_8h",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "abs_corr_24h",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "samples_4h",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "samples_8h",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "samples_24h",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "avg_abs_corr",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "total_samples",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "rank_in_asset",
+          "type": "int64",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "dim_asset",
+      "label": "Asset",
+      "table": "dim_asset",
+      "source": "[gold].[dim_asset]",
+      "category": "dimension",
+      "role": "hub",
+      "grain": "one row per monitored asset",
+      "description": "The central entity: every generating asset (turbine, boiler, pump, generator) in the fleet, with its plant, unit and equipment category.",
+      "columns": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "pk"
+        },
+        {
+          "name": "asset_display_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "plant",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "icare_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "equipment_category",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "equipment_group",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "running_tag",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "running_threshold",
+          "type": "int64",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "dim_date",
+      "label": "Date",
+      "table": "dim_date",
+      "source": "[gold].[dim_date]",
+      "category": "dimension",
+      "role": "leaf",
+      "grain": "one row per calendar day",
+      "description": "Standard date dimension used to trend facts and scores over time.",
+      "columns": [
+        {
+          "name": "date_key",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "year",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "quarter",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "quarter_label",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "year_quarter",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "month",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "month_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "month_short",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "year_month",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "year_month_key",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "day",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "day_of_year",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "day_of_week",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "day_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "day_short",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "week_of_year",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "iso_week_label",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "is_weekend",
+          "type": "boolean",
+          "key": null
+        },
+        {
+          "name": "is_weekday",
+          "type": "boolean",
+          "key": null
+        },
+        {
+          "name": "start_of_month",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "end_of_month",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "start_of_quarter",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "start_of_year",
+          "type": "dateTime",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "dim_equipment",
+      "label": "Equipment",
+      "table": "dim_equipment",
+      "source": "[gold].[dim_equipment]",
+      "category": "dimension",
+      "role": "leaf",
+      "grain": "one row per equipment item (iCare id)",
+      "description": "Physical equipment master keyed by iCare id \u2014 the bridge between condition-monitoring identity and the analytics asset id.",
+      "columns": [
+        {
+          "name": "icare_id",
+          "type": "string",
+          "key": "pk"
+        },
+        {
+          "name": "equipment_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "parent_icare_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "level",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "level0_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "level1_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "level2_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "level3_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "level4_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "level5_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "full_path",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "plant",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "child_count",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "descendant_count",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "is_leaf",
+          "type": "boolean",
+          "key": null
+        },
+        {
+          "name": "pi_plants_direct",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pi_prefixes_direct",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pi_tag_count_direct",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "pi_prefixes_rollup",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pi_tag_count_rollup",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "gads_acronyms_direct",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "gads_event_count_direct",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "gads_acronyms_rollup",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "gads_event_count_rollup",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "best_pi_match_confidence",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "best_pi_match_jaccard",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "asset_display_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "fact_gads_event",
+      "label": "GADS Outages",
+      "table": "fact_gads_event",
+      "source": "[gold].[fact_gads_event]",
+      "category": "event",
+      "role": "leaf",
+      "grain": "one row per outage/derate event",
+      "description": "GADS reliability events \u2014 forced outages, derates and their causes for each asset.",
+      "columns": [
+        {
+          "name": "event_uid",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "GEN_SEQ_NO",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "UNIT_ID",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "UNIT_NAME",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "plant",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "REAL_START_DT",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "REAL_END_DT",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "DURATION_HRS",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "EVENT_YEAR",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "EVENT_MONTH",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "EVENT_TYPE_CD",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "EVENT_TYPE_DESC",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "EVENT_CAUSE_CD",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "CAUSE_CODE_DESC",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "AVAIL_CAP_DURING",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "AVAIL_CAP_AFTER",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "DERATING",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "EQUIPMENT_DESC",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "CAUSE_OF_EVENT",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "PRIMARY_FUEL",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "UNIT_TYPE",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "BOILER_MANF",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "TURBINE_MANF",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "MAX_DESIGN_CAP",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "icare_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "primary_matched_acronym",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "equipment_node_count",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "all_matched_acronyms",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "start_date_key",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "end_date_key",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "downtime_classification",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "root_cause_summary",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "gads_intake_notes",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "gads_match_source",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "fact_work_requests",
+      "label": "Work Requests",
+      "table": "fact_work_requests",
+      "source": "[gold].[fact_work_requests]",
+      "category": "event",
+      "role": "leaf",
+      "grain": "one row per work request",
+      "description": "Maintenance work requests / orders raised against equipment.",
+      "columns": [
+        {
+          "name": "wr_id",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "problem_descr",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "problem_location",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "wr_type",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "wr_type_code",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "wr_status",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "wr_status_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "site_code",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "site_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "priority",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "priority_code",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "priority_rank",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "planner",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pm_identifier",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "pm_descr",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pm_due_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "safety_related",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "environ_related",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "unit_status",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "unit_status_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "offline_status",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "offline_status_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "elec_hrs",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "mech_hrs",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "ic_hrs",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "other_hrs",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "total_hrs",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "estimate_hrs",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "obsrv_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "start_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "complete_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "condition",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "condition_code",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "entity_identity",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "entity_descr",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "parent_identity",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "parent_descr",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "create_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "update_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "source_host",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "IngestedAt",
+          "type": "dateTime",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "predictions_longterm",
+      "label": "Long-Term Survival",
+      "table": "predictions_longterm",
+      "source": "[ml].[predictions_longterm]",
+      "category": "ml",
+      "role": "leaf",
+      "grain": "one row per asset per horizon",
+      "description": "Cox survival model output \u2014 7/14-day survival probability, risk score and median days to failure.",
+      "columns": [
+        {
+          "name": "scoring_timestamp",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "scoring_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "risk_score",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "survival_probability_7d",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "survival_probability_14d",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "predicted_median_survival_days",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "risk_level",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "model_type",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "horizon",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "model_run_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "model_run_timestamp",
+          "type": "dateTime",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "predictions_shortterm",
+      "label": "Short-Term Stop Risk",
+      "table": "predictions_shortterm",
+      "source": "[ml].[predictions_shortterm]",
+      "category": "ml",
+      "role": "leaf",
+      "grain": "one row per asset per horizon",
+      "description": "Near-term stop-probability model \u2014 likelihood the asset trips within 4h/8h/24h with an alert level.",
+      "columns": [
+        {
+          "name": "scoring_timestamp",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "prediction_horizon",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "stop_probability",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "alert_level",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "model_algorithm",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "model_run_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "scored_at",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "label_type",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "daily_narrative",
+      "label": "Daily Narrative",
+      "table": "daily_narrative",
+      "source": "[ml].[daily_narrative]",
+      "category": "narrative",
+      "role": "leaf",
+      "grain": "one row per asset per day",
+      "description": "Auto-generated plain-language daily briefing summarizing each asset's state.",
+      "columns": [
+        {
+          "name": "narrative_date",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "narrative_text",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "system_status",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "critical_alerts",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "total_alerts",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "assets_flagged",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "generated_at",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "narrative_html",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "aakr_health",
+      "label": "AAKR Health",
+      "table": "aakr_health",
+      "source": "[ml].[aakr_health]",
+      "category": "telemetry",
+      "role": "leaf",
+      "grain": "one row per asset per scoring run",
+      "description": "Rolled-up asset health index derived from AAKR residuals across the asset's tags.",
+      "columns": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "health_score",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "total_tag_bins",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "anomalous_tag_bins",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "anomaly_pct",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "mean_abs_z",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "max_abs_z",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "mean_effective_n",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "n_tags",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "threshold",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "scored_at",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "notebook_run_id",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "aakr_scores",
+      "label": "AAKR Residuals",
+      "table": "aakr_scores",
+      "source": "[ml].[aakr_scores]",
+      "category": "telemetry",
+      "role": "leaf",
+      "grain": "one row per tag per scoring run",
+      "description": "Auto-Associative Kernel Regression residuals \u2014 how far each tag drifts from its expected healthy value.",
+      "columns": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "bin_start",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "actual_value",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "expected_value",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "residual",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "z_residual",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "is_anomaly",
+          "type": "boolean",
+          "key": null
+        },
+        {
+          "name": "effective_n",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "bandwidth",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "notebook_run_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "scored_at",
+          "type": "dateTime",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "fact_icare_measurement",
+      "label": "iCare Measurements",
+      "table": "fact_icare_measurement",
+      "source": "[gold].[fact_icare_measurement]",
+      "category": "telemetry",
+      "role": "leaf",
+      "grain": "one row per condition reading",
+      "description": "Condition-monitoring measurements (vibration, oil, thermography) collected on equipment rounds.",
+      "columns": [
+        {
+          "name": "measurementId",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "icare_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "asset_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "gds",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "acqend",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "date_key",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "value",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "status",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "res_type",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "global_type",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "analysis_status",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "technology",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "analysis_measured_date",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        }
+      ]
+    },
+    {
+      "id": "fact_pi",
+      "label": "PI Telemetry",
+      "table": "fact_pi",
+      "source": "[gold].[fact_pi]",
+      "category": "telemetry",
+      "role": "leaf",
+      "grain": "one row per tag per timestamp",
+      "description": "Raw process-historian (PI) time-series readings streamed from plant sensors.",
+      "columns": [
+        {
+          "name": "Tag",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "plant",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "Timestamp",
+          "type": "dateTime",
+          "key": null
+        },
+        {
+          "name": "date_key",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "ValueNumeric",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "ValueString",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "IsSystem",
+          "type": "boolean",
+          "key": null
+        },
+        {
+          "name": "Good",
+          "type": "boolean",
+          "key": null
+        },
+        {
+          "name": "Questionable",
+          "type": "boolean",
+          "key": null
+        },
+        {
+          "name": "WebId",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "DataServer",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "icare_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pi_mapping_confidence",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pi_mapping_jaccard",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "tag_role",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "downtime_relevance",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pi_match_source",
+          "type": "string",
+          "key": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "predictions_longterm::dim_asset",
+      "from": "predictions_longterm",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "long-term survival for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_gads_event::dim_asset",
+      "from": "fact_gads_event",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "outage events for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_icare_measurement::dim_asset",
+      "from": "fact_icare_measurement",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "condition readings for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "watchlist::dim_asset",
+      "from": "watchlist",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "watch signals for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "predictions_shortterm::dim_asset",
+      "from": "predictions_shortterm",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "short-term stop risk for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "dim_equipment::dim_asset",
+      "from": "dim_equipment",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "describes",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_pi::bridge_pi_tag_to_asset",
+      "from": "fact_pi",
+      "to": "bridge_pi_tag_to_asset",
+      "fromCol": "Tag",
+      "toCol": "Tag",
+      "label": "telemetry on tag",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "anomaly_advisories::bridge_pi_tag_to_asset",
+      "from": "anomaly_advisories",
+      "to": "bridge_pi_tag_to_asset",
+      "fromCol": "Tag",
+      "toCol": "Tag",
+      "label": "anomaly on tag",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "aakr_health::dim_asset",
+      "from": "aakr_health",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "health index for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "aakr_scores::bridge_pi_tag_to_asset",
+      "from": "aakr_scores",
+      "to": "bridge_pi_tag_to_asset",
+      "fromCol": "tag",
+      "toCol": "Tag",
+      "label": "residual on tag",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "bridge_pi_tag_to_asset::dim_equipment",
+      "from": "bridge_pi_tag_to_asset",
+      "to": "dim_equipment",
+      "fromCol": "asset_id",
+      "toCol": "icare_id",
+      "label": "maps tag to",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_work_requests::dim_equipment",
+      "from": "fact_work_requests",
+      "to": "dim_equipment",
+      "fromCol": "entity_identity",
+      "toCol": "icare_id",
+      "label": "work on",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "aakr_scores::dim_asset",
+      "from": "aakr_scores",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "relates to",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "anomaly_advisories::dim_asset",
+      "from": "anomaly_advisories",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "relates to",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "bridge_pi_tag_to_asset::dim_asset",
+      "from": "bridge_pi_tag_to_asset",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "belongs to",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_pi::dim_asset",
+      "from": "fact_pi",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "relates to",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "root_cause::dim_asset",
+      "from": "root_cause",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "diagnoses",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "root_cause::bridge_pi_tag_to_asset",
+      "from": "root_cause",
+      "to": "bridge_pi_tag_to_asset",
+      "fromCol": "tag",
+      "toCol": "Tag",
+      "label": "cause on tag",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "selected_tags::bridge_pi_tag_to_asset",
+      "from": "selected_tags",
+      "to": "bridge_pi_tag_to_asset",
+      "fromCol": "Tag",
+      "toCol": "Tag",
+      "label": "selects tag",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "daily_narrative::dim_date",
+      "from": "daily_narrative",
+      "to": "dim_date",
+      "fromCol": "narrative_date",
+      "toCol": "date",
+      "label": "dated by",
+      "kind": "temporal",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_icare_measurement::dim_date",
+      "from": "fact_icare_measurement",
+      "to": "dim_date",
+      "fromCol": "date_key",
+      "toCol": "date",
+      "label": "dated by",
+      "kind": "temporal",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_pi::dim_date",
+      "from": "fact_pi",
+      "to": "dim_date",
+      "fromCol": "date_key",
+      "toCol": "date",
+      "label": "dated by",
+      "kind": "temporal",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_work_requests::dim_date",
+      "from": "fact_work_requests",
+      "to": "dim_date",
+      "fromCol": "pm_due_date",
+      "toCol": "date",
+      "label": "dated by",
+      "kind": "temporal",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "predictions_longterm::dim_date",
+      "from": "predictions_longterm",
+      "to": "dim_date",
+      "fromCol": "scoring_date",
+      "toCol": "date",
+      "label": "dated by",
+      "kind": "temporal",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "root_cause::dim_date",
+      "from": "root_cause",
+      "to": "dim_date",
+      "fromCol": "scoring_date",
+      "toCol": "date",
+      "label": "dated by",
+      "kind": "temporal",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "watchlist::dim_date",
+      "from": "watchlist",
+      "to": "dim_date",
+      "fromCol": "scoring_date",
+      "toCol": "date",
+      "label": "dated by",
+      "kind": "temporal",
+      "cardinality": "many-to-one"
+    }
+  ],
+  "stats": {
+    "nodes": 17,
+    "edges": 26,
+    "physical": 12,
+    "logical": 7,
+    "temporal": 7
+  }
+}

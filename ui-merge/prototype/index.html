@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OneGrid — Unified UI Prototype (rail + chat)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* OneGrid deep navy + Microsoft/Fluent Communication Blue (#0078D4) */
+    --bg:#06080d; --surface:#0a1020; --card:#111827; --elev:#141b2b;
+    --fg:#f5f8fd; --muted:#aeb9cd; --faint:#7d89a1;
+    --border:#223149; --border-soft:#18233a;
+    --primary:#0078d4; --primary-fg:#ffffff; --accent:#106ebe;
+    --warn:#f0b429; --danger:#ff5a5f; --ok:#3fd08a;
+    --risk-crit:#ff5a5f; --risk-high:#f0b429; --risk-mon:#2b88d8; --risk-low:#3fd08a;
+    --radius:8px; --rail-w:248px;
+  }
+  html:not(.dark){ --bg:#f4f6f9; --surface:#fff; --card:#fff; --elev:#eef2f7; --fg:#10202f;
+    --muted:#5a6b7d; --faint:#8595a6; --border:#dde5ee; --border-soft:#e8edf3; --primary:#0078d4; --primary-fg:#fff; }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"IBM Plex Mono",monospace}
+  a{color:inherit;text-decoration:none}
+  button{font-family:inherit;cursor:pointer}
+  .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+  /* prototype option bar */
+  .optbar{display:flex;align-items:center;gap:10px;padding:7px 16px;font-size:12px;
+    background:color-mix(in srgb,var(--accent) 8%,transparent);border-bottom:1px solid var(--border);color:var(--muted)}
+  .optbar strong{color:var(--fg)}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .seg button{border:0;background:transparent;color:var(--muted);padding:5px 12px;font-size:12px;font-weight:600}
+  .seg button.active{background:var(--primary);color:var(--primary-fg)}
+  .spacer{margin-left:auto}
+
+  /* top bar */
+  .topbar{display:flex;align-items:center;gap:16px;height:56px;padding:0 16px;flex-shrink:0;
+    border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(8px)}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand .logo{width:30px;height:30px;border-radius:6px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;font-weight:700;letter-spacing:-.04em;font-size:13px}
+  .brand .name{font-weight:600;letter-spacing:-.01em;line-height:1.05}
+  .brand .sub{font-size:10px;color:var(--muted)}
+  .pillartabs{display:flex;gap:2px;padding:3px;border-radius:10px;background:color-mix(in srgb,var(--fg) 5%,transparent)}
+  .pillartabs button{border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:7px;font-size:13px;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:7px}
+  .pillartabs button.active{color:var(--primary);background:color-mix(in srgb,var(--primary) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 45%,transparent)}
+  .iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);display:grid;place-items:center;position:relative}
+  .iconbtn:hover{color:var(--fg);background:var(--elev)}
+  .iconbtn.active{color:var(--fg);background:color-mix(in srgb,var(--primary) 22%,transparent);border-color:color-mix(in srgb,var(--primary) 55%,transparent)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:999px;padding:5px 10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));display:grid;place-items:center;color:#fff;font-weight:700;font-size:12px}
+
+  /* badge (counts) */
+  .badge{min-width:18px;height:18px;padding:0 5px;border-radius:999px;font-size:10px;font-weight:700;line-height:18px;text-align:center;
+    background:var(--danger);color:#fff}
+  .badge.soft{background:color-mix(in srgb,var(--danger) 22%,transparent);color:#fecaca}
+  .topbadge{position:absolute;top:-5px;right:-5px}
+
+  /* body */
+  .body{display:flex;flex:1;min-height:0}
+  .rail{width:var(--rail-w);flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);
+    display:flex;flex-direction:column;overflow:hidden;transition:width .16s ease}
+  body[data-railcollapsed="1"] .rail{width:64px}
+  .rail .scroll{flex:1;overflow-y:auto;padding:8px 8px 4px}
+  .railhead{display:flex;align-items:center;gap:8px;padding:10px 12px 6px;color:var(--faint);font-size:10px;text-transform:uppercase;letter-spacing:.12em}
+  .navitem{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:8px;color:var(--muted);font-size:13.5px;margin:1px 0;position:relative;white-space:nowrap;cursor:pointer}
+  .navitem:hover{background:var(--elev);color:var(--fg)}
+  .navitem.active{background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--fg);font-weight:600;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 35%,transparent)}
+  .navitem.strong .lbl{font-weight:700;color:var(--fg)}
+  .navitem .ic{width:18px;text-align:center;opacity:.9;flex-shrink:0}
+  .ic svg{width:16px;height:16px;display:block;margin:0 auto;vertical-align:middle}
+  .navitem .lbl{flex:1;overflow:hidden;text-overflow:ellipsis}
+  .navitem .badge{margin-left:auto}
+  /* group header (collapsible) */
+  .grouphdr{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:8px;color:var(--fg);font-size:13.5px;font-weight:600;margin:3px 0 1px;user-select:none;position:relative;cursor:pointer}
+  .grouphdr.active{background:color-mix(in srgb,var(--primary) 13%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 35%,transparent)}
+  .grouphdr:hover{background:var(--elev)}
+  .grouphdr .chev{margin-left:auto;transition:transform .15s ease;color:var(--faint);font-size:11px}
+  .grouphdr.collapsed .chev{transform:rotate(-90deg)}
+  .grouphdr .ic{width:18px;text-align:center;flex-shrink:0}
+  .groupkids{display:grid;grid-template-rows:1fr;transition:grid-template-rows .24s cubic-bezier(.4,0,.2,1),opacity .18s ease;opacity:1}
+  .groupkids>.kidwrap{overflow:hidden;min-height:0}
+  .groupkids .navitem{margin-left:6px;padding-left:14px}
+  .groupkids .navitem:before{content:"";position:absolute;left:6px;top:0;bottom:0;width:1px;background:var(--border-soft)}
+  .grouphdr.collapsed + .groupkids{grid-template-rows:0fr;opacity:0}
+  .divider{height:1px;background:var(--border);margin:8px 6px}
+  .rail .foot{border-top:1px solid var(--border);padding:6px 8px}
+  /* collapsed-to-icons: hide labels/badges/chevrons/headers */
+  body[data-railcollapsed="1"] .lbl,
+  body[data-railcollapsed="1"] .railhead,
+  body[data-railcollapsed="1"] .chev,
+  body[data-railcollapsed="1"] .navitem .badge{display:none}
+  /* collapsed-to-icons: show only top-level items (Overview + pillar/Admin headers), hide children — matches the expanded menu's top level */
+  body[data-railcollapsed="1"] .groupkids{grid-template-rows:0fr!important;opacity:0!important}
+  body[data-railcollapsed="1"] .navitem,body[data-railcollapsed="1"] .grouphdr{justify-content:center;padding-left:0;padding-right:0}
+  body[data-railcollapsed="1"] .groupkids .navitem:before{display:none}
+  /* per-badge dot when collapsed, so alerts still signal */
+  body[data-railcollapsed="1"] .hasalert .ic:after{content:"";position:absolute;top:6px;right:12px;width:7px;height:7px;border-radius:50%;background:var(--danger)}
+
+  /* content */
+  .content{flex:1;min-width:0;overflow-y:auto}
+  .pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:18px 24px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .pagehead h1{margin:0;font-size:19px;letter-spacing:-.02em}
+  .pagehead p{margin:4px 0 0;font-size:12px;color:var(--muted);max-width:640px}
+  .provenance{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);border:1px dashed var(--border);border-radius:6px;padding:4px 8px}
+  .tabs{display:flex;gap:4px;padding:10px 24px 0}
+  .tabs a{font-size:13px;color:var(--muted);padding:7px 12px;border-radius:8px 8px 0 0;border:1px solid transparent;border-bottom:0}
+  .tabs a.active{color:var(--fg);font-weight:600;background:var(--card);border-color:var(--border)}
+  .pad{padding:22px 24px}
+  .grid{display:grid;gap:14px}
+  .cols-4{grid-template-columns:repeat(4,1fr)} .cols-3{grid-template-columns:repeat(3,1fr)} .cols-2{grid-template-columns:repeat(2,1fr)}
+  @media (max-width:1150px){.cols-4{grid-template-columns:repeat(2,1fr)}.cols-3{grid-template-columns:repeat(2,1fr)}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+  .card h3{margin:0 0 3px;font-size:12px;font-weight:600;color:var(--muted)}
+  .kpi{font-size:30px;font-weight:700;letter-spacing:-.02em}
+  .kpi small{font-size:12px;font-weight:600}
+  .up{color:var(--ok)} .down{color:var(--danger)}
+  .cardtitle{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .cardtitle h2{margin:0;font-size:14px;letter-spacing:-.01em}
+  .tag{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em}
+  .surface-mock{border-radius:8px;border:1px solid var(--border);position:relative;overflow:hidden;min-height:260px}
+  .map{background:radial-gradient(circle at 30% 40%,color-mix(in srgb,var(--accent) 35%,transparent),transparent 45%),radial-gradient(circle at 68% 62%,color-mix(in srgb,var(--danger) 30%,transparent),transparent 40%),repeating-linear-gradient(0deg,var(--border-soft) 0 1px,transparent 1px 34px),repeating-linear-gradient(90deg,var(--border-soft) 0 1px,transparent 1px 34px),var(--elev)}
+  .twin{background:radial-gradient(circle at 50% 45%,color-mix(in srgb,var(--primary) 24%,transparent),transparent 55%),var(--elev);display:grid;place-items:center}
+  .twin .rig{width:120px;height:150px;position:relative;filter:drop-shadow(0 8px 24px rgba(0,0,0,.5))}
+  .twin .rig:before{content:"";position:absolute;inset:40% 44% 0 44%;background:linear-gradient(var(--muted),var(--faint))}
+  .twin .rig:after{content:"";position:absolute;left:50%;top:0;width:2px;height:60%;background:var(--muted);transform:translateX(-50%);box-shadow:-22px 30px 0 var(--muted),22px 30px 0 var(--muted)}
+  .graph{background:var(--elev)} .graph svg{width:100%;height:100%;display:block}
+  .pin{position:absolute;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 4px color-mix(in srgb,currentColor 25%,transparent)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border-soft)}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:600}
+  .chip{font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;display:inline-block}
+  .chip.crit{background:color-mix(in srgb,var(--risk-crit) 18%,transparent);color:#fecaca}
+  .chip.high{background:color-mix(in srgb,var(--risk-high) 18%,transparent);color:#fde68a}
+  .chip.mon{background:color-mix(in srgb,var(--risk-mon) 18%,transparent);color:#bae6fd}
+  .chip.low{background:color-mix(in srgb,var(--risk-low) 18%,transparent);color:#bbf7d0}
+  /* light theme: chips need dark text to stay legible on white */
+  html:not(.dark) .chip.crit{background:color-mix(in srgb,var(--risk-crit) 15%,#fff);color:#a4262c}
+  html:not(.dark) .chip.high{background:color-mix(in srgb,var(--risk-high) 22%,#fff);color:#8a5a00}
+  html:not(.dark) .chip.mon{background:color-mix(in srgb,var(--risk-mon) 16%,#fff);color:#0b5cad}
+  html:not(.dark) .chip.low{background:color-mix(in srgb,var(--risk-low) 20%,#fff);color:#1a7a3a}
+  .bar{height:7px;border-radius:999px;background:var(--elev);overflow:hidden}
+  .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--primary),var(--accent))}
+  .spark{display:flex;align-items:flex-end;gap:3px;height:46px}
+  .spark i{flex:1;background:color-mix(in srgb,var(--primary) 55%,transparent);border-radius:2px 2px 0 0}
+  .muted{color:var(--muted)} .faint{color:var(--faint)}
+  .row{display:flex;align-items:center;gap:10px}
+  .list>div{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border-soft)}
+  .list>div:last-child{border-bottom:0}
+  .src{font-size:9px;padding:2px 6px;border-radius:4px;letter-spacing:.06em;text-transform:uppercase}
+  .src.a{background:color-mix(in srgb,#2dd4bf 20%,transparent);color:#99f6e4}
+  .src.b{background:color-mix(in srgb,#3b82f6 22%,transparent);color:#bfdbfe}
+
+  /* ===== OneGrid chat dialog (ported feel from report-app ChatPanel) ===== */
+  .launcher{position:fixed;right:22px;bottom:22px;z-index:60;display:flex;align-items:center;gap:9px;
+    padding:11px 16px;border-radius:999px;border:0;font-weight:600;font-size:13px;color:#fff;
+    background:linear-gradient(135deg,var(--primary),var(--accent));box-shadow:0 12px 30px rgba(0,0,0,.45)}
+  .chat{position:fixed;right:22px;bottom:22px;width:396px;max-height:74vh;z-index:61;display:none;flex-direction:column;
+    background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.55);overflow:hidden}
+  .chat.open{display:flex}
+  .chat .head{padding:11px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+  .chat .headrow{display:flex;align-items:center;gap:8px}
+  .chat .title{font-weight:600;font-size:13px;display:flex;align-items:center;gap:7px}
+  .modelbtn{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);background:var(--elev);border:1px solid var(--border);border-radius:7px;padding:4px 8px}
+  .modelmenu{position:absolute;z-index:70;margin-top:4px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px;min-width:220px;box-shadow:0 16px 40px rgba(0,0,0,.5);display:none}
+  .modelmenu.open{display:block}
+  .modelmenu .vh{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);padding:6px 8px 3px}
+  .modelmenu button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;border:0;color:var(--fg);font-size:12.5px;padding:6px 8px;border-radius:7px}
+  .modelmenu button:hover{background:var(--elev)}
+  .modelmenu .rd{width:7px;height:7px;border-radius:50%;border:1px solid var(--border);flex-shrink:0}
+  .modelmenu button.sel .rd{background:var(--primary);border-color:var(--primary)}
+  .toggles{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .provtoggle{display:inline-flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}
+  .provtoggle button{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;padding:4px 9px}
+  .provtoggle button.on{background:var(--primary);color:var(--primary-fg)}
+  .agenttog{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:7px;padding:4px 9px}
+  .agenttog .sw{width:26px;height:15px;border-radius:999px;background:var(--elev);position:relative;transition:.15s}
+  .agenttog.on .sw{background:var(--primary)}
+  .agenttog .sw:after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:#fff;transition:.15s}
+  .agenttog.on .sw:after{left:13px}
+  .chat .msgs{padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;flex:1}
+  .bubble{padding:9px 12px;border-radius:11px;font-size:13px;max-width:86%;line-height:1.45}
+  .bubble.ai{background:var(--elev);align-self:flex-start}
+  .bubble.me{background:color-mix(in srgb,var(--primary) 18%,transparent);align-self:flex-end}
+  .suggest{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start;max-width:100%}
+  .suggest button{font-size:11.5px;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:999px;padding:5px 10px}
+  .suggest button:hover{color:var(--fg);border-color:var(--primary)}
+  .chat .ask{border-top:1px solid var(--border);padding:10px;display:flex;gap:8px}
+  .chat input.q{flex:1;background:var(--elev);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--fg);font-family:inherit}
+  .chat .send{border:0;border-radius:9px;padding:0 14px;font-weight:600;background:var(--primary);color:var(--primary-fg)}
+  .chat .foot{font-size:9px;color:var(--faint);text-align:center;padding:0 0 8px}
+
+  /* landing */
+  .hero{padding:52px 24px;text-align:center;background:radial-gradient(ellipse at 50% -20%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 60%)}
+  .hero h1{font-size:38px;letter-spacing:-.03em;margin:14px auto 12px;max-width:760px;line-height:1.05}
+  .hero p{color:var(--muted);max-width:620px;margin:0 auto 22px;font-size:15px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px;border:1px solid var(--border);background:transparent;color:var(--fg)}
+  .btn.primary{background:var(--primary);color:var(--primary-fg);border-color:transparent}
+
+  /* profile dropdown (PS avatar) */
+  .profilewrap{position:relative}
+  .profilemenu{position:absolute;right:0;top:42px;z-index:70;width:258px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.55);padding:8px;display:none}
+  .profilemenu.open{display:block}
+  .pm-head{display:flex;gap:10px;align-items:center;padding:8px}
+  .pm-sec{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);padding:9px 8px 4px}
+  .pm-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;font-size:13px}
+  .pm-row select{background:var(--elev);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 6px;font-size:12px}
+  .pm-div{height:1px;background:var(--border);margin:6px 4px}
+  .pm-item{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--fg);font-size:13px;padding:8px;border-radius:7px}
+  .pm-item:hover{background:var(--elev)}
+  .miniseg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .miniseg button{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;padding:3px 9px}
+  .miniseg button.on{background:var(--primary);color:var(--primary-fg)}
+  .avatar{border:0;cursor:pointer}
+
+  /* layout visibility */
+  body[data-layout="A"] .pillartabs{display:none}
+  .hide{display:none!important}
+</style>
+</head>
+<body data-layout="A" data-railcollapsed="0">
+
+<div class="app">
+  <!-- top bar -->
+  <div class="topbar">
+    <button class="iconbtn" id="railToggle" title="Collapse navigation" style="width:32px;height:32px">‹‹</button>
+    <a class="brand" href="#" onclick="go('overview');return false">
+      <span class="logo"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" aria-hidden="true"><path d="M6 10 A2.6 2.6 0 0 1 5.8 5 A6 6 0 0 1 15.2 5 A2.6 2.6 0 0 1 16.4 10 Z" fill="#c3cedd" opacity=".85"/><g stroke="#fff" stroke-width="1.7" stroke-linecap="round" opacity=".85"><path d="M3 13h6"/><path d="M3 16.5h4"/><path d="M3 20h7"/></g><path d="M16 9.5 L11.5 15.8 L15 15.8 L13.3 22 L20.5 14.5 L16 14.5 Z" fill="#fff"/></svg></span>
+      <span><div class="name">OneGrid</div><div class="sub">Asset &amp; weather intelligence</div></span>
+    </a>
+    <nav class="pillartabs" id="pillartabs"></nav>
+    <span class="spacer"></span>
+    <span class="pill"><span class="dot"></span> Fabric live · GoM tenant</span>
+    <button class="iconbtn" id="alertsTop" title="Alerts">! <span class="badge topbadge" id="alertsTopBadge">5</span></button>
+    <div class="profilewrap">
+      <button class="avatar" id="profileBtn" title="Your profile">PS</button>
+      <div class="profilemenu" id="profileMenu">
+        <div class="pm-head">
+          <span class="avatar" style="width:38px;height:38px">PS</span>
+          <div><div style="font-weight:600">Paul Shaheen</div><div class="faint" style="font-size:11px">paul.shaheen@contoso.com</div></div>
+        </div>
+        <div class="pm-div"></div>
+        <div class="pm-sec">My preferences</div>
+        <div class="pm-row"><span>Theme</span>
+          <span class="miniseg" id="pmTheme"><button data-theme="dark" class="on">Dark</button><button data-theme="light">Light</button></span></div>
+        <div class="pm-row"><span>Default landing</span>
+          <select id="pmLanding"><option value="overview">Overview</option><option value="weatherOv">Weather</option><option value="twinOv">Digital Twin</option></select></div>
+        <div class="pm-row"><span>Density</span>
+          <span class="miniseg"><button class="on">Comfortable</button><button>Compact</button></span></div>
+        <div class="pm-row"><span>Units</span>
+          <select><option>Imperial</option><option>Metric</option></select></div>
+        <div class="pm-row"><span>Email me critical alerts</span>
+          <span class="agenttog on" style="cursor:pointer"><span class="sw"></span></span></div>
+        <div class="pm-div"></div>
+        <button class="pm-item">Profile &amp; account settings</button>
+        <button class="pm-item">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- body -->
+  <div class="body">
+    <aside class="rail" id="railAside">
+      <div class="scroll" id="rail"></div>
+    </aside>
+    <section class="content">
+      <div class="tabs" id="subtabs"></div>
+      <div id="view"></div>
+    </section>
+  </div>
+</div>
+
+<!-- OneGrid chat dialog -->
+<button class="launcher" id="launcher">✦ Ask the data</button>
+<div class="chat" id="chat">
+  <div class="head">
+    <div class="headrow">
+      <div class="title">✦ OneGrid Copilot</div>
+      <span class="spacer"></span>
+      <div style="position:relative">
+        <button class="modelbtn" id="modelBtn"><span id="modelName">GPT-5</span> ▾</button>
+        <div class="modelmenu" id="modelMenu"></div>
+      </div>
+      <button class="iconbtn" id="chatClose" title="Close" style="width:28px;height:28px;border:0">✕</button>
+    </div>
+    <div class="toggles">
+      <span class="provtoggle"><button class="on" data-prov="azure">Azure</button><button data-prov="copilot">Copilot</button></span>
+      <span class="agenttog on" id="agentTog" title="Answer from the published Fabric Data Agent, grounded in the OneGrid semantic model"><span class="sw"></span> Data Agent</span>
+      <span class="spacer"></span>
+      <button class="modelbtn" id="newChat" title="New chat">＋ New</button>
+    </div>
+  </div>
+  <div class="msgs" id="msgs"></div>
+  <div class="ask">
+    <input class="q" id="q" placeholder="Ask about any asset, event, model or the ontology…" />
+    <button class="send" id="send">Send</button>
+  </div>
+  <div class="foot">Grounded in Eventhouse (KQL) · semantic model (DAX) · forecast</div>
+</div>
+
+<script>
+/* ============ Cleaned IA — pillars (top-level) with areas; overlaps combined ============
+   Combined vs the raw 13-item merge:
+   • Executive Overview (A) + Operations Overview (B)  -> one "Overview"
+   • Weather Events (B) + Forecast Timeline (B)        -> one "Forecast" (tabs)
+   • Operations Assistant / Copilot (B route)          -> removed from rail -> the chat dialog
+   • Thresholds + Governance + Deployment              -> "Admin" (secondary, collapsed)
+   • Asset Mgmt (A/B) surfaces as the "Assets" hub (Registry / Risk / Maintenance lenses)
+   alerts:n on an area rolls up to a badge on its pillar (badges only on core destinations). */
+const IC_OVERVIEW='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.3"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.3"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.3"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.3"/></svg>';
+const IC_ONTOLOGY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M9.5 5h5M6.5 8 11 14.5M17.5 8 13 14.5" stroke-linecap="round"/><rect x="2.5" y="2.5" width="7" height="5" rx="1.2"/><rect x="14.5" y="2.5" width="7" height="5" rx="1.2"/><rect x="8.5" y="15" width="7" height="5.5" rx="1.2"/></svg>';
+const PILLARS = [
+  { id:'overview',  label:'Overview',        icon:IC_OVERVIEW, single:true, bold:true, areas:[ {id:'overview', label:'Overview', icon:IC_OVERVIEW} ] },
+  { id:'assetexplorer', label:'Asset Explorer', icon:'▤', single:true, src:'A + B', areas:[ {id:'assetrisk', label:'Asset Explorer', icon:'▤'} ] },
+  { id:'twin',      label:'Digital Twin',    icon:'◧', src:'A', ov:'twinOv', areas:[
+      {id:'controlroom', label:'Control Room', icon:'◧'},
+      {id:'simulation',  label:'Simulation',   icon:'⚗'},                    // alembic (real build: lucide FlaskConical)
+      {id:'maintenance', label:'Maintenance',  icon:'✚', alerts:2},
+  ]},
+  { id:'weather',   label:'Weather',         icon:'≈', src:'B', ov:'weatherOv', areas:[
+      {id:'map',      label:'Live Map',        icon:'◉'},
+      {id:'forecast', label:'Forecast',        icon:'⌁'},                    // Events + Timeline
+      {id:'exposure', label:'Storm Exposure',  icon:'△', alerts:3},          // weather-driven exposure (feeds Asset Explorer)
+      {id:'posture',  label:'Response Posture', icon:'⛨'},
+  ]},
+  { id:'ontology',  label:'Ontology',        icon:IC_ONTOLOGY, single:true, src:'A', areas:[ {id:'ontology', label:'Graph', icon:IC_ONTOLOGY} ] },
+];
+const SECONDARY = [
+  { id:'admin',  label:'Admin',  icon:'⚙', collapsedByDefault:true, areas:[
+      {id:'thresholds', label:'Thresholds',            icon:'⚙'},
+      {id:'governance', label:'Governance & Security',  icon:'⛉'},
+      {id:'deployment', label:'Deployment',             icon:'⤴'},
+  ]},
+];
+const ALL = [...PILLARS, ...SECONDARY];
+const areaAlerts = p => p.alerts ?? p.areas.reduce((s,a)=>s+(a.alerts||0),0);
+const areaById = id => ALL.flatMap(p=>p.areas.map(a=>({...a,pillar:p.id}))).find(a=>a.id===id);
+const pillarOf = id => ALL.find(p=>p.id===id || p.ov===id || p.areas.some(a=>a.id===id));
+const isSecondary = pid => SECONDARY.some(p=>p.id===pid);
+
+let current = 'overview';
+const manualCollapsed = new Set();                          // groups the user explicitly collapsed
+const isActivePillar = p => pillarOf(current)?.id===p.id;
+const groupOpen = p => isActivePillar(p) && !manualCollapsed.has(p.id);
+
+/* ---------- rail (Layout A: grouped, accordion, animated) ---------- */
+function railGroup(p){
+  const roll = areaAlerts(p);
+  if (p.single){
+    return `<a class="navitem ${p.bold?'strong':''} ${p.alerts?'hasalert':''}" data-area="${p.areas[0].id}" title="${p.label}">
+      <span class="ic">${p.icon}</span><span class="lbl">${p.label}</span>${p.alerts?`<span class="badge">${p.alerts}</span>`:''}</a>`;
+  }
+  const kids = p.areas.map(a=>`<a class="navitem ${a.alerts?'hasalert':''}" data-area="${a.id}" title="${a.label}">
+      <span class="ic">${a.icon}</span><span class="lbl">${a.label}</span>${a.alerts?`<span class="badge soft">${a.alerts}</span>`:''}</a>`).join('');
+  return `<div class="grouphdr ${groupOpen(p)?'':'collapsed'} ${current===p.ov?'active':''} ${roll?'hasalert':''}" data-group="${p.id}" title="${p.label}">
+      <span class="ic">${p.icon}</span><span class="lbl">${p.label}</span>
+      ${roll?`<span class="badge soft">${roll}</span>`:''}<span class="chev">▾</span>
+    </div><div class="groupkids"><div class="kidwrap">${kids}</div></div>`;
+}
+// Build the rail DOM once; navigation only toggles classes so expand/collapse animates.
+function renderRail(){
+  const rail=document.getElementById('rail');
+  rail.innerHTML = PILLARS.map(railGroup).join('') + `<div class="divider"></div>` + SECONDARY.map(railGroup).join('');
+  rail.querySelectorAll('[data-area]').forEach(a=> a.onclick=e=>{e.preventDefault();go(a.dataset.area);});
+  rail.querySelectorAll('[data-group]').forEach(g=> g.onclick=()=>{
+    const p=ALL.find(x=>x.id===g.dataset.group);
+    if(isActivePillar(p)){                    // already open → second click collapses (click again to reopen)
+      manualCollapsed.has(p.id)?manualCollapsed.delete(p.id):manualCollapsed.add(p.id);
+      syncRail();
+    } else {                                  // other pillar → open it + load its overview page (no separate overview link needed)
+      manualCollapsed.clear();
+      go(p.ov || p.areas[0].id);
+    }
+  });
+  syncRail();
+}
+function syncRail(){
+  const rail=document.getElementById('rail');
+  rail.querySelectorAll('[data-group]').forEach(g=>{const p=ALL.find(x=>x.id===g.dataset.group);
+    g.classList.toggle('collapsed', !groupOpen(p));
+    g.classList.toggle('active', current===p.ov);});
+  rail.querySelectorAll('[data-area]').forEach(a=> a.classList.toggle('active', a.dataset.area===current));
+  document.getElementById('alertsTop').classList.toggle('active', current==='alerts');
+}
+
+/* ---------- content views (mock) ---------- */
+const V={};
+V.overview=()=>head('Overview','Unified executive + operations view across weather exposure and asset health.','A + B')+`
+  <div class="pad"><div class="grid cols-4">
+    ${kpi('Assets at risk','3','+1 vs T-96h','down','B')}${kpi('Fleet health','92%','+0.4%','up','A')}
+    ${kpi('Open alerts','5','2 critical','down','B')}${kpi('Forecast conf.','78%','T-72h','','B')}
+  </div><div class="grid cols-2" style="margin-top:14px">
+    <div class="card"><div class="cardtitle"><h2>Exposure by platform</h2><span class="src b">weather</span></div>${riskTable()}</div>
+    <div class="card"><div class="cardtitle"><h2>Fleet health pulse</h2><span class="src a">twin</span></div><div class="spark">${bars(24)}</div>
+      <p class="muted" style="font-size:12px;margin:12px 0 0">Live historian aggregate, last 24h. Two assets trending toward maintenance thresholds.</p></div>
+  </div></div>`;
+V.weatherOv=()=>head('Weather — Operations Overview','Storm exposure and response posture across the estate.','B')+`
+  <div class="pad"><div class="grid cols-4">
+    ${kpi('Assets at risk','3','+1 vs T-96h','down','B')}${kpi('Named storms','1','Gabrielle · Cat 3','','B')}
+    ${kpi('Open alerts','5','2 critical','down','B')}${kpi('Forecast conf.','78%','T-72h','','B')}
+  </div><div class="grid cols-2" style="margin-top:14px">
+    <div class="card"><div class="cardtitle"><h2>Exposure by platform</h2><span class="src b">weather</span></div>${riskTable()}</div>
+    <div class="card"><div class="cardtitle"><h2>Response posture</h2><span class="src b">weather</span></div>
+      <div class="list">${liveRow('Thunder Horse','muster T-72h','high')}${liveRow('Mad Dog','standby','mon')}${liveRow('Atlantis','standby','mon')}</div></div>
+  </div></div>`;
+V.twinOv=()=>head('Digital Twin — Operations Overview','Executive view of fleet health, live twin telemetry and predicted failures.','A')+`
+  <div class="pad"><div class="grid cols-4">
+    ${kpi('Fleet health','92%','+0.4%','up','A')}${kpi('Assets streaming','48','live','','A')}
+    ${kpi('Open anomalies','2','Compressor B · Boiler 3','down','A')}${kpi('Predicted trips (14d)','3','survival model','','A')}
+  </div><div class="grid cols-2" style="margin-top:14px">
+    <div class="card"><div class="cardtitle"><h2>Fleet health pulse</h2><span class="src a">twin</span></div><div class="spark">${bars(24)}</div></div>
+    <div class="card"><div class="cardtitle"><h2>Assets to watch</h2><span class="src a">twin</span></div>
+      <div class="list">${liveRow('Compressor B','trip ~26h','high')}${liveRow('Boiler 3','survival flag','high')}${liveRow('Pump 12','drift','mon')}</div></div>
+  </div></div>`;
+V.map=()=>head('Live Map','Real-time storm track joined to your offshore estate.','B')+`
+  <div class="pad grid cols-2" style="grid-template-columns:1.6fr 1fr">
+    <div class="surface-mock map"><span class="pin" style="left:31%;top:41%;color:var(--risk-crit);background:var(--risk-crit)"></span>
+      <span class="pin" style="left:67%;top:61%;color:var(--risk-high);background:var(--risk-high)"></span>
+      <span class="pin" style="left:52%;top:33%;color:var(--risk-mon);background:var(--risk-mon)"></span>
+      <span class="pin" style="left:44%;top:70%;color:var(--risk-low);background:var(--risk-low)"></span></div>
+    <div class="card"><div class="cardtitle"><h2>In the cone</h2><span class="tag">MapLibre</span></div>${riskTable()}</div></div>`;
+V.forecast=()=>head('Forecast','Named storms, tracks and the T-gate timeline — Events + Timeline in one place.','B')+
+  tabbar('forecast',[['events','Weather Events'],['timeline','Forecast Timeline']])+`
+  <div class="pad" id="fcbody"></div>`;
+V.exposure=()=>head('Storm Exposure','Weather-driven exposure score — forecast × fragility × exposure. (Feeds the unified Asset Risk.)','B')+`
+  <div class="pad grid cols-3">${gauge('Thunder Horse',.86,'crit')}${gauge('Mad Dog',.64,'high')}${gauge('Atlantis',.58,'high')}
+    ${gauge('Na Kika',.32,'mon')}${gauge('Holstein',.19,'low')}${gauge('Horn Mtn',.12,'low')}</div>`;
+V.posture=()=>head('Response Posture','T-gate readiness per asset and crew.','B')+`
+  <div class="pad grid cols-3">${card('Evacuation gates','B','3 platforms past T-72h muster gate.')}${card('Crew readiness','B','Standby crews staged at 2 shore bases.')}${card('Playbooks','B','Storm playbooks attached per asset class.')}</div>`;
+V.controlroom=()=>head('Control Room — Digital Twin','Live 3D twin with anomalies pinned to the physical zone.','A')+`
+  <div class="pad grid cols-2" style="grid-template-columns:1.5fr 1fr"><div class="surface-mock twin"><div class="rig"></div></div>
+    <div><div class="card"><div class="cardtitle"><h2>Compressor B</h2><span class="chip high">anomaly</span></div>
+      <div class="list">${liveRow('Vibration','7.8 mm/s','high')}${liveRow('Bearing temp','96 °C','mon')}${liveRow('Discharge press','61 bar','low')}${liveRow('Flow','12,400 m³/h','low')}</div></div>
+      <div class="card" style="margin-top:14px"><div class="cardtitle"><h2>Root cause</h2><span class="src a">twin</span></div>
+        <p class="muted" style="font-size:13px;margin:0">Stop model predicts trip in ~26h; survival model attributes to bearing wear. Inspect at next weather window.</p></div></div></div>`;
+V.simulation=()=>head('Failure Simulation','Fast-forward an asset to its predicted breakdown.','A')+`
+  <div class="pad grid cols-3">${card('Horizon','A','Projects up to 14 days from live state.')}${card('Driver','A','Short-term stop + long-term survival models.')}${card('Feedback','A','Thumbs up/down at each predicted failure.')}</div>`;
+V.maintenance=()=>head('Maintenance','Work orders driven by the twin + survival models.','A')+`
+  <div class="pad card"><table><thead><tr><th>Asset</th><th>Signal</th><th>Due</th><th>Sev</th></tr></thead><tbody>
+    ${['Compressor B|bearing wear|26h|high','Boiler 3|survival flag|4d|high','Pump 12|drift|9d|mon'].map(r=>{const[a,s,d,c]=r.split('|');return `<tr><td>${a}</td><td class="muted">${s}</td><td class="mono">${d}</td><td><span class="chip ${c}">${c}</span></td></tr>`}).join('')}
+  </tbody></table></div>`;
+V.assetrisk=()=>head('Asset Explorer','Explore every asset — weather exposure blended with equipment reliability.','A + B')+
+  tabbar('assetrisk',[['total','Total risk'],['exposure','Weather exposure'],['reliability','Reliability'],['registry','Registry']])+`<div class="pad" id="arbody"></div>`;
+V.assets=()=>head('Asset Registry','Every asset joined across both data planes.','A + B')+`
+  <div class="pad card"><table><thead><tr><th>Asset</th><th>Type</th><th>Region</th><th>Operator</th><th>Total risk</th></tr></thead><tbody>
+    ${[['Thunder Horse','Platform','GoM','BP','crit'],['Mad Dog','Platform','GoM','BP','high'],['Atlantis','Platform','GoM','BP','high'],['Compressor B','Equipment','Atlantis','—','high'],['Na Kika','FPU','GoM','Shell','mon'],['Holstein','Spar','GoM','—','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="muted">${r[2]}</td><td class="muted">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
+  </tbody></table></div>`;
+V.ontology=()=>head('Ontology','Force-directed knowledge graph generated from the Fabric semantic model.','A')+`
+  <div class="pad"><div class="surface-mock graph">${graphSvg()}</div></div>`;
+V.alerts=()=>head('Alerts','Unified inbox — weather-triggered and twin-triggered.','A + B')+`
+  <div class="pad card"><table><thead><tr><th>Time</th><th>Source</th><th>Asset</th><th>Message</th><th>Sev</th></tr></thead><tbody>
+    ${alertRow('02:14','B','Thunder Horse','Enters high-risk gate at T-72h','crit')}${alertRow('01:52','A','Compressor B','Vibration anomaly — trip predicted 26h','high')}
+    ${alertRow('00:40','B','Mad Dog','Forecast uncertainty widened','mon')}${alertRow('23:18','A','Boiler 3','Survival model flag','high')}${alertRow('22:05','B','Pipeline 7','Wind threshold breach','mon')}
+  </tbody></table></div>`;
+V.thresholds=()=>head('Thresholds','Per-asset trigger thresholds and gates.','B')+`<div class="pad grid cols-3">${card('Wind','B','Per asset-class breach thresholds.')}${card('Surge','B','Storm-surge gates by elevation.')}${card('Vibration','B','Twin anomaly trigger levels.')}</div>`;
+V.governance=()=>head('Governance & Security','OneLake security &amp; lineage review plane.','A')+`<div class="pad grid cols-3">${card('OneLake access','A','12 workspaces · least-privilege verified.')}${card('Lineage','A','Every KPI traces to a measure or KQL query.')}${card('Sensitivity','A','2 datasets labeled Confidential; masking on.')}</div>`;
+V.deployment=()=>head('Deployment','Ship OneGrid into your own Azure tenant.','B')+`<div class="pad grid cols-2">${card('Deploy to Azure','B','One-click ARM provisions Fabric + Foundry + Container App.')}${card('Status','B','Last deploy healthy · managed identity wired.')}</div>`;
+
+/* sub-tab bodies */
+function forecastTab(t){document.getElementById('fcbody').innerHTML = t==='timeline'
+  ? `<div class="card"><div class="cardtitle"><h2>T-gate timeline</h2><span class="tag">T-120h → landfall</span></div><div class="spark">${bars(30)}</div></div>`
+  : `<div class="grid cols-2">${card('Hurricane Gabrielle','B','Cat 3 · NW at 12kt · cone intersects GoM estate.')}${card('Invest 94L','B','40% formation odds over 48h.')}</div>`;}
+function assetriskTab(t){const el=document.getElementById('arbody');
+  if(t==='exposure'){el.innerHTML=`<div class="grid cols-3">${gauge('Thunder Horse',.86,'crit')}${gauge('Mad Dog',.64,'high')}${gauge('Atlantis',.58,'high')}${gauge('Na Kika',.32,'mon')}${gauge('Holstein',.19,'low')}${gauge('Horn Mtn',.12,'low')}</div>
+    <p class="muted" style="font-size:12px;margin:14px 0 0">Weather-driven: forecast × fragility × exposure (from the Weather section).</p>`;}
+  else if(t==='reliability'){el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Failure mechanism</th><th>7d surv</th><th>14d surv</th><th>Risk</th></tr></thead><tbody>
+    ${[['Compressor B','bearing wear','62%','41%','high'],['Boiler 3','tube fouling','70%','55%','high'],['Pump 12','seal drift','88%','79%','mon'],['Turbine 4','—','98%','96%','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="mono">${r[2]}</td><td class="mono">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
+  </tbody></table><p class="muted" style="font-size:12px;margin:12px 0 0">Twin-driven: survival / stop models (from Digital Twin).</p></div>`;}
+  else if(t==='registry'){el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Type</th><th>Region</th><th>Operator</th><th>Total risk</th></tr></thead><tbody>
+    ${[['Thunder Horse','Platform','GoM','BP','crit'],['Mad Dog','Platform','GoM','BP','high'],['Atlantis','Platform','GoM','BP','high'],['Compressor B','Equipment','Atlantis','—','high'],['Na Kika','FPU','GoM','Shell','mon'],['Holstein','Spar','GoM','—','low']].map(r=>`<tr><td>${r[0]}</td><td class="muted">${r[1]}</td><td class="muted">${r[2]}</td><td class="muted">${r[3]}</td><td><span class="chip ${r[4]}">${r[4]}</span></td></tr>`).join('')}
+  </tbody></table></div>`;}
+  else{el.innerHTML=`<div class="card"><table><thead><tr><th>Asset</th><th>Weather</th><th>Reliability</th><th>Total</th></tr></thead><tbody>
+    ${[['Thunder Horse','0.86','0.30','0.79','crit'],['Mad Dog','0.64','0.20','0.58','high'],['Atlantis','0.58','0.44','0.55','high'],['Compressor B','0.22','0.71','0.63','high'],['Na Kika','0.32','0.18','0.30','mon'],['Holstein','0.19','0.12','0.17','low']].map(r=>`<tr><td>${r[0]}</td><td class="mono muted">${r[1]}</td><td class="mono muted">${r[2]}</td><td><span class="chip ${r[4]}" style="min-width:44px;text-align:center">${r[3]}</span></td></tr>`).join('')}
+  </tbody></table><p class="muted" style="font-size:12px;margin:12px 0 0">Total = blend of weather exposure and equipment reliability.</p></div>`;}}
+
+/* helpers */
+function head(t,d,prov){return `<div class="pagehead"><div><h1>${t}</h1><p>${d}</p></div><span class="provenance">source: ${prov}</span></div>`}
+function tabbar(view,items){return `<div class="tabs" style="border-bottom:1px solid var(--border);margin:0;padding:10px 24px 0">${items.map((it,i)=>`<a href="#" data-tab="${view}:${it[0]}" class="${i===0?'active':''}">${it[1]}</a>`).join('')}</div>`}
+function card(t,src,d){return `<div class="card"><div class="cardtitle"><h2>${t}</h2>${src?`<span class="src ${src.toLowerCase()}">${src==='A'?'twin':'weather'}</span>`:''}</div><p class="muted" style="font-size:13px;margin:0">${d}</p></div>`}
+function kpi(t,v,sub,dir,src){return `<div class="card"><h3>${t} <span class="src ${src.toLowerCase()}" style="float:right">${src}</span></h3><div class="kpi">${v} <small class="${dir||'muted'}">${sub}</small></div></div>`}
+function bars(n){let s='';for(let i=0;i<n;i++)s+=`<i style="height:${30+Math.round(60*Math.abs(Math.sin(i*.7)))}%"></i>`;return s}
+function riskTable(){return `<table><thead><tr><th>Platform</th><th>Score</th><th>Gate</th></tr></thead><tbody>${rt('Thunder Horse','0.86','crit')}${rt('Mad Dog','0.64','high')}${rt('Atlantis','0.58','high')}${rt('Na Kika','0.32','mon')}${rt('Holstein','0.19','low')}</tbody></table>`}
+function rt(n,s,c){const L={crit:'Critical',high:'High',mon:'Monitor',low:'Low'};return `<tr><td>${n}</td><td class="mono">${s}</td><td><span class="chip ${c}">${L[c]}</span></td></tr>`}
+function gauge(n,v,c){return `<div class="card"><div class="cardtitle"><h2>${n}</h2><span class="chip ${c}">${Math.round(v*100)}</span></div><div class="bar"><span style="width:${v*100}%"></span></div><p class="muted" style="font-size:12px;margin:10px 0 0">forecast × fragility × exposure</p></div>`}
+function liveRow(k,v,c){return `<div><span style="flex:1">${k}</span><span class="mono">${v}</span><span class="chip ${c}" style="min-width:52px;text-align:center">${c==='high'?'high':c==='mon'?'watch':'ok'}</span></div>`}
+function alertRow(t,src,a,m,c){return `<tr><td class="mono muted">${t}</td><td><span class="src ${src.toLowerCase()}">${src}</span></td><td>${a}</td><td class="muted">${m}</td><td><span class="chip ${c}">${c}</span></td></tr>`}
+function graphSvg(){const nodes=[[50,50],[24,30],[76,32],[30,72],[70,74],[50,86],[14,55],[88,58]];let e='';[[0,1],[0,2],[0,3],[0,4],[1,6],[2,7],[3,5],[4,5],[1,2]].forEach(([a,b])=>{e+=`<line x1="${nodes[a][0]}%" y1="${nodes[a][1]}%" x2="${nodes[b][0]}%" y2="${nodes[b][1]}%" stroke="var(--border)" stroke-width="1.5"/>`});nodes.forEach(([x,y],i)=>{e+=`<circle cx="${x}%" cy="${y}%" r="${i===0?11:7}" fill="${i===0?'var(--primary)':'var(--accent)'}" opacity="${i===0?1:.8}"/>`});return `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${e}</svg>`}
+
+/* ---------- navigate ---------- */
+function go(id){
+  current=id; manualCollapsed.clear();
+  document.getElementById('view').innerHTML=(V[id]||V.overview)();
+  document.getElementById('subtabs').innerHTML='';  // sub-tabs live inside views now
+  // wire in-view tabbars
+  document.querySelectorAll('[data-tab]').forEach(a=>a.onclick=e=>{e.preventDefault();
+    const[view,tab]=a.dataset.tab.split(':');document.querySelectorAll(`[data-tab^="${view}:"]`).forEach(x=>x.classList.toggle('active',x===a));
+    if(view==='forecast')forecastTab(tab); if(view==='assetrisk')assetriskTab(tab);});
+  if(id==='forecast')forecastTab('events');
+  if(id==='assetrisk')assetriskTab('total');
+  syncRail();
+  document.querySelector('.content').scrollTop=0;
+}
+
+/* ---------- chrome controls ---------- */
+function syncTheme(dark){ document.documentElement.classList.toggle('dark',dark);
+  document.querySelectorAll('#pmTheme button').forEach(x=>x.classList.toggle('on',(x.dataset.theme==='dark')===dark)); }
+document.getElementById('railToggle').onclick=()=>{const c=document.body.dataset.railcollapsed==='1';
+  document.body.dataset.railcollapsed=c?'0':'1';document.getElementById('railToggle').textContent=c?'‹‹':'››';};
+// Alerts: toggle to the inbox and back to the previous page; button shows selected while open
+let prevPage='overview';
+document.getElementById('alertsTop').onclick=()=>{ if(current==='alerts'){go(prevPage);} else {prevPage=current;go('alerts');} };
+// Clicking any blank area of a collapsed rail expands it back out
+document.getElementById('railAside').addEventListener('click',e=>{
+  if(document.body.dataset.railcollapsed==='1' && !e.target.closest('[data-area],[data-group]')){
+    document.body.dataset.railcollapsed='0'; document.getElementById('railToggle').textContent='‹‹'; }
+});
+// profile dropdown (personal settings)
+const profileBtn=document.getElementById('profileBtn'), profileMenu=document.getElementById('profileMenu');
+profileBtn.onclick=(e)=>{e.stopPropagation();profileMenu.classList.toggle('open');};
+document.addEventListener('click',(e)=>{ if(!profileMenu.contains(e.target)&&e.target!==profileBtn) profileMenu.classList.remove('open'); });
+document.querySelectorAll('#pmTheme button').forEach(b=>b.onclick=()=>syncTheme(b.dataset.theme==='dark'));
+document.getElementById('pmLanding').onchange=(e)=>go(e.target.value);
+
+/* ---------- chat dialog (OneGrid ChatPanel feel) ---------- */
+const MODELS={'Azure OpenAI':['GPT-5','GPT-4o','GPT-4o mini'],'Anthropic':['Claude Opus 4','Claude Sonnet 4'],'Meta':['Llama 3.1 70B']};
+let curModel='GPT-5';
+function renderModels(){const m=document.getElementById('modelMenu');
+  m.innerHTML=Object.entries(MODELS).map(([v,list])=>`<div class="vh">${v}</div>`+list.map(n=>`<button class="${n===curModel?'sel':''}" data-model="${n}"><span class="rd"></span>${n}</button>`).join('')).join('');
+  m.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>{curModel=b.dataset.model;document.getElementById('modelName').textContent=curModel;m.classList.remove('open');renderModels();});}
+const SUGGEST=['Compare Thunder Horse exposure vs last cycle','Open the twin for Compressor B','Which assets trip before landfall?'];
+function addMsg(who,html){const d=document.createElement('div');d.className='bubble '+who;d.innerHTML=html;document.getElementById('msgs').appendChild(d);document.getElementById('msgs').scrollTop=1e9;}
+function addSuggest(){const d=document.createElement('div');d.className='suggest';d.innerHTML=SUGGEST.map(s=>`<button>${s}</button>`).join('');
+  d.querySelectorAll('button').forEach(b=>b.onclick=()=>ask(b.textContent));document.getElementById('msgs').appendChild(d);}
+function seedChat(){document.getElementById('msgs').innerHTML='';
+  addMsg('ai','Ask across the whole grid — weather exposure, asset risk, twin telemetry, or the ontology.');addSuggest();}
+function ask(text){const t=text||document.getElementById('q').value.trim();if(!t)return;document.getElementById('q').value='';
+  document.querySelectorAll('.suggest').forEach(s=>s.remove());addMsg('me',t);
+  setTimeout(()=>{addMsg('ai','<b>3 platforms</b> exceed the high-risk gate at T-72h: Thunder Horse, Mad Dog, Atlantis. Thunder Horse also has an open twin anomaly on Compressor B.');addSuggest();},350);}
+document.getElementById('launcher').onclick=()=>{document.getElementById('chat').classList.add('open');document.getElementById('launcher').style.display='none';};
+document.getElementById('chatClose').onclick=()=>{document.getElementById('chat').classList.remove('open');document.getElementById('launcher').style.display='flex';};
+document.getElementById('modelBtn').onclick=()=>document.getElementById('modelMenu').classList.toggle('open');
+document.getElementById('newChat').onclick=seedChat;
+document.getElementById('agentTog').onclick=()=>document.getElementById('agentTog').classList.toggle('on');
+document.querySelectorAll('.provtoggle button').forEach(b=>b.onclick=()=>document.querySelectorAll('.provtoggle button').forEach(x=>x.classList.toggle('on',x===b)));
+document.getElementById('send').onclick=()=>ask();
+document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')ask();});
+
+renderModels(); seedChat(); renderRail(); go('overview');
+</script>
+</body>
+</html>

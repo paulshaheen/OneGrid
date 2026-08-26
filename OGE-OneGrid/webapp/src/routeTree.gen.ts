@@ -12,26 +12,38 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AlertsRouteImport } from './routes/alerts'
+import { Route as AssetExplorerRouteImport } from './routes/asset-explorer'
 import { Route as AssetsRouteImport } from './routes/assets'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ControlRoomRouteImport } from './routes/control-room'
 import { Route as CopilotRouteImport } from './routes/copilot'
 import { Route as DeploymentRouteImport } from './routes/deployment'
 import { Route as EventsRouteImport } from './routes/events'
+import { Route as GovernanceRouteImport } from './routes/governance'
+import { Route as MaintenanceRouteImport } from './routes/maintenance'
 import { Route as MapRouteImport } from './routes/map'
+import { Route as OntologyRouteImport } from './routes/ontology'
 import { Route as PostureRouteImport } from './routes/posture'
 import { Route as RiskRouteImport } from './routes/risk'
+import { Route as SimulationRouteImport } from './routes/simulation'
 import { Route as ThresholdsRouteImport } from './routes/thresholds'
 import { Route as TimelineRouteImport } from './routes/timeline'
 import { Route as AuthCallbackRouteImport } from './routes/auth_.callback'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAlertsRouteImport } from './routes/_authenticated/app.alerts'
+import { Route as AuthenticatedAppAssetExplorerRouteImport } from './routes/_authenticated/app.asset-explorer'
 import { Route as AuthenticatedAppAssetsRouteImport } from './routes/_authenticated/app.assets'
+import { Route as AuthenticatedAppControlRoomRouteImport } from './routes/_authenticated/app.control-room'
 import { Route as AuthenticatedAppCopilotRouteImport } from './routes/_authenticated/app.copilot'
 import { Route as AuthenticatedAppDeploymentRouteImport } from './routes/_authenticated/app.deployment'
 import { Route as AuthenticatedAppEventsRouteImport } from './routes/_authenticated/app.events'
+import { Route as AuthenticatedAppGovernanceRouteImport } from './routes/_authenticated/app.governance'
+import { Route as AuthenticatedAppMaintenanceRouteImport } from './routes/_authenticated/app.maintenance'
 import { Route as AuthenticatedAppMapRouteImport } from './routes/_authenticated/app.map'
+import { Route as AuthenticatedAppOntologyRouteImport } from './routes/_authenticated/app.ontology'
 import { Route as AuthenticatedAppPostureRouteImport } from './routes/_authenticated/app.posture'
 import { Route as AuthenticatedAppRiskRouteImport } from './routes/_authenticated/app.risk'
+import { Route as AuthenticatedAppSimulationRouteImport } from './routes/_authenticated/app.simulation'
 import { Route as AuthenticatedAppThresholdsRouteImport } from './routes/_authenticated/app.thresholds'
 import { Route as AuthenticatedAppTimelineRouteImport } from './routes/_authenticated/app.timeline'
 
@@ -49,6 +61,11 @@ const AlertsRoute = AlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssetExplorerRoute = AssetExplorerRouteImport.update({
+  id: '/asset-explorer',
+  path: '/asset-explorer',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AssetsRoute = AssetsRouteImport.update({
   id: '/assets',
   path: '/assets',
@@ -57,6 +74,11 @@ const AssetsRoute = AssetsRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ControlRoomRoute = ControlRoomRouteImport.update({
+  id: '/control-room',
+  path: '/control-room',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CopilotRoute = CopilotRouteImport.update({
@@ -74,9 +96,24 @@ const EventsRoute = EventsRouteImport.update({
   path: '/events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GovernanceRoute = GovernanceRouteImport.update({
+  id: '/governance',
+  path: '/governance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MaintenanceRoute = MaintenanceRouteImport.update({
+  id: '/maintenance',
+  path: '/maintenance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MapRoute = MapRouteImport.update({
   id: '/map',
   path: '/map',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OntologyRoute = OntologyRouteImport.update({
+  id: '/ontology',
+  path: '/ontology',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PostureRoute = PostureRouteImport.update({
@@ -87,6 +124,11 @@ const PostureRoute = PostureRouteImport.update({
 const RiskRoute = RiskRouteImport.update({
   id: '/risk',
   path: '/risk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SimulationRoute = SimulationRouteImport.update({
+  id: '/simulation',
+  path: '/simulation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ThresholdsRoute = ThresholdsRouteImport.update({
@@ -114,11 +156,23 @@ const AuthenticatedAppAlertsRoute = AuthenticatedAppAlertsRouteImport.update({
   path: '/app/alerts',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppAssetExplorerRoute =
+  AuthenticatedAppAssetExplorerRouteImport.update({
+    id: '/app/asset-explorer',
+    path: '/app/asset-explorer',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppAssetsRoute = AuthenticatedAppAssetsRouteImport.update({
   id: '/app/assets',
   path: '/app/assets',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppControlRoomRoute =
+  AuthenticatedAppControlRoomRouteImport.update({
+    id: '/app/control-room',
+    path: '/app/control-room',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppCopilotRoute = AuthenticatedAppCopilotRouteImport.update({
   id: '/app/copilot',
   path: '/app/copilot',
@@ -135,11 +189,29 @@ const AuthenticatedAppEventsRoute = AuthenticatedAppEventsRouteImport.update({
   path: '/app/events',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppGovernanceRoute =
+  AuthenticatedAppGovernanceRouteImport.update({
+    id: '/app/governance',
+    path: '/app/governance',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAppMaintenanceRoute =
+  AuthenticatedAppMaintenanceRouteImport.update({
+    id: '/app/maintenance',
+    path: '/app/maintenance',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppMapRoute = AuthenticatedAppMapRouteImport.update({
   id: '/app/map',
   path: '/app/map',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppOntologyRoute =
+  AuthenticatedAppOntologyRouteImport.update({
+    id: '/app/ontology',
+    path: '/app/ontology',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppPostureRoute = AuthenticatedAppPostureRouteImport.update({
   id: '/app/posture',
   path: '/app/posture',
@@ -150,6 +222,12 @@ const AuthenticatedAppRiskRoute = AuthenticatedAppRiskRouteImport.update({
   path: '/app/risk',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppSimulationRoute =
+  AuthenticatedAppSimulationRouteImport.update({
+    id: '/app/simulation',
+    path: '/app/simulation',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppThresholdsRoute =
   AuthenticatedAppThresholdsRouteImport.update({
     id: '/app/thresholds',
@@ -166,25 +244,37 @@ const AuthenticatedAppTimelineRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alerts': typeof AlertsRoute
+  '/asset-explorer': typeof AssetExplorerRoute
   '/assets': typeof AssetsRoute
   '/auth': typeof AuthRoute
+  '/control-room': typeof ControlRoomRoute
   '/copilot': typeof CopilotRoute
   '/deployment': typeof DeploymentRoute
   '/events': typeof EventsRoute
+  '/governance': typeof GovernanceRoute
+  '/maintenance': typeof MaintenanceRoute
   '/map': typeof MapRoute
+  '/ontology': typeof OntologyRoute
   '/posture': typeof PostureRoute
   '/risk': typeof RiskRoute
+  '/simulation': typeof SimulationRoute
   '/thresholds': typeof ThresholdsRoute
   '/timeline': typeof TimelineRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
+  '/app/asset-explorer': typeof AuthenticatedAppAssetExplorerRoute
   '/app/assets': typeof AuthenticatedAppAssetsRoute
+  '/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/app/events': typeof AuthenticatedAppEventsRoute
+  '/app/governance': typeof AuthenticatedAppGovernanceRoute
+  '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/app/map': typeof AuthenticatedAppMapRoute
+  '/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
+  '/app/simulation': typeof AuthenticatedAppSimulationRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
   '/app/': typeof AuthenticatedAppIndexRoute
@@ -192,25 +282,37 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alerts': typeof AlertsRoute
+  '/asset-explorer': typeof AssetExplorerRoute
   '/assets': typeof AssetsRoute
   '/auth': typeof AuthRoute
+  '/control-room': typeof ControlRoomRoute
   '/copilot': typeof CopilotRoute
   '/deployment': typeof DeploymentRoute
   '/events': typeof EventsRoute
+  '/governance': typeof GovernanceRoute
+  '/maintenance': typeof MaintenanceRoute
   '/map': typeof MapRoute
+  '/ontology': typeof OntologyRoute
   '/posture': typeof PostureRoute
   '/risk': typeof RiskRoute
+  '/simulation': typeof SimulationRoute
   '/thresholds': typeof ThresholdsRoute
   '/timeline': typeof TimelineRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
+  '/app/asset-explorer': typeof AuthenticatedAppAssetExplorerRoute
   '/app/assets': typeof AuthenticatedAppAssetsRoute
+  '/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/app/events': typeof AuthenticatedAppEventsRoute
+  '/app/governance': typeof AuthenticatedAppGovernanceRoute
+  '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/app/map': typeof AuthenticatedAppMapRoute
+  '/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
+  '/app/simulation': typeof AuthenticatedAppSimulationRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
   '/app': typeof AuthenticatedAppIndexRoute
@@ -220,25 +322,37 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/alerts': typeof AlertsRoute
+  '/asset-explorer': typeof AssetExplorerRoute
   '/assets': typeof AssetsRoute
   '/auth': typeof AuthRoute
+  '/control-room': typeof ControlRoomRoute
   '/copilot': typeof CopilotRoute
   '/deployment': typeof DeploymentRoute
   '/events': typeof EventsRoute
+  '/governance': typeof GovernanceRoute
+  '/maintenance': typeof MaintenanceRoute
   '/map': typeof MapRoute
+  '/ontology': typeof OntologyRoute
   '/posture': typeof PostureRoute
   '/risk': typeof RiskRoute
+  '/simulation': typeof SimulationRoute
   '/thresholds': typeof ThresholdsRoute
   '/timeline': typeof TimelineRoute
   '/auth_/callback': typeof AuthCallbackRoute
   '/_authenticated/app/alerts': typeof AuthenticatedAppAlertsRoute
+  '/_authenticated/app/asset-explorer': typeof AuthenticatedAppAssetExplorerRoute
   '/_authenticated/app/assets': typeof AuthenticatedAppAssetsRoute
+  '/_authenticated/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/_authenticated/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/_authenticated/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/_authenticated/app/events': typeof AuthenticatedAppEventsRoute
+  '/_authenticated/app/governance': typeof AuthenticatedAppGovernanceRoute
+  '/_authenticated/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/_authenticated/app/map': typeof AuthenticatedAppMapRoute
+  '/_authenticated/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/_authenticated/app/posture': typeof AuthenticatedAppPostureRoute
   '/_authenticated/app/risk': typeof AuthenticatedAppRiskRoute
+  '/_authenticated/app/simulation': typeof AuthenticatedAppSimulationRoute
   '/_authenticated/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/_authenticated/app/timeline': typeof AuthenticatedAppTimelineRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
@@ -248,25 +362,37 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/alerts'
+    | '/asset-explorer'
     | '/assets'
     | '/auth'
+    | '/control-room'
     | '/copilot'
     | '/deployment'
     | '/events'
+    | '/governance'
+    | '/maintenance'
     | '/map'
+    | '/ontology'
     | '/posture'
     | '/risk'
+    | '/simulation'
     | '/thresholds'
     | '/timeline'
     | '/auth/callback'
     | '/app/alerts'
+    | '/app/asset-explorer'
     | '/app/assets'
+    | '/app/control-room'
     | '/app/copilot'
     | '/app/deployment'
     | '/app/events'
+    | '/app/governance'
+    | '/app/maintenance'
     | '/app/map'
+    | '/app/ontology'
     | '/app/posture'
     | '/app/risk'
+    | '/app/simulation'
     | '/app/thresholds'
     | '/app/timeline'
     | '/app/'
@@ -274,25 +400,37 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/alerts'
+    | '/asset-explorer'
     | '/assets'
     | '/auth'
+    | '/control-room'
     | '/copilot'
     | '/deployment'
     | '/events'
+    | '/governance'
+    | '/maintenance'
     | '/map'
+    | '/ontology'
     | '/posture'
     | '/risk'
+    | '/simulation'
     | '/thresholds'
     | '/timeline'
     | '/auth/callback'
     | '/app/alerts'
+    | '/app/asset-explorer'
     | '/app/assets'
+    | '/app/control-room'
     | '/app/copilot'
     | '/app/deployment'
     | '/app/events'
+    | '/app/governance'
+    | '/app/maintenance'
     | '/app/map'
+    | '/app/ontology'
     | '/app/posture'
     | '/app/risk'
+    | '/app/simulation'
     | '/app/thresholds'
     | '/app/timeline'
     | '/app'
@@ -301,25 +439,37 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/alerts'
+    | '/asset-explorer'
     | '/assets'
     | '/auth'
+    | '/control-room'
     | '/copilot'
     | '/deployment'
     | '/events'
+    | '/governance'
+    | '/maintenance'
     | '/map'
+    | '/ontology'
     | '/posture'
     | '/risk'
+    | '/simulation'
     | '/thresholds'
     | '/timeline'
     | '/auth_/callback'
     | '/_authenticated/app/alerts'
+    | '/_authenticated/app/asset-explorer'
     | '/_authenticated/app/assets'
+    | '/_authenticated/app/control-room'
     | '/_authenticated/app/copilot'
     | '/_authenticated/app/deployment'
     | '/_authenticated/app/events'
+    | '/_authenticated/app/governance'
+    | '/_authenticated/app/maintenance'
     | '/_authenticated/app/map'
+    | '/_authenticated/app/ontology'
     | '/_authenticated/app/posture'
     | '/_authenticated/app/risk'
+    | '/_authenticated/app/simulation'
     | '/_authenticated/app/thresholds'
     | '/_authenticated/app/timeline'
     | '/_authenticated/app/'
@@ -329,14 +479,20 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AlertsRoute: typeof AlertsRoute
+  AssetExplorerRoute: typeof AssetExplorerRoute
   AssetsRoute: typeof AssetsRoute
   AuthRoute: typeof AuthRoute
+  ControlRoomRoute: typeof ControlRoomRoute
   CopilotRoute: typeof CopilotRoute
   DeploymentRoute: typeof DeploymentRoute
   EventsRoute: typeof EventsRoute
+  GovernanceRoute: typeof GovernanceRoute
+  MaintenanceRoute: typeof MaintenanceRoute
   MapRoute: typeof MapRoute
+  OntologyRoute: typeof OntologyRoute
   PostureRoute: typeof PostureRoute
   RiskRoute: typeof RiskRoute
+  SimulationRoute: typeof SimulationRoute
   ThresholdsRoute: typeof ThresholdsRoute
   TimelineRoute: typeof TimelineRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
@@ -365,6 +521,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlertsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/asset-explorer': {
+      id: '/asset-explorer'
+      path: '/asset-explorer'
+      fullPath: '/asset-explorer'
+      preLoaderRoute: typeof AssetExplorerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assets': {
       id: '/assets'
       path: '/assets'
@@ -377,6 +540,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/control-room': {
+      id: '/control-room'
+      path: '/control-room'
+      fullPath: '/control-room'
+      preLoaderRoute: typeof ControlRoomRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/copilot': {
@@ -400,11 +570,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/governance': {
+      id: '/governance'
+      path: '/governance'
+      fullPath: '/governance'
+      preLoaderRoute: typeof GovernanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/maintenance': {
+      id: '/maintenance'
+      path: '/maintenance'
+      fullPath: '/maintenance'
+      preLoaderRoute: typeof MaintenanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/map': {
       id: '/map'
       path: '/map'
       fullPath: '/map'
       preLoaderRoute: typeof MapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ontology': {
+      id: '/ontology'
+      path: '/ontology'
+      fullPath: '/ontology'
+      preLoaderRoute: typeof OntologyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/posture': {
@@ -419,6 +610,13 @@ declare module '@tanstack/react-router' {
       path: '/risk'
       fullPath: '/risk'
       preLoaderRoute: typeof RiskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/simulation': {
+      id: '/simulation'
+      path: '/simulation'
+      fullPath: '/simulation'
+      preLoaderRoute: typeof SimulationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/thresholds': {
@@ -456,11 +654,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAlertsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/asset-explorer': {
+      id: '/_authenticated/app/asset-explorer'
+      path: '/app/asset-explorer'
+      fullPath: '/app/asset-explorer'
+      preLoaderRoute: typeof AuthenticatedAppAssetExplorerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/assets': {
       id: '/_authenticated/app/assets'
       path: '/app/assets'
       fullPath: '/app/assets'
       preLoaderRoute: typeof AuthenticatedAppAssetsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/app/control-room': {
+      id: '/_authenticated/app/control-room'
+      path: '/app/control-room'
+      fullPath: '/app/control-room'
+      preLoaderRoute: typeof AuthenticatedAppControlRoomRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/app/copilot': {
@@ -484,11 +696,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppEventsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/governance': {
+      id: '/_authenticated/app/governance'
+      path: '/app/governance'
+      fullPath: '/app/governance'
+      preLoaderRoute: typeof AuthenticatedAppGovernanceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/app/maintenance': {
+      id: '/_authenticated/app/maintenance'
+      path: '/app/maintenance'
+      fullPath: '/app/maintenance'
+      preLoaderRoute: typeof AuthenticatedAppMaintenanceRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/map': {
       id: '/_authenticated/app/map'
       path: '/app/map'
       fullPath: '/app/map'
       preLoaderRoute: typeof AuthenticatedAppMapRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/app/ontology': {
+      id: '/_authenticated/app/ontology'
+      path: '/app/ontology'
+      fullPath: '/app/ontology'
+      preLoaderRoute: typeof AuthenticatedAppOntologyRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/app/posture': {
@@ -503,6 +736,13 @@ declare module '@tanstack/react-router' {
       path: '/app/risk'
       fullPath: '/app/risk'
       preLoaderRoute: typeof AuthenticatedAppRiskRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/app/simulation': {
+      id: '/_authenticated/app/simulation'
+      path: '/app/simulation'
+      fullPath: '/app/simulation'
+      preLoaderRoute: typeof AuthenticatedAppSimulationRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/app/thresholds': {
@@ -524,13 +764,19 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppAlertsRoute: typeof AuthenticatedAppAlertsRoute
+  AuthenticatedAppAssetExplorerRoute: typeof AuthenticatedAppAssetExplorerRoute
   AuthenticatedAppAssetsRoute: typeof AuthenticatedAppAssetsRoute
+  AuthenticatedAppControlRoomRoute: typeof AuthenticatedAppControlRoomRoute
   AuthenticatedAppCopilotRoute: typeof AuthenticatedAppCopilotRoute
   AuthenticatedAppDeploymentRoute: typeof AuthenticatedAppDeploymentRoute
   AuthenticatedAppEventsRoute: typeof AuthenticatedAppEventsRoute
+  AuthenticatedAppGovernanceRoute: typeof AuthenticatedAppGovernanceRoute
+  AuthenticatedAppMaintenanceRoute: typeof AuthenticatedAppMaintenanceRoute
   AuthenticatedAppMapRoute: typeof AuthenticatedAppMapRoute
+  AuthenticatedAppOntologyRoute: typeof AuthenticatedAppOntologyRoute
   AuthenticatedAppPostureRoute: typeof AuthenticatedAppPostureRoute
   AuthenticatedAppRiskRoute: typeof AuthenticatedAppRiskRoute
+  AuthenticatedAppSimulationRoute: typeof AuthenticatedAppSimulationRoute
   AuthenticatedAppThresholdsRoute: typeof AuthenticatedAppThresholdsRoute
   AuthenticatedAppTimelineRoute: typeof AuthenticatedAppTimelineRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
@@ -538,13 +784,19 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppAlertsRoute: AuthenticatedAppAlertsRoute,
+  AuthenticatedAppAssetExplorerRoute: AuthenticatedAppAssetExplorerRoute,
   AuthenticatedAppAssetsRoute: AuthenticatedAppAssetsRoute,
+  AuthenticatedAppControlRoomRoute: AuthenticatedAppControlRoomRoute,
   AuthenticatedAppCopilotRoute: AuthenticatedAppCopilotRoute,
   AuthenticatedAppDeploymentRoute: AuthenticatedAppDeploymentRoute,
   AuthenticatedAppEventsRoute: AuthenticatedAppEventsRoute,
+  AuthenticatedAppGovernanceRoute: AuthenticatedAppGovernanceRoute,
+  AuthenticatedAppMaintenanceRoute: AuthenticatedAppMaintenanceRoute,
   AuthenticatedAppMapRoute: AuthenticatedAppMapRoute,
+  AuthenticatedAppOntologyRoute: AuthenticatedAppOntologyRoute,
   AuthenticatedAppPostureRoute: AuthenticatedAppPostureRoute,
   AuthenticatedAppRiskRoute: AuthenticatedAppRiskRoute,
+  AuthenticatedAppSimulationRoute: AuthenticatedAppSimulationRoute,
   AuthenticatedAppThresholdsRoute: AuthenticatedAppThresholdsRoute,
   AuthenticatedAppTimelineRoute: AuthenticatedAppTimelineRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
@@ -557,14 +809,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AlertsRoute: AlertsRoute,
+  AssetExplorerRoute: AssetExplorerRoute,
   AssetsRoute: AssetsRoute,
   AuthRoute: AuthRoute,
+  ControlRoomRoute: ControlRoomRoute,
   CopilotRoute: CopilotRoute,
   DeploymentRoute: DeploymentRoute,
   EventsRoute: EventsRoute,
+  GovernanceRoute: GovernanceRoute,
+  MaintenanceRoute: MaintenanceRoute,
   MapRoute: MapRoute,
+  OntologyRoute: OntologyRoute,
   PostureRoute: PostureRoute,
   RiskRoute: RiskRoute,
+  SimulationRoute: SimulationRoute,
   ThresholdsRoute: ThresholdsRoute,
   TimelineRoute: TimelineRoute,
   AuthCallbackRoute: AuthCallbackRoute,
