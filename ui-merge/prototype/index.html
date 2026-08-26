@@ -328,7 +328,7 @@ const PILLARS = [
       {id:'maintenance', label:'Maintenance',  icon:'✚', alerts:2},
   ]},
   { id:'assets',    label:'Assets',          icon:'▤', src:'A + B', ov:'assetrisk', areas:[
-      {id:'assetrisk', label:'Asset Risk', icon:'▲'},                        // unified: weather exposure + reliability
+      {id:'assetrisk', label:'Asset Explorer', icon:'▲'},                    // unified: weather exposure + reliability
       {id:'assets',    label:'Registry',   icon:'▤'},
   ]},
   { id:'ontology',  label:'Ontology',        icon:IC_ONTOLOGY, single:true, src:'A', areas:[ {id:'ontology', label:'Graph', icon:IC_ONTOLOGY} ] },
@@ -447,7 +447,7 @@ V.maintenance=()=>head('Maintenance','Work orders driven by the twin + survival 
   <div class="pad card"><table><thead><tr><th>Asset</th><th>Signal</th><th>Due</th><th>Sev</th></tr></thead><tbody>
     ${['Compressor B|bearing wear|26h|high','Boiler 3|survival flag|4d|high','Pump 12|drift|9d|mon'].map(r=>{const[a,s,d,c]=r.split('|');return `<tr><td>${a}</td><td class="muted">${s}</td><td class="mono">${d}</td><td><span class="chip ${c}">${c}</span></td></tr>`}).join('')}
   </tbody></table></div>`;
-V.assetrisk=()=>head('Asset Risk','One risk per asset — weather exposure blended with equipment reliability.','A + B')+
+V.assetrisk=()=>head('Asset Explorer','One risk per asset — weather exposure blended with equipment reliability.','A + B')+
   tabbar('assetrisk',[['total','Total risk'],['exposure','Weather exposure'],['reliability','Reliability']])+`<div class="pad" id="arbody"></div>`;
 V.assets=()=>head('Asset Registry','Every asset joined across both data planes.','A + B')+`
   <div class="pad card"><table><thead><tr><th>Asset</th><th>Type</th><th>Region</th><th>Operator</th><th>Total risk</th></tr></thead><tbody>
