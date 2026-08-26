@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
+  Timer,
   UserCog,
   Wind,
   Wrench,
@@ -63,7 +64,8 @@ const NAV: Entry[] = [
     icon: Wind,
     children: [
       { to: "/map", label: "Live Map", icon: MapIcon },
-      { to: "/events", label: "Forecast", icon: CloudLightning },
+      { to: "/events", label: "Weather Events", icon: CloudLightning },
+      { to: "/timeline", label: "Forecast Timeline", icon: Timer },
       { to: "/risk", label: "Storm Exposure", icon: Gauge, alerts: 3 },
       { to: "/posture", label: "Response Posture", icon: ShieldAlert },
     ],
@@ -86,15 +88,20 @@ const ADMIN: Group = {
 const GROUPS = [...NAV.filter((e): e is Group => e.kind === "group"), ADMIN];
 const MOBILE_ROUTES = [
   { to: "/", label: "Overview" },
-  { to: "/assets", label: "Asset Explorer" },
+  { to: "/asset-explorer", label: "Asset Explorer" },
+  { to: "/control-room", label: "Control Room" },
+  { to: "/simulation", label: "Simulation" },
+  { to: "/maintenance", label: "Maintenance" },
   { to: "/map", label: "Live Map" },
-  { to: "/events", label: "Forecast" },
+  { to: "/events", label: "Weather Events" },
+  { to: "/timeline", label: "Forecast Timeline" },
   { to: "/risk", label: "Storm Exposure" },
   { to: "/posture", label: "Response Posture" },
+  { to: "/ontology", label: "Ontology" },
   { to: "/thresholds", label: "Thresholds" },
+  { to: "/governance", label: "Governance & Security" },
   { to: "/deployment", label: "Deployment" },
   { to: "/alerts", label: "Alerts" },
-  { to: "/copilot", label: "Copilot" },
 ];
 const TOTAL_ALERTS = 5;
 
