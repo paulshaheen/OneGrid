@@ -1,10 +1,14 @@
+import { useEffect, useRef, useState } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { ContactShadows, OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
 import { Activity, Cpu } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 
-// P1: Control Room, ported from the report-app twin/ControlRoom view. A live digital
-// twin with anomalies pinned to the physical zone. This is a styled UI representation;
-// the full react-three-fiber scene + live WebSocket telemetry land in P2/P3.
+// P3: a real react-three-fiber 3D digital twin (fiber@9 / drei@10 on React 19).
+// A compressor skid you can orbit, with an anomaly pulse pinned to the bearing.
+// Sample telemetry until wired to the live WebSocket in P2.
 const TELEMETRY = [
   { k: "Vibration", v: "7.8 mm/s", tone: "high", state: "high" },
   { k: "Bearing temp", v: "96 °C", tone: "monitor", state: "watch" },
@@ -18,65 +22,111 @@ const TONE: Record<string, string> = {
   normal: "bg-muted text-muted-foreground",
 };
 
-/** Stylized twin — a compressor skid with a glowing anomaly zone. */
-function TwinVisual() {
+function metal(color: string, m = 0.45, r = 0.5) {
+  return <meshStandardMaterial color={color} metalness={m} roughness={r} />;
+}
+
+function CompressorSkid() {
   return (
-    <div className="relative grid h-[420px] place-items-center overflow-hidden rounded-md border bg-surface-raised">
-      <div
-        className="absolute inset-0 opacity-70"
-        style={{
-          background:
-            "radial-gradient(circle at 50% 45%, color-mix(in oklch, var(--color-primary) 22%, transparent), transparent 55%)",
-        }}
+    <group position={[0, 0.35, 0]} rotation={[0, -0.5, 0]}>
+      {/* base skid */}
+      <mesh position={[0, -0.5, 0]} receiveShadow castShadow>
+        <boxGeometry args={[4.4, 0.3, 1.9]} />
+        {metal("#39445a", 0.5, 0.55)}
+      </mesh>
+      {/* motor */}
+      <mesh position={[-1.25, 0.15, 0]} castShadow>
+        <boxGeometry args={[1.4, 1.05, 1.05]} />
+        {metal("#5b6675", 0.55, 0.4)}
+      </mesh>
+      {/* coupling */}
+      <mesh position={[-0.4, 0.15, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.14, 0.14, 0.55, 24]} />
+        {metal("#8b98a9", 0.7, 0.3)}
+      </mesh>
+      {/* bearing housing (anomaly zone) */}
+      <mesh position={[-0.02, 0.15, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.24, 0.24, 0.34, 24]} />
+        {metal("#9aa6b6", 0.7, 0.25)}
+      </mesh>
+      {/* compressor body */}
+      <mesh position={[0.95, 0.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.62, 0.62, 1.9, 40]} />
+        {metal("#6b7686", 0.5, 0.35)}
+      </mesh>
+      {/* end cap */}
+      <mesh position={[1.95, 0.2, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.66, 0.66, 0.18, 40]} />
+        {metal("#7c8797", 0.6, 0.3)}
+      </mesh>
+      {/* piping */}
+      <mesh position={[1.7, 0.85, 0.45]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.09, 0.09, 1.4, 16]} />
+        {metal("#465063", 0.6, 0.45)}
+      </mesh>
+      <mesh position={[1.7, 0.85, -0.45]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.09, 0.09, 1.4, 16]} />
+        {metal("#465063", 0.6, 0.45)}
+      </mesh>
+    </group>
+  );
+}
+
+function AnomalyPulse() {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (ref.current) {
+      ref.current.scale.setScalar(1 + Math.sin(t * 3) * 0.22);
+      (ref.current.material as THREE.MeshBasicMaterial).opacity =
+        0.28 + (Math.sin(t * 3) + 1) * 0.12;
+    }
+  });
+  // bearing zone is at group offset (~ -0.02, 0.5, 0) in world space after skid transform
+  return (
+    <group position={[0.05, 0.5, 0.35]}>
+      <mesh ref={ref}>
+        <sphereGeometry args={[0.5, 24, 24]} />
+        <meshBasicMaterial color="#ff5a5f" transparent opacity={0.35} depthWrite={false} />
+      </mesh>
+      <pointLight color="#ff7a5f" intensity={2.2} distance={3} />
+    </group>
+  );
+}
+
+function Scene() {
+  return (
+    <>
+      <color attach="background" args={["#0a1020"]} />
+      <hemisphereLight args={["#a7c4ee", "#141b2b", 1.1]} />
+      <ambientLight intensity={0.5} />
+      <directionalLight
+        position={[5, 7, 4]}
+        intensity={1.8}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
       />
-      <svg viewBox="0 0 320 240" className="relative h-64">
-        <defs>
-          <linearGradient id="skid" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="var(--color-muted-foreground)" />
-            <stop offset="1" stopColor="var(--color-border)" />
-          </linearGradient>
-        </defs>
-        <rect x="70" y="150" width="180" height="34" rx="4" fill="url(#skid)" />
-        <rect x="96" y="96" width="70" height="58" rx="6" fill="url(#skid)" />
-        <circle
-          cx="131"
-          cy="125"
-          r="17"
-          fill="var(--color-surface)"
-          stroke="var(--color-muted-foreground)"
-          strokeWidth="2"
-        />
-        <rect x="178" y="110" width="54" height="44" rx="5" fill="url(#skid)" />
-        <line
-          x1="166"
-          y1="125"
-          x2="178"
-          y2="128"
-          stroke="var(--color-muted-foreground)"
-          strokeWidth="6"
-        />
-        {/* anomaly pin on the bearing */}
-        <circle
-          cx="131"
-          cy="125"
-          r="26"
-          fill="none"
-          stroke="var(--color-risk-high)"
-          strokeWidth="2"
-        >
-          <animate attributeName="r" values="20;30;20" dur="2s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.9;0.2;0.9" dur="2s" repeatCount="indefinite" />
-        </circle>
-        <circle cx="131" cy="125" r="4" fill="var(--color-risk-high)" />
-      </svg>
-      <div className="absolute bottom-3 left-3 rounded-md border bg-card/80 px-2.5 py-1.5 text-[11px] text-muted-foreground backdrop-blur">
-        Compressor B · live twin · anomaly pinned to bearing housing
-      </div>
-    </div>
+      <directionalLight position={[-4, 4, 6]} intensity={0.8} />
+      <pointLight position={[-4, 3, -3]} color="#2b88d8" intensity={1.8} />
+      <CompressorSkid />
+      <AnomalyPulse />
+      <ContactShadows position={[0, -0.16, 0]} opacity={0.5} blur={2.6} scale={9} far={4} />
+      <OrbitControls
+        autoRotate
+        autoRotateSpeed={0.7}
+        enablePan={false}
+        minDistance={4.5}
+        maxDistance={12}
+        maxPolarAngle={Math.PI / 2.05}
+      />
+    </>
   );
 }
 
 export function ControlRoomPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   return (
     <AppShell>
       <PageHeader
@@ -84,7 +134,21 @@ export function ControlRoomPage() {
         description="Live 3D digital twin streaming historian values, with anomalies pinned to the exact physical zone."
       />
       <div className="grid gap-4 p-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <TwinVisual />
+        <div className="relative h-[460px] overflow-hidden rounded-lg border bg-surface-raised">
+          {mounted ? (
+            <Canvas shadows camera={{ position: [5.5, 3, 6.5], fov: 42 }} dpr={[1, 2]}>
+              <Scene />
+            </Canvas>
+          ) : (
+            <div className="grid h-full place-items-center text-sm text-muted-foreground">
+              Loading 3D twin…
+            </div>
+          )}
+          <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border bg-card/80 px-2.5 py-1.5 text-[11px] text-muted-foreground backdrop-blur">
+            Compressor B · live twin · drag to orbit
+          </div>
+        </div>
+
         <div className="space-y-4">
           <div className="rounded-lg border bg-card">
             <div className="flex items-center justify-between border-b px-4 py-3">
