@@ -10,7 +10,7 @@
 <style>
   :root {
     /* OneGrid deep navy + Microsoft/Fluent Communication Blue (#0078D4) */
-    --bg:#06080d; --surface:#0a1020; --card:#1a1e26; --elev:#242932;
+    --bg:#06080d; --surface:#0a1020; --card:#111827; --elev:#141b2b;
     --fg:#f5f8fd; --muted:#aeb9cd; --faint:#7d89a1;
     --border:#223149; --border-soft:#18233a;
     --primary:#0078d4; --primary-fg:#ffffff; --accent:#106ebe;
@@ -75,7 +75,8 @@
   .navitem .lbl{flex:1;overflow:hidden;text-overflow:ellipsis}
   .navitem .badge{margin-left:auto}
   /* group header (collapsible) */
-  .grouphdr{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:8px;color:var(--fg);font-size:13.5px;font-weight:600;margin:3px 0 1px;user-select:none}
+  .grouphdr{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:8px;color:var(--fg);font-size:13.5px;font-weight:600;margin:3px 0 1px;user-select:none;position:relative;cursor:pointer}
+  .grouphdr.active{background:color-mix(in srgb,var(--primary) 13%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 35%,transparent)}
   .grouphdr:hover{background:var(--elev)}
   .grouphdr .chev{margin-left:auto;transition:transform .15s ease;color:var(--faint);font-size:11px}
   .grouphdr.collapsed .chev{transform:rotate(-90deg)}
@@ -92,7 +93,8 @@
   body[data-railcollapsed="1"] .railhead,
   body[data-railcollapsed="1"] .chev,
   body[data-railcollapsed="1"] .navitem .badge{display:none}
-  body[data-railcollapsed="1"] .groupkids{grid-template-rows:1fr!important;opacity:1!important}
+  /* collapsed-to-icons: show only top-level items (Overview + pillar/Admin headers), hide children — matches the expanded menu's top level */
+  body[data-railcollapsed="1"] .groupkids{grid-template-rows:0fr!important;opacity:0!important}
   body[data-railcollapsed="1"] .navitem,body[data-railcollapsed="1"] .grouphdr{justify-content:center;padding-left:0;padding-right:0}
   body[data-railcollapsed="1"] .groupkids .navitem:before{display:none}
   /* per-badge dot when collapsed, so alerts still signal */
@@ -135,6 +137,11 @@
   .chip.high{background:color-mix(in srgb,var(--risk-high) 18%,transparent);color:#fde68a}
   .chip.mon{background:color-mix(in srgb,var(--risk-mon) 18%,transparent);color:#bae6fd}
   .chip.low{background:color-mix(in srgb,var(--risk-low) 18%,transparent);color:#bbf7d0}
+  /* light theme: chips need dark text to stay legible on white */
+  html:not(.dark) .chip.crit{background:color-mix(in srgb,var(--risk-crit) 15%,#fff);color:#a4262c}
+  html:not(.dark) .chip.high{background:color-mix(in srgb,var(--risk-high) 22%,#fff);color:#8a5a00}
+  html:not(.dark) .chip.mon{background:color-mix(in srgb,var(--risk-mon) 16%,#fff);color:#0b5cad}
+  html:not(.dark) .chip.low{background:color-mix(in srgb,var(--risk-low) 20%,#fff);color:#1a7a3a}
   .bar{height:7px;border-radius:999px;background:var(--elev);overflow:hidden}
   .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--primary),var(--accent))}
   .spark{display:flex;align-items:flex-end;gap:3px;height:46px}
@@ -193,6 +200,22 @@
   .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px;border:1px solid var(--border);background:transparent;color:var(--fg)}
   .btn.primary{background:var(--primary);color:var(--primary-fg);border-color:transparent}
 
+  /* profile dropdown (PS avatar) */
+  .profilewrap{position:relative}
+  .profilemenu{position:absolute;right:0;top:42px;z-index:70;width:258px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.55);padding:8px;display:none}
+  .profilemenu.open{display:block}
+  .pm-head{display:flex;gap:10px;align-items:center;padding:8px}
+  .pm-sec{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--faint);padding:9px 8px 4px}
+  .pm-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;font-size:13px}
+  .pm-row select{background:var(--elev);border:1px solid var(--border);color:var(--fg);border-radius:6px;padding:3px 6px;font-size:12px}
+  .pm-div{height:1px;background:var(--border);margin:6px 4px}
+  .pm-item{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--fg);font-size:13px;padding:8px;border-radius:7px}
+  .pm-item:hover{background:var(--elev)}
+  .miniseg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .miniseg button{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;padding:3px 9px}
+  .miniseg button.on{background:var(--primary);color:var(--primary-fg)}
+  .avatar{border:0;cursor:pointer}
+
   /* layout visibility */
   body[data-layout="A"] .pillartabs{display:none}
   .hide{display:none!important}
@@ -203,7 +226,7 @@
 <div class="app">
   <!-- prototype controls -->
   <div class="optbar">
-    <strong>Prototype</strong> <span class="src b" style="text-transform:none;letter-spacing:0">build&nbsp;v7 · neutral panels</span> · nav model:
+    <strong>Prototype</strong> <span class="src b" style="text-transform:none;letter-spacing:0">build&nbsp;v8</span> · nav model:
     <span class="seg" id="layoutSeg">
       <button data-l="A" class="active">A · Left rail</button>
       <button data-l="C">C · Hybrid (top + contextual rail)</button>
@@ -225,8 +248,30 @@
     <span class="spacer"></span>
     <span class="pill"><span class="dot"></span> Fabric live · GoM tenant</span>
     <button class="iconbtn" id="alertsTop" title="Alerts">! <span class="badge topbadge" id="alertsTopBadge">5</span></button>
-    <button class="iconbtn" title="Admin">⚙</button>
-    <div class="avatar">PS</div>
+    <div class="profilewrap">
+      <button class="avatar" id="profileBtn" title="Your profile">PS</button>
+      <div class="profilemenu" id="profileMenu">
+        <div class="pm-head">
+          <span class="avatar" style="width:38px;height:38px">PS</span>
+          <div><div style="font-weight:600">Paul Shaheen</div><div class="faint" style="font-size:11px">paul.shaheen@contoso.com</div></div>
+        </div>
+        <div class="pm-div"></div>
+        <div class="pm-sec">My preferences</div>
+        <div class="pm-row"><span>Theme</span>
+          <span class="miniseg" id="pmTheme"><button data-theme="dark" class="on">Dark</button><button data-theme="light">Light</button></span></div>
+        <div class="pm-row"><span>Default landing</span>
+          <select id="pmLanding"><option value="overview">Overview</option><option value="weatherOv">Weather</option><option value="twinOv">Digital Twin</option></select></div>
+        <div class="pm-row"><span>Density</span>
+          <span class="miniseg"><button class="on">Comfortable</button><button>Compact</button></span></div>
+        <div class="pm-row"><span>Units</span>
+          <select><option>Imperial</option><option>Metric</option></select></div>
+        <div class="pm-row"><span>Email me critical alerts</span>
+          <span class="agenttog on" style="cursor:pointer"><span class="sw"></span></span></div>
+        <div class="pm-div"></div>
+        <button class="pm-item">Profile &amp; account settings</button>
+        <button class="pm-item">Sign out</button>
+      </div>
+    </div>
   </div>
 
   <!-- body -->
@@ -280,18 +325,18 @@
    alerts:n on an area rolls up to a badge on its pillar (badges only on core destinations). */
 const PILLARS = [
   { id:'overview',  label:'Overview',        icon:'⌂', single:true, bold:true, areas:[ {id:'overview', label:'Overview', icon:'▦'} ] },
-  { id:'weather',   label:'Weather',         icon:'≈', src:'B', areas:[
+  { id:'weather',   label:'Weather',         icon:'≈', src:'B', ov:'weatherOv', areas:[
       {id:'map',      label:'Live Map',        icon:'◉'},
       {id:'forecast', label:'Forecast',        icon:'⌁'},                    // Events + Timeline
       {id:'risk',     label:'Asset Risk',      icon:'▲', alerts:3},
       {id:'posture',  label:'Response Posture', icon:'⛨'},
   ]},
-  { id:'twin',      label:'Digital Twin',    icon:'◧', src:'A', areas:[
+  { id:'twin',      label:'Digital Twin',    icon:'◧', src:'A', ov:'twinOv', areas:[
       {id:'controlroom', label:'Control Room', icon:'◧'},
       {id:'simulation',  label:'Simulation',   icon:'⚗'},                    // alembic (real build: lucide FlaskConical)
       {id:'maintenance', label:'Maintenance',  icon:'✚', alerts:2},
   ]},
-  { id:'ontology',  label:'Ontology',        icon:'❖', src:'A', areas:[
+  { id:'ontology',  label:'Ontology',        icon:'❖', src:'A', ov:'ontology', areas:[
       {id:'ontology', label:'Graph',  icon:'❖'},                            // the force-directed ontology
       {id:'assets',   label:'Assets', icon:'▤'},                            // asset registry now lives under Ontology
   ]},
@@ -306,11 +351,11 @@ const SECONDARY = [
 const ALL = [...PILLARS, ...SECONDARY];
 const areaAlerts = p => p.alerts ?? p.areas.reduce((s,a)=>s+(a.alerts||0),0);
 const areaById = id => ALL.flatMap(p=>p.areas.map(a=>({...a,pillar:p.id}))).find(a=>a.id===id);
-const pillarOf = id => ALL.find(p=>p.areas.some(a=>a.id===id));
+const pillarOf = id => ALL.find(p=>p.id===id || p.ov===id || p.areas.some(a=>a.id===id));
 const isSecondary = pid => SECONDARY.some(p=>p.id===pid);
 
 let current = 'overview';
-let collapsed = {}; // group collapse state (rail, layout A)
+let collapsed = {}; // manual group-collapse overrides (accordion derives from `current`)
 
 /* ---------- rail (Layout A: grouped + progressive disclosure) ---------- */
 function railGroup(p){
@@ -320,11 +365,12 @@ function railGroup(p){
     return `<a class="navitem ${act?'active':''} ${p.bold?'strong':''} ${p.alerts?'hasalert':''}" data-area="${a.id}" title="${p.label}">
       <span class="ic">${p.icon}</span><span class="lbl">${p.label}</span>${p.alerts?`<span class="badge">${p.alerts}</span>`:''}</a>`;
   }
-  const isCol = collapsed[p.id] ?? (p.collapsedByDefault && pillarOf(current)?.id!==p.id);
+  const isCol = collapsed[p.id] ?? (pillarOf(current)?.id!==p.id);   // accordion: open only the pillar holding the current page
+  const headActive = current===p.ov;                                 // header highlights when on the pillar overview
   const kids = p.areas.map(a=>{const act=a.id===current;
     return `<a class="navitem ${act?'active':''} ${a.alerts?'hasalert':''}" data-area="${a.id}" title="${a.label}">
       <span class="ic">${a.icon}</span><span class="lbl">${a.label}</span>${a.alerts?`<span class="badge soft">${a.alerts}</span>`:''}</a>`;}).join('');
-  return `<div class="grouphdr ${isCol?'collapsed':''}" data-group="${p.id}" title="${p.label}">
+  return `<div class="grouphdr ${isCol?'collapsed':''} ${headActive?'active':''} ${roll?'hasalert':''}" data-group="${p.id}" title="${p.label}">
       <span class="ic">${p.icon}</span><span class="lbl">${p.label}</span>
       ${roll?`<span class="badge soft">${roll}</span>`:''}<span class="chev">▾</span>
     </div><div class="groupkids"><div class="kidwrap">${kids}</div></div>`;
@@ -350,11 +396,12 @@ function renderRailC(){
 }
 function wireRail(){
   document.querySelectorAll('#rail [data-area]').forEach(a=> a.onclick=e=>{e.preventDefault();go(a.dataset.area);});
+  // Clicking a pillar header loads that pillar's overview AND expands it (accordion) —
+  // so you never need a separate "Operations Overview" link.
   document.querySelectorAll('#rail [data-group]').forEach(g=> g.onclick=()=>{
-    const id=g.dataset.group;
-    const willCollapse = !g.classList.contains('collapsed');
-    collapsed[id]=willCollapse;                 // remember for later full re-renders
-    g.classList.toggle('collapsed', willCollapse);  // animate in place (CSS grid-rows transition)
+    const p=ALL.find(x=>x.id===g.dataset.group);
+    collapsed={};                       // accordion: clear manual overrides
+    go(p.ov || p.areas[0].id);          // overview page (or first area for Admin)
   });
 }
 function renderRail(){ document.body.dataset.layout==='C'?renderRailC():renderRailA(); }
@@ -364,7 +411,7 @@ function renderPillars(){
   const el=document.getElementById('pillartabs');
   el.innerHTML = PILLARS.map(p=>{const act=pillarOf(current)?.id===p.id;const roll=areaAlerts(p);
     return `<button data-pillar="${p.id}" class="${act?'active':''}">${p.icon} ${p.label}${roll?`<span class="badge soft">${roll}</span>`:''}</button>`;}).join('');
-  el.querySelectorAll('button').forEach(b=> b.onclick=()=>{const p=PILLARS.find(x=>x.id===b.dataset.pillar);go(p.areas[0].id);});
+  el.querySelectorAll('button').forEach(b=> b.onclick=()=>{const p=PILLARS.find(x=>x.id===b.dataset.pillar);go(p.ov||p.areas[0].id);});
 }
 
 /* ---------- content views (mock) ---------- */
@@ -377,6 +424,24 @@ V.overview=()=>head('Overview','Unified executive + operations view across weath
     <div class="card"><div class="cardtitle"><h2>Exposure by platform</h2><span class="src b">weather</span></div>${riskTable()}</div>
     <div class="card"><div class="cardtitle"><h2>Fleet health pulse</h2><span class="src a">twin</span></div><div class="spark">${bars(24)}</div>
       <p class="muted" style="font-size:12px;margin:12px 0 0">Live historian aggregate, last 24h. Two assets trending toward maintenance thresholds.</p></div>
+  </div></div>`;
+V.weatherOv=()=>head('Weather — Operations Overview','Storm exposure and response posture across the estate.','B')+`
+  <div class="pad"><div class="grid cols-4">
+    ${kpi('Assets at risk','3','+1 vs T-96h','down','B')}${kpi('Named storms','1','Gabrielle · Cat 3','','B')}
+    ${kpi('Open alerts','5','2 critical','down','B')}${kpi('Forecast conf.','78%','T-72h','','B')}
+  </div><div class="grid cols-2" style="margin-top:14px">
+    <div class="card"><div class="cardtitle"><h2>Exposure by platform</h2><span class="src b">weather</span></div>${riskTable()}</div>
+    <div class="card"><div class="cardtitle"><h2>Response posture</h2><span class="src b">weather</span></div>
+      <div class="list">${liveRow('Thunder Horse','muster T-72h','high')}${liveRow('Mad Dog','standby','mon')}${liveRow('Atlantis','standby','mon')}</div></div>
+  </div></div>`;
+V.twinOv=()=>head('Digital Twin — Operations Overview','Executive view of fleet health, live twin telemetry and predicted failures.','A')+`
+  <div class="pad"><div class="grid cols-4">
+    ${kpi('Fleet health','92%','+0.4%','up','A')}${kpi('Assets streaming','48','live','','A')}
+    ${kpi('Open anomalies','2','Compressor B · Boiler 3','down','A')}${kpi('Predicted trips (14d)','3','survival model','','A')}
+  </div><div class="grid cols-2" style="margin-top:14px">
+    <div class="card"><div class="cardtitle"><h2>Fleet health pulse</h2><span class="src a">twin</span></div><div class="spark">${bars(24)}</div></div>
+    <div class="card"><div class="cardtitle"><h2>Assets to watch</h2><span class="src a">twin</span></div>
+      <div class="list">${liveRow('Compressor B','trip ~26h','high')}${liveRow('Boiler 3','survival flag','high')}${liveRow('Pump 12','drift','mon')}</div></div>
   </div></div>`;
 V.map=()=>head('Live Map','Real-time storm track joined to your offshore estate.','B')+`
   <div class="pad grid cols-2" style="grid-template-columns:1.6fr 1fr">
@@ -466,10 +531,18 @@ document.getElementById('layoutSeg').querySelectorAll('button').forEach(b=>b.onc
     : 'Grouped rail; non-active groups auto-collapse (progressive disclosure).';
   renderPillars(); renderRail();
 });
-document.getElementById('themeBtn').onclick=()=>document.documentElement.classList.toggle('dark');
+function syncTheme(dark){ document.documentElement.classList.toggle('dark',dark);
+  document.querySelectorAll('#pmTheme button').forEach(x=>x.classList.toggle('on', (x.dataset.theme==='dark')===dark)); }
+document.getElementById('themeBtn').onclick=()=>syncTheme(!document.documentElement.classList.contains('dark'));
 document.getElementById('railToggle').onclick=()=>{const c=document.body.dataset.railcollapsed==='1';
   document.body.dataset.railcollapsed=c?'0':'1';document.getElementById('railToggle').textContent=c?'‹‹':'››';};
 document.getElementById('alertsTop').onclick=()=>go('alerts');
+// profile dropdown (personal settings)
+const profileBtn=document.getElementById('profileBtn'), profileMenu=document.getElementById('profileMenu');
+profileBtn.onclick=(e)=>{e.stopPropagation();profileMenu.classList.toggle('open');};
+document.addEventListener('click',(e)=>{ if(!profileMenu.contains(e.target)&&e.target!==profileBtn) profileMenu.classList.remove('open'); });
+document.querySelectorAll('#pmTheme button').forEach(b=>b.onclick=()=>syncTheme(b.dataset.theme==='dark'));
+document.getElementById('pmLanding').onchange=(e)=>go(e.target.value);
 
 /* ---------- chat dialog (OneGrid ChatPanel feel) ---------- */
 const MODELS={'Azure OpenAI':['GPT-5','GPT-4o','GPT-4o mini'],'Anthropic':['Claude Opus 4','Claude Sonnet 4'],'Meta':['Llama 3.1 70B']};
