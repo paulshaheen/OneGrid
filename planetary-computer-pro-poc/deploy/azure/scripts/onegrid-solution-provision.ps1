@@ -60,6 +60,19 @@ if ($env:IDENTITY_CLIENT_ID) {
 }
 if ($env:SUBSCRIPTION_ID) { & az account set --subscription $env:SUBSCRIPTION_ID --only-show-errors 2>$null | Out-Null }
 
+# Register the Fabric resource provider. A subscription with a zero Fabric regional
+# quota (BadRequest: RegionalQuota 0) is usually one where Microsoft.Fabric was never
+# registered — registering it grants the default capacity-unit quota. Idempotent + fast
+# when already registered. Best-effort: never fail the run just for this.
+try {
+  $fabricState = (& az provider show --namespace Microsoft.Fabric --query registrationState -o tsv 2>$null)
+  if ($fabricState -ne 'Registered') {
+    Log "registering Microsoft.Fabric resource provider (current: $fabricState)..."
+    & az provider register --namespace Microsoft.Fabric --only-show-errors 2>$null | Out-Null
+  } else { Log 'Microsoft.Fabric resource provider already registered' }
+} catch { Log "Microsoft.Fabric provider registration skipped: $($_.Exception.Message)" 'Yellow' }
+
+
 # --- 3. Clone the OneGrid orchestrator + accelerator content ----------------------
 $repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OneGrid.git' }
 $ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }
