@@ -2,6 +2,7 @@
 OGE-OneGrid/data/*
 # ...but keep the data-engineering source artifacts (spec, notebook, reference tracks)
 !OGE-OneGrid/data/MODEL.md
+!OGE-OneGrid/data/HANDOFF.md
 !OGE-OneGrid/data/notebooks/
 !OGE-OneGrid/data/notebooks/**
 !OGE-OneGrid/data/reference/
