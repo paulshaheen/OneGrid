@@ -126,7 +126,7 @@ param deployOneGridApp bool = false
 ])
 param chatAgentAppServiceSku string = 'B1'
 
-@description('URL of the prebuilt, self-contained OneGrid web app package (zip) mounted read-only via WEBSITE_RUN_FROM_PACKAGE. Defaults to the latest asset published by the "Release OneGrid App" GitHub Actions workflow. No server-side build runs; the package already contains the built webapp + node_modules.')
+@description('SOURCE URL of the prebuilt, self-contained OneGrid web app package (zip) published by the "Release OneGrid App" GitHub Actions workflow. The provisioner downloads this and re-hosts it in the deployment\'s own (private) storage account; the web app then mounts it read-only via WEBSITE_RUN_FROM_PACKAGE using its managed identity (no public exposure, no SAS). No server-side build runs; the package already contains the built webapp + node_modules.')
 param oneGridAppPackageUrl string = 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip'
 
 @description('Seed the full OneGrid historical demo dataset into the lakehouse/eventhouse (cloud-seeded from the public release bundle, ~hundreds of MB). Off by default to keep the deployment fast; enable for a fully populated demo.')
@@ -150,6 +150,11 @@ var effectiveGeoCatalogName = empty(geoCatalogName) ? toLower('pcpro${uniqueStri
 var sampleStorageName = toLower('pcpro${uniqueString(resourceGroup().id)}')
 var ingestIdentityName = '${namePrefix}-ingest-identity'
 var sampleContainerName = 'sample-assets'
+var onegridAppPackageContainerName = 'onegrid-app-package'
+// Runtime location of the web app package inside the private storage account. Built from the
+// account name (not a resource reference) so it resolves regardless of resource ordering and
+// honors sovereign-cloud storage suffixes. The web app mounts THIS via its managed identity.
+var oneGridAppPackageBlobUrl = 'https://${sampleStorageName}.blob.${environment().suffixes.storage}/${onegridAppPackageContainerName}/onegrid-app.zip'
 // Container the Aurora storm-impact notebook uploads its weather model outputs to
 // (matches UPLOAD_CONTAINER_NAME in the app .env).
 var modelOutputsContainerName = 'model-outputs'
@@ -306,6 +311,18 @@ resource sampleContainer 'Microsoft.Storage/storageAccounts/blobServices/contain
   }
 }
 
+// Private container that holds the prebuilt OneGrid web app package. The provisioner uploads
+// the zip here (keyless, via the Fabric-plane identity) and the web app mounts it read-only
+// via WEBSITE_RUN_FROM_PACKAGE under its own managed identity - the MSFT-recommended secure
+// external-package pattern (private blob + managed identity, no SAS, no public access).
+resource onegridAppPackageContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (deployOneGridAppEffective) {
+  parent: sampleBlobService
+  name: onegridAppPackageContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
 // Destination container for the Aurora weather-forecast model outputs produced by the
 // storm-impact notebook.
 resource modelOutputsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = if (deploySampleStorage) {
@@ -395,6 +412,20 @@ resource fabricPlaneStorageUaaRole 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
+// The provisioner uploads the prebuilt web app package into the private storage account
+// keylessly (az storage blob upload --auth-mode login), which is a DATA-plane write. Owner
+// on the RG does not grant blob data actions, so give the Fabric-plane identity Storage Blob
+// Data Contributor scoped to the sample storage account only.
+resource fabricPlaneBlobContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
+  name: guid(sampleStorage.id, fabricPlaneIdentityName, storageBlobDataContributorRoleId)
+  scope: sampleStorage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
+    principalId: deployOneGridAppEffective ? fabricPlaneIdentity.properties.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // When the OneGrid web app is included, the provisioner also creates the Foundry account
 // and the chat/report Container App IN THIS RESOURCE GROUP and assigns data-plane roles to
 // the app's identity. That requires resource-creation AND role-assignment rights, so the
@@ -449,9 +480,11 @@ resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEf
       // in later by the provisioner via `az webapp config appsettings set` (which preserves
       // these). WEBSITE_RUN_FROM_PACKAGE mounts a prebuilt, self-contained zip read-only as
       // wwwroot - NO server-side build (no Oryx), so the empty-wwwroot/build-failure class of
-      // bugs cannot occur. The package is produced by the "Release OneGrid App" workflow.
+      // bugs cannot occur. The package lives in the deployment's PRIVATE storage account and is
+      // fetched with this app's system-assigned identity (Storage Blob Data Reader granted
+      // below) - no SAS, no public access. The provisioner uploads it before restarting.
       appSettings: [
-        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: oneGridAppPackageUrl }
+        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: oneGridAppPackageBlobUrl }
         { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~22' }
         { name: 'REPORT_PORT', value: '8080' }
         { name: 'WEBSITES_PORT', value: '8080' }
@@ -512,6 +545,9 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
       { name: 'NAME_PREFIX', value: namePrefix }
       { name: 'CHAT_AGENT_APP_NAME', value: chatAgentAppName }
       { name: 'ONEGRID_APP_PACKAGE_URL', value: oneGridAppPackageUrl }
+      { name: 'ONEGRID_APP_PACKAGE_BLOB_URL', value: oneGridAppPackageBlobUrl }
+      { name: 'ONEGRID_APP_STORAGE_ACCOUNT', value: sampleStorageName }
+      { name: 'ONEGRID_APP_PACKAGE_CONTAINER', value: onegridAppPackageContainerName }
       { name: 'IDENTITY_CLIENT_ID', value: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.clientId : '' }
       { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
       { name: 'ONEGRID_REF', value: oneGridRef }

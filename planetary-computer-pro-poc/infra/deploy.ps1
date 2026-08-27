@@ -975,17 +975,43 @@ function Phase-ChatAgent {
   az provider register -n Microsoft.Web --wait 1>$null 2>$null
   $app = $cfg.chatAgent.appName
 
-  # Package URL: honor an explicit override (config or env, threaded from the ARM template),
-  # else default to the latest published release asset on the public repo.
-  $pkgUrl = if ($cfg.chatAgent.packageUrl) { $cfg.chatAgent.packageUrl }
-            elseif ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL }
-            else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }
-  Log "  run-from-package: $pkgUrl" "Green"
+  # Package SOURCE URL: honor an explicit override (config or env, threaded from the ARM
+  # template), else default to the latest published release asset on the public repo.
+  $pkgSrcUrl = if ($cfg.chatAgent.packageUrl) { $cfg.chatAgent.packageUrl }
+               elseif ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL }
+               else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }
+
+  # Re-host the package in the deployment's PRIVATE storage account and mount it with the web
+  # app's managed identity (the MSFT-recommended secure external-package pattern - no SAS, no
+  # public exposure). When the storage target is configured (ARM path), download the source
+  # zip and upload it keylessly (--auth-mode login; the Fabric-plane identity has Storage Blob
+  # Data Contributor); then point WEBSITE_RUN_FROM_PACKAGE at the blob. If re-hosting isn't
+  # possible (e.g. a local run with no storage target), fall back to mounting the source URL.
+  $pkgStorage   = $cfg.chatAgent.packageStorageAccount
+  $pkgBlobUrl   = $cfg.chatAgent.packageBlobUrl
+  $pkgContainer = if ($cfg.chatAgent.packageContainer) { $cfg.chatAgent.packageContainer } else { 'onegrid-app-package' }
+  $runFromPkg   = $pkgSrcUrl
+  if ($pkgStorage -and $pkgBlobUrl) {
+    $tmpZip = Join-Path $env:TEMP ("onegrid-app-" + [guid]::NewGuid().ToString('N').Substring(0,8) + ".zip")
+    try {
+      Log "  staging package: downloading $pkgSrcUrl"
+      Invoke-WebRequest -Uri $pkgSrcUrl -OutFile $tmpZip -UseBasicParsing -TimeoutSec 300
+      Log "  re-hosting package in private storage: $pkgStorage/$pkgContainer/onegrid-app.zip"
+      az storage blob upload --account-name $pkgStorage -c $pkgContainer -n 'onegrid-app.zip' -f $tmpZip --auth-mode login --overwrite true -o none 2>$null
+      if ($LASTEXITCODE -eq 0) { $runFromPkg = $pkgBlobUrl }
+      else { Log "  blob upload failed (exit $LASTEXITCODE) - falling back to the source URL" "Yellow" }
+    } catch {
+      Log "  package re-host failed ($($_.Exception.Message)) - falling back to the source URL" "Yellow"
+    } finally {
+      Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
+    }
+  }
+  Log "  run-from-package: $runFromPkg" "Green"
 
   # App settings = the chat/report env vars + the run-from-package pointer. The server binds
   # REPORT_PORT (default 7700); App Service Linux/Node routes to 8080, so pin REPORT_PORT=8080.
   # No SCM_DO_BUILD_DURING_DEPLOYMENT: the package is already built.
-  $settings = @($envVars) + @('REPORT_PORT=8080','WEBSITES_PORT=8080','WEBSITE_NODE_DEFAULT_VERSION=~22', "WEBSITE_RUN_FROM_PACKAGE=$pkgUrl")
+  $settings = @($envVars) + @('REPORT_PORT=8080','WEBSITES_PORT=8080','WEBSITE_NODE_DEFAULT_VERSION=~22', "WEBSITE_RUN_FROM_PACKAGE=$runFromPkg")
 
   # Create the plan + web app, with a small region fallback if a region is out of capacity.
   $regions = @($cfg.location)
