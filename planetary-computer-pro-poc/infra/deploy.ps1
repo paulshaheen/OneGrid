@@ -1038,18 +1038,45 @@ function Phase-ChatAgent {
   else { $regions += @('eastus','westus3','centralus','westeurope') | Where-Object { $_ -ne $cfg.location } }
   $regions = $regions | Select-Object -Unique
   $appOk = $false; $fqdn = $null
+
+  # Configure settings + startup, push the zip (Oryx build), and VERIFY the deploy actually
+  # landed - the deploy command must succeed AND the site must stop returning 5xx. Checking
+  # only that the hostname resolves is not enough: an ARM-created site always resolves even
+  # when no code was deployed, which previously masked a 503 (empty wwwroot + startup command
+  # -> "Cannot find module report-app/server/index.js"). Returns @{Host;Healthy} or $null.
+  function Publish-WebApp($appName, $rgName) {
+    az webapp config appsettings set -n $appName -g $rgName --settings @settings -o none 2>$null
+    az webapp config set -n $appName -g $rgName --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
+    Log "  deploying app (App Service builds the SPA - several minutes)..."
+    az webapp deploy -n $appName -g $rgName --src-path $zip --type zip -o none 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { Log "  zip deploy command failed (exit $LASTEXITCODE)" "Red"; return $null }
+    $hostName = AzTry { az webapp show -n $appName -g $rgName --query defaultHostName -o tsv }
+    if (-not $hostName) { Log "  web app has no hostname after deploy" "Red"; return $null }
+    $url = "https://$hostName"
+    Log "  deploy submitted - waiting for the app to answer (Oryx build + cold start)..."
+    $deadline = (Get-Date).AddMinutes(12)
+    while ((Get-Date) -lt $deadline) {
+      $code = 0
+      try { $code = [int](Invoke-WebRequest -Uri $url -Method Get -TimeoutSec 20 -UseBasicParsing -ErrorAction Stop).StatusCode }
+      catch { $code = [int]($_.Exception.Response.StatusCode.value__) }
+      if ($code -ge 200 -and $code -lt 500) { Log "  app responded HTTP $code" "Green"; return @{ Host = $hostName; Healthy = $true } }
+      Start-Sleep -Seconds 20
+    }
+    Log "  app still returning 5xx after 12 min - Oryx build or startup likely failed (check 'az webapp log tail -n $appName -g $rgName')" "Yellow"
+    return @{ Host = $hostName; Healthy = $false }
+  }
+
   # When the one-click ARM template is used, the App Service plan + web app (+ its managed
   # identity and the storage/GeoCatalog role grants) are already declared as ARM resources.
   # In that case deploy straight into the existing site - no create, no region fallback.
   $existingLoc = AzTry { az webapp show -n $app -g $rg --query location -o tsv }
   if ($existingLoc) {
     Log "  App Service '$app' already exists ($existingLoc) - deploying into it (skipping plan/web app create)"
-    az webapp config appsettings set -n $app -g $rg --settings @settings -o none 2>$null
-    az webapp config set -n $app -g $rg --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
-    Log "  deploying app (App Service builds the SPA - several minutes)..."
-    az webapp deploy -n $app -g $rg --src-path $zip --type zip -o none 2>&1 | Out-Null
-    $fqdn = AzTry { az webapp show -n $app -g $rg --query defaultHostName -o tsv }
-    if ($fqdn) { $appOk = $true; $state.ChatAgentLocation = $existingLoc }
+    $pub = Publish-WebApp $app $rg
+    if ($pub) {
+      $fqdn = $pub.Host; $appOk = $true; $state.ChatAgentLocation = $existingLoc
+      if (-not $pub.Healthy) { $state.ChatAgentDegraded = 'app-5xx-after-deploy' }
+    }
   } else {
     $planSku = if ($cfg.chatAgent -and $cfg.chatAgent.appServiceSku) { $cfg.chatAgent.appServiceSku } else { 'B1' }
     foreach ($loc in $regions) {
@@ -1058,12 +1085,12 @@ function Phase-ChatAgent {
       az appservice plan create -n $plan -g $rg -l $loc --is-linux --sku $planSku -o none 2>$null
       az webapp create -n $app -g $rg --plan $plan --runtime 'NODE:22-lts' -o none 2>&1 | Out-Null
       if (-not (AzTry { az webapp show -n $app -g $rg --query name -o tsv })) { Log "  web app not created in $loc - trying next region" "Yellow"; continue }
-      az webapp config appsettings set -n $app -g $rg --settings @settings -o none 2>$null
-      az webapp config set -n $app -g $rg --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
-      Log "  deploying app (App Service builds the SPA - several minutes)..."
-      az webapp deploy -n $app -g $rg --src-path $zip --type zip -o none 2>&1 | Out-Null
-      $fqdn = AzTry { az webapp show -n $app -g $rg --query defaultHostName -o tsv }
-      if ($fqdn) { $appOk = $true; $state.ChatAgentLocation = $loc; break }
+      $pub = Publish-WebApp $app $rg
+      if ($pub) {
+        $fqdn = $pub.Host; $appOk = $true; $state.ChatAgentLocation = $loc
+        if (-not $pub.Healthy) { $state.ChatAgentDegraded = 'app-5xx-after-deploy' }
+        break
+      }
       Log "  web app not up in $loc - trying next region" "Yellow"
     }
   }
