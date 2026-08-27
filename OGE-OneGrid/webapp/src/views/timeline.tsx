@@ -3,7 +3,7 @@ import { Pause, Play } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
-import { OpsMap } from "@/components/ops/OpsMap";
+import { MapModeSwitch } from "@/components/ops/MapModeSwitch";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { assetsQuery, eventsQuery } from "@/lib/hooks/use-ops-data";
@@ -102,11 +102,12 @@ export function TimelinePage() {
               </div>
             </div>
             <div className="relative h-[420px]">
-              <OpsMap
+              <MapModeSwitch
                 className="h-full w-full"
                 assets={assets}
                 risks={riskMap}
                 event={event}
+                initialFocusEventId={event?.id}
                 hour={hour}
                 layers={{ assets: true, track: true, wind: true }}
                 selectedId={selected}

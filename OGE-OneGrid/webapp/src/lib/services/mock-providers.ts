@@ -1,7 +1,7 @@
 // Mock provider implementations backed by the isolated sample dataset.
 // Replace individually with Azure-backed providers via src/lib/services/index.ts.
 
-import { sampleAlerts, sampleAssets, sampleEvent } from "@/lib/data/sample-gom";
+import { sampleAlerts, sampleAssets, sampleEvent, samplePacificEvent } from "@/lib/data/sample-gom";
 import { derivePosture } from "@/lib/services/posture";
 import { DEFAULT_RULES } from "@/lib/services/thresholds";
 import type {
@@ -41,10 +41,10 @@ export class MockAssetService implements AssetService {
 export class MockWeatherService implements WeatherService {
   readonly providerLabel = "Blended global forecast ensemble";
   async listEvents(): Promise<WeatherEvent[]> {
-    return [sampleEvent];
+    return [sampleEvent, samplePacificEvent];
   }
   async getEvent(id: string): Promise<WeatherEvent | null> {
-    return id === sampleEvent.id ? sampleEvent : null;
+    return [sampleEvent, samplePacificEvent].find((e) => e.id === id) ?? null;
   }
 }
 

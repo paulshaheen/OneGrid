@@ -1,19 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Search, Play, Pause } from "lucide-react";
+import { Search, Play, Pause, Box, Map as MapIcon } from "lucide-react";
 
 import { AppShell } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
+import { WeatherHoloMap } from "@/components/ops/WeatherHoloMap";
 import { AssetDetailPanel } from "@/components/ops/AssetDetailPanel";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
-import { layersQuery, useOpsSnapshot } from "@/lib/hooks/use-ops-data";
+import { layersQuery, useOpsSnapshot, eventsQuery } from "@/lib/hooks/use-ops-data";
 import { ASSET_TYPE_LABEL, RISK_ORDER } from "@/lib/format";
 import type { AssetType, RiskLevel } from "@/lib/domain/types";
 
 export function MapPage() {
   const base = useOpsBase();
   const { assets, riskMap, event } = useOpsSnapshot(base, 120);
+  const allEvents = useQuery(eventsQuery(base));
   const layerDefs = useQuery(layersQuery(base));
   const [layers, setLayers] = useState<Record<string, boolean>>({
     assets: true,
@@ -34,13 +36,14 @@ export function MapPage() {
   const [operator, setOperator] = useState("all");
   const [hour, setHour] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [mapMode, setMapMode] = useState<"2d" | "3d">("3d");
 
   // Advance the forecast playhead so the eye, wind field and cone animate along
   // the real Aurora track. Interpolation between 6-hour steps keeps it smooth.
   useEffect(() => {
     if (!playing || !event) return;
     const id = setInterval(() => {
-      setHour((h) => (h >= 120 ? 0 : Math.min(120, h + 1.5)));
+      setHour((h) => (h >= 120 ? 0 : Math.min(120, h + 0.375)));
     }, 90);
     return () => clearInterval(id);
   }, [playing, event]);
@@ -209,17 +212,62 @@ export function MapPage() {
         </div>
 
         <div className="relative min-w-0 flex-1">
-          <OpsMap
-            className="h-full w-full"
-            assets={filtered}
-            risks={riskMap}
-            event={event}
-            layers={layers}
-            catalogLayers={layerDefs.data ?? []}
-            selectedId={selected}
-            hour={hour}
-            onSelect={setSelected}
-          />
+          {mapMode === "3d" ? (
+            <WeatherHoloMap
+              className="h-full w-full"
+              assets={filtered}
+              risks={riskMap}
+              event={event}
+              events={allEvents.data ?? (event ? [event] : [])}
+              layers={layers}
+              catalogLayers={layerDefs.data ?? []}
+              selectedId={selected}
+              hour={hour}
+              onSelect={setSelected}
+            />
+          ) : (
+            <OpsMap
+              className="h-full w-full"
+              assets={filtered}
+              risks={riskMap}
+              event={event}
+              layers={layers}
+              catalogLayers={layerDefs.data ?? []}
+              selectedId={selected}
+              hour={hour}
+              onSelect={setSelected}
+            />
+          )}
+
+          <div className="absolute top-3 left-3 z-10 flex flex-col items-start gap-2">
+            <div className="flex overflow-hidden rounded-md border bg-popover/90 shadow-lg backdrop-blur">
+              <button
+                onClick={() => setMapMode("2d")}
+                aria-pressed={mapMode === "2d"}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs ${
+                  mapMode === "2d" ? "bg-accent font-semibold" : "hover:bg-accent/60"
+                }`}
+              >
+                <MapIcon className="size-3.5" /> 2D
+              </button>
+              <button
+                onClick={() => setMapMode("3d")}
+                aria-pressed={mapMode === "3d"}
+                className={`inline-flex items-center gap-1.5 border-l px-2.5 py-1.5 text-xs ${
+                  mapMode === "3d" ? "bg-accent font-semibold" : "hover:bg-accent/60"
+                }`}
+              >
+                <Box className="size-3.5" /> 3D
+              </button>
+            </div>
+            {mapMode === "3d" && (
+              <div className="max-w-[13rem] rounded-md border bg-popover/80 px-2.5 py-1.5 text-[11px] leading-snug text-muted-foreground shadow-lg backdrop-blur">
+                <span className="text-foreground">Click</span> a spot to fly there ·{" "}
+                <span className="text-foreground">drag</span> to rotate ·{" "}
+                <span className="text-foreground">scroll</span> to zoom
+              </div>
+            )}
+          </div>
           {!event && assets.length === 0 && (layerDefs.data?.length ?? 0) === 0 && (
             <div className="pointer-events-none absolute top-3 left-1/2 z-10 w-[min(90%,24rem)] -translate-x-1/2 rounded-sm border bg-background/90 px-3 py-2 text-center shadow-sm backdrop-blur">
               <p className="text-[11px] text-muted-foreground">
@@ -256,7 +304,9 @@ export function MapPage() {
                 className="h-1 w-40 accent-[var(--color-primary)] sm:w-56"
                 aria-label="Forecast hour"
               />
-              <span className="num w-14 text-right text-xs font-semibold">+{Math.round(hour)} h</span>
+              <span className="num w-14 text-right text-xs font-semibold">
+                +{Math.round(hour)} h
+              </span>
             </div>
           )}
         </div>

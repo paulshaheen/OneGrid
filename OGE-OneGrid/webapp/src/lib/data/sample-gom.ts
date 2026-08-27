@@ -525,6 +525,95 @@ sampleEvent.previousForecast = sampleEvent.forecast.map((p) => ({
   coneRadiusMi: Math.round(p.coneRadiusMi * 1.07),
 }));
 
+// ---------------------------------------------------------------------------
+// A second, concurrent system: a non-tropical Pacific windstorm tracking up the
+// West Coast. category 0 (no tropical eye) but damaging sustained winds — it
+// exercises multi-storm rendering and the "high wind, no hurricane" case.
+// ---------------------------------------------------------------------------
+export const samplePacificEvent: WeatherEvent = {
+  id: "EP902026",
+  name: "Pacific Windstorm Talon",
+  kind: "severe_convective",
+  status: "High-wind warning — damaging gusts",
+  basin: "Northeast Pacific",
+  currentCategory: 0,
+  currentWindMph: 74,
+  gustMph: 98,
+  pressureMb: 971,
+  movementDeg: 45,
+  movementMph: 29,
+  lat: 41.5,
+  lon: -125.5,
+  confidence: "moderate",
+  modelSource: "Blended global forecast ensemble",
+  updatedAtIso: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
+  expectedLandfall: "Pacific Northwest coast, ~30 hours",
+  history: [
+    [-129.2, 37.8],
+    [-128.1, 39.0],
+    [-127.0, 40.1],
+    [-126.1, 40.9],
+    [-125.5, 41.5],
+  ],
+  forecast: [
+    { hour: 0, lat: 41.5, lon: -125.5, windMph: 74, coneRadiusMi: 0, category: 0, pressureMb: 971 },
+    {
+      hour: 12,
+      lat: 43.2,
+      lon: -125.0,
+      windMph: 79,
+      coneRadiusMi: 46,
+      category: 0,
+      pressureMb: 966,
+    },
+    {
+      hour: 24,
+      lat: 44.8,
+      lon: -124.5,
+      windMph: 82,
+      coneRadiusMi: 84,
+      category: 0,
+      pressureMb: 962,
+    },
+    {
+      hour: 36,
+      lat: 46.2,
+      lon: -124.1,
+      windMph: 74,
+      coneRadiusMi: 126,
+      category: 0,
+      pressureMb: 969,
+    },
+    {
+      hour: 48,
+      lat: 47.4,
+      lon: -123.4,
+      windMph: 61,
+      coneRadiusMi: 168,
+      category: 0,
+      pressureMb: 980,
+    },
+    {
+      hour: 72,
+      lat: 48.6,
+      lon: -121.8,
+      windMph: 46,
+      coneRadiusMi: 232,
+      category: 0,
+      pressureMb: 991,
+    },
+    {
+      hour: 96,
+      lat: 49.2,
+      lon: -119.4,
+      windMph: 37,
+      coneRadiusMi: 292,
+      category: 0,
+      pressureMb: 998,
+    },
+  ],
+};
+
 sampleEvent.cycleShift = {
   currentCycle: "18Z cycle",
   previousCycle: "12Z cycle",

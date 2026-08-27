@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
+import { MapModeSwitch } from "@/components/ops/MapModeSwitch";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { useOpsBase } from "@/components/ops/ops-nav";
 import { useOpsSnapshot } from "@/lib/hooks/use-ops-data";
@@ -92,11 +93,13 @@ export function EventsPage() {
               ))}
             </div>
             <div className="h-[360px] border-t">
-              <OpsMap
+              <MapModeSwitch
                 className="h-full w-full"
                 assets={assets}
                 risks={riskMap}
                 event={event}
+                initialFocusEventId={event.id}
+                autoPlay
                 layers={{ assets: true, track: true, wind: true }}
                 selectedId={selected}
                 onSelect={setSelected}
