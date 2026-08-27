@@ -60,6 +60,10 @@ jobs:
           # report-app: server + its runtime node_modules (ws)
           cp -R "$SRC/report-app" "$STAGE/report-app"
           rm -rf "$STAGE/report-app/node_modules/.cache"
+          # Never ship a resolved Fabric target: production is wired per tenant via
+          # app settings / last-deploy-state.json. Strip any stray dev target file so
+          # no backend IDs can leak into the package.
+          rm -f "$STAGE/report-app/server/target.json" "$STAGE/report-app/server/target.local.json"
 
           # webapp: prebuilt SSR output + server.mjs + pruned runtime node_modules
           cp -R "$SRC/webapp" "$STAGE/webapp"

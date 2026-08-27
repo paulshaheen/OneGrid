@@ -1,0 +1,7 @@
+{
+  "_comment": "LOCAL DEV ONLY. Copy to target.local.json (gitignored) and fill in YOUR OWN Fabric IDs to point the report API at a workspace while developing. NEVER commit real IDs. In production these come from per-tenant app settings (PBI_WORKSPACE / PBI_DATASET / KUSTO_CLUSTER / KUSTO_DATABASE) or last-deploy-state.json.",
+  "workspaceId": "",
+  "datasetId": "",
+  "kustoUri": "",
+  "kqlDatabase": "pi-realtime-db"
+}

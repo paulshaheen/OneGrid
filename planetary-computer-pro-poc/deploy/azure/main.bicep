@@ -249,11 +249,28 @@ var userAccessAdministratorRoleId = '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9'
 // which Contributor cannot do. Scoped to THIS resource group only.
 var ownerRoleId = '8e3af657-a8ff-443c-a75c-2fe8c4bcb635'
 // Phases handed to OneGrid deploy.ps1 -Only, mapped from the selected components.
-// Base = the operational Fabric plane; +data seeds the historical demo dataset;
-// +foundry/dataagent/chatagent stand up the AI + chat/report web app.
-var ogPhasesBase = [ 'workspace', 'core', 'fabricplane', 'artifacts', 'semantic', 'oge', 'governance', 'permissions' ]
-var ogPhases = concat(ogPhasesBase, deployOneGridData ? [ 'data' ] : [], deployOneGridApp ? [ 'foundry', 'dataagent', 'chatagent' ] : [])
-var ogPhasesCsv = join(ogPhases, ',')
+// The provisioning is SPLIT into two independent deploymentScripts so a failure in one
+// plane does not block the other (a dead/failed Fabric capacity used to skip the whole
+// provisioner - including GeoCatalog/Foundry/storage/Aurora wiring that has nothing to do
+// with Fabric). See the two deploymentScripts below.
+//
+//  * APP plane (runs ALWAYS when the web app is selected; NO dependency on the Fabric
+//    capacity): stands up Foundry + the chat/report web app and wires the app-native
+//    services (GeoCatalog, Azure OpenAI, storage, Aurora endpoint, report API). The
+//    chatagent phase omits KUSTO_*/PBI_*/DATA_AGENT_* when no Fabric state is present, so
+//    it never blanks the Fabric settings the fabric plane writes later.
+//  * FABRIC plane (depends on the Fabric capacity; skipped cleanly if the capacity failed):
+//    builds the Fabric workspace/lakehouse/eventhouse/KQL/semantic model/data agent, then
+//    re-runs chatagent to layer the live KUSTO_*/PBI_*/DATA_AGENT_* onto the already-wired
+//    app, plus the eventhouse/PBI permission grants.
+var ogAppPhases = deployOneGridApp ? [ 'foundry', 'chatagent' ] : []
+var ogFabricPhases = concat([ 'workspace', 'core', 'fabricplane', 'artifacts', 'semantic', 'oge', 'governance' ], deployOneGridData ? [ 'data' ] : [], deployOneGridApp ? [ 'dataagent', 'chatagent' ] : [], [ 'permissions' ])
+var ogAppPhasesCsv = join(ogAppPhases, ',')
+var ogFabricPhasesCsv = join(ogFabricPhases, ',')
+// Combined list retained for the informational output (which phases this deployment runs).
+var ogPhasesCsv = join(concat(ogFabricPhases, ogAppPhases), ',')
+// The app-plane provisioner only makes sense when the web app is selected.
+var deployAppProvision = deployFabricPlaneEffective && deployOneGridApp
 
 // ------------------------------------------------------------------------------------
 // Core resource: the Planetary Computer Pro GeoCatalog
@@ -520,11 +537,88 @@ resource chatAgentGeoCatalogAdmin 'Microsoft.Authorization/roleAssignments@2022-
 // eventhouses/KQL, the AI Foundry account, and the chat/report Container App are not ARM
 // resource types, so we run OneGrid's own orchestrator (deploy.ps1) headless as a
 // deploymentScript (Azure PowerShell image → pwsh; git + az CLI installed at runtime),
-// under the Fabric-plane identity. The selected components map to deploy.ps1 -Only phases
-// (ogPhasesCsv). This is what makes the solution stand up alongside the PCP backend from
-// the single Deploy button instead of a separate manual script run.
+// under the Fabric-plane identity.
+//
+// The provisioning is intentionally SPLIT across two deploymentScripts so a failure in one
+// plane no longer takes the other down. The scripts share the same environment except for
+// ONEGRID_PHASES (which phases each runs) and FABRIC_CAPACITY_ID (only the fabric plane
+// references the capacity resource, so only IT is skipped when the capacity fails):
+var provisionCommonEnv = [
+  { name: 'SUBSCRIPTION_ID', value: subscription().subscriptionId }
+  { name: 'LOCATION', value: location }
+  { name: 'TARGET_RESOURCE_GROUP', value: resourceGroup().name }
+  { name: 'NAME_PREFIX', value: namePrefix }
+  { name: 'CHAT_AGENT_APP_NAME', value: chatAgentAppName }
+  { name: 'ONEGRID_APP_PACKAGE_URL', value: oneGridAppPackageUrl }
+  { name: 'ONEGRID_APP_PACKAGE_BLOB_URL', value: oneGridAppPackageBlobUrl }
+  { name: 'ONEGRID_APP_STORAGE_ACCOUNT', value: sampleStorageName }
+  { name: 'ONEGRID_APP_PACKAGE_CONTAINER', value: onegridAppPackageContainerName }
+  { name: 'IDENTITY_CLIENT_ID', value: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.clientId : '' }
+  { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
+  { name: 'ONEGRID_REF', value: oneGridRef }
+  { name: 'FABRIC_WORKSPACE', value: fabricWorkspaceName }
+  { name: 'FABRIC_CONNECTION_ID', value: fabricConnectionId }
+  { name: 'PCP_CREATE_CONNECTION', value: string(createFabricConnectionEffective) }
+  { name: 'PCP_STORAGE_ACCOUNT_NAME', value: sampleStorageName }
+  { name: 'PCP_STORAGE_ACCOUNT_ID', value: deployFabricPlaneEffective ? sampleStorage.id : '' }
+  { name: 'PCP_BLOB_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.blob : '' }
+  { name: 'PCP_DFS_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.dfs : '' }
+  { name: 'PCP_MODEL_CONTAINER', value: modelOutputsContainerName }
+  { name: 'PCP_OPENAI_ENDPOINT', value: deployAiAgent ? openAi.properties.endpoint : '' }
+  { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
+  { name: 'PCP_GEOCATALOG_URI', value: geoCatalog.properties.catalogUri }
+  { name: 'PCP_GEOCATALOG_ID', value: geoCatalog.id }
+  { name: 'PCP_SAMPLE_CONTAINER', value: sampleContainerName }
+  { name: 'PCP_AURORA_ENDPOINT', value: deployAuroraModel ? auroraEndpoint.properties.scoringUri : '' }
+  { name: 'PCP_AURORA_DEPLOYED', value: string(deployAuroraDeployment) }
+]
+
+// --- APP plane -----------------------------------------------------------------------
+// Stands up Foundry + wires the chat/report web app's app-native services (GeoCatalog,
+// Azure OpenAI, storage, Aurora endpoint, report API). It has NO reference to the Fabric
+// capacity, so it runs even when the capacity failed or was never requested - which is why
+// GeoCatalog/Foundry/storage/Aurora now light up independently of Fabric. FABRIC_CAPACITY_ID
+// is passed empty here on purpose (no symbolic capacity reference = no implicit dependency).
+resource appProvisionScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (deployAppProvision) {
+  name: '${namePrefix}-onegrid-provision-app'
+  location: location
+  kind: 'AzurePowerShell'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${fabricPlaneIdentity.id}': {}
+    }
+  }
+  properties: {
+    azPowerShellVersion: '11.5'
+    retentionInterval: 'P1D'
+    timeout: 'PT2H'
+    cleanupPreference: 'OnSuccess'
+    environmentVariables: concat(provisionCommonEnv, [
+      { name: 'ONEGRID_PHASES', value: ogAppPhasesCsv }
+      { name: 'FABRIC_CAPACITY_ID', value: '' }
+    ])
+    scriptContent: loadTextContent('scripts/onegrid-solution-provision.ps1')
+  }
+  dependsOn: [
+    fabricPlaneBlobReaderRole
+    fabricPlaneRgOwner
+    fabricPlaneStorageUaaRole
+    modelOutputsContainer
+    chatAgentSite
+  ]
+}
+
+// --- FABRIC plane --------------------------------------------------------------------
+// Builds the Fabric workspace/lakehouse/eventhouse/KQL/semantic model/data agent, then
+// re-runs chatagent to layer the live KUSTO_*/PBI_*/DATA_AGENT_* onto the already-wired app
+// (the chatagent phase MERGES app settings and omits Fabric keys when absent, so the two
+// scripts never clobber each other), plus the eventhouse/PBI permission grants. It
+// references the Fabric capacity via FABRIC_CAPACITY_ID, so a failed capacity skips ONLY
+// this script - the app plane above still completes. It depends on the app plane (when the
+// app is deployed) so it is the last writer of the app settings and the app already exists.
 resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (deployFabricPlaneEffective) {
-  name: '${namePrefix}-onegrid-provision'
+  name: '${namePrefix}-onegrid-provision-fabric'
   location: location
   kind: 'AzurePowerShell'
   identity: {
@@ -538,37 +632,10 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
     retentionInterval: 'P1D'
     timeout: 'PT3H'
     cleanupPreference: 'OnSuccess'
-    environmentVariables: [
-      { name: 'SUBSCRIPTION_ID', value: subscription().subscriptionId }
-      { name: 'LOCATION', value: location }
-      { name: 'TARGET_RESOURCE_GROUP', value: resourceGroup().name }
-      { name: 'NAME_PREFIX', value: namePrefix }
-      { name: 'CHAT_AGENT_APP_NAME', value: chatAgentAppName }
-      { name: 'ONEGRID_APP_PACKAGE_URL', value: oneGridAppPackageUrl }
-      { name: 'ONEGRID_APP_PACKAGE_BLOB_URL', value: oneGridAppPackageBlobUrl }
-      { name: 'ONEGRID_APP_STORAGE_ACCOUNT', value: sampleStorageName }
-      { name: 'ONEGRID_APP_PACKAGE_CONTAINER', value: onegridAppPackageContainerName }
-      { name: 'IDENTITY_CLIENT_ID', value: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.clientId : '' }
-      { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
-      { name: 'ONEGRID_REF', value: oneGridRef }
-      { name: 'ONEGRID_PHASES', value: ogPhasesCsv }
+    environmentVariables: concat(provisionCommonEnv, [
+      { name: 'ONEGRID_PHASES', value: ogFabricPhasesCsv }
       { name: 'FABRIC_CAPACITY_ID', value: createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId }
-      { name: 'FABRIC_WORKSPACE', value: fabricWorkspaceName }
-      { name: 'FABRIC_CONNECTION_ID', value: fabricConnectionId }
-      { name: 'PCP_CREATE_CONNECTION', value: string(createFabricConnectionEffective) }
-      { name: 'PCP_STORAGE_ACCOUNT_NAME', value: sampleStorageName }
-      { name: 'PCP_STORAGE_ACCOUNT_ID', value: deployFabricPlaneEffective ? sampleStorage.id : '' }
-      { name: 'PCP_BLOB_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.blob : '' }
-      { name: 'PCP_DFS_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.dfs : '' }
-      { name: 'PCP_MODEL_CONTAINER', value: modelOutputsContainerName }
-      { name: 'PCP_OPENAI_ENDPOINT', value: deployAiAgent ? openAi.properties.endpoint : '' }
-      { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
-      { name: 'PCP_GEOCATALOG_URI', value: geoCatalog.properties.catalogUri }
-      { name: 'PCP_GEOCATALOG_ID', value: geoCatalog.id }
-      { name: 'PCP_SAMPLE_CONTAINER', value: sampleContainerName }
-      { name: 'PCP_AURORA_ENDPOINT', value: deployAuroraModel ? auroraEndpoint.properties.scoringUri : '' }
-      { name: 'PCP_AURORA_DEPLOYED', value: string(deployAuroraDeployment) }
-    ]
+    ])
     scriptContent: loadTextContent('scripts/onegrid-solution-provision.ps1')
   }
   dependsOn: [
@@ -577,6 +644,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
     fabricPlaneStorageUaaRole
     modelOutputsContainer
     chatAgentSite
+    ...(deployAppProvision ? [ appProvisionScript ] : [])
   ]
 }
 
@@ -978,6 +1046,8 @@ output fabricPlaneIdentityPrincipalId string = deployFabricPlaneEffective ? fabr
 output fabricPlaneCapacityId string = deployFabricPlaneEffective ? (createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId) : 'not-deployed'
 @description('Result of the in-template Fabric provisioning: workspace/lakehouse/eventhouse ids, KQL apply status, and OneLake shortcut status.')
 output fabricPlaneProvisionResult object = deployFabricPlaneEffective ? fabricPlaneScript.properties.outputs : {}
+@description('Result of the in-template app-plane provisioning (Foundry + chat/report web app wiring for GeoCatalog/OpenAI/storage/Aurora). Runs independently of the Fabric capacity.')
+output appPlaneProvisionResult object = deployAppProvision ? appProvisionScript.properties.outputs : {}
 @description('Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut.')
 output fabricPlaneConfig object = deployFabricPlaneEffective ? {
   reuseExistingFoundry: deployAiAgent

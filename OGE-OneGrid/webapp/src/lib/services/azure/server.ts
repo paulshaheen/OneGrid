@@ -200,18 +200,155 @@ export type DataPlaneStatus = {
   auroraModelDeployed: boolean;
   /** The server-side Aurora response-to-WeatherEvent adapter is implemented. */
   auroraAdapterConnected: boolean;
+  // ---- Live reachability probes -------------------------------------------
+  // Unlike the "*Configured" flags (which only report whether an env var is set
+  // at deploy time), these are runtime probes: the app's managed identity calls
+  // each data plane right now. They tell a *deleted / unreachable* resource
+  // ("unreachable") apart from one that answers but where the identity lost its
+  // data-plane role ("unauthorized") — the honest liveness the presence-only
+  // flags cannot give. `undefined` = probe skipped because the plane is not
+  // configured (nothing to reach).
+  /** GeoCatalog STAC API reachability under the app identity. */
+  geoCatalogLive?: ProbeResult;
+  /** Azure OpenAI (Foundry) endpoint reachability under the app identity. */
+  foundryLive?: ProbeResult;
+  /** Upload storage container reachability under the app identity. */
+  storageLive?: ProbeResult;
+  /** Configured Entra tenant's OpenID metadata reachability (public, no token). */
+  entraLive?: ProbeResult;
 };
+
+/**
+ * Outcome of a live reachability probe:
+ * - "ok"           the resource answered 2xx under the app identity
+ * - "unauthorized" it answered 401/403 — reachable, but the identity lost its role
+ * - "unreachable"  network error (DNS gone after a delete, refused, timeout) or
+ *                  any other non-2xx — treat as not serving
+ */
+export type ProbeResult = "ok" | "unauthorized" | "unreachable";
+
+/**
+ * Issue a lightweight request and classify the outcome. Aborts the socket on
+ * timeout (via AbortController) so slow planes can't pile up connections across
+ * repeated status polls, and always clears its timer. Best-effort: never throws.
+ */
+async function probeReach(
+  url: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<ProbeResult> {
+  const { timeoutMs = 5_000, ...rest } = init;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...rest, signal: controller.signal });
+    if (res.ok) return "ok";
+    if (res.status === 401 || res.status === 403) return "unauthorized";
+    return "unreachable";
+  } catch {
+    return "unreachable";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 
 /** Report which onboarding capabilities the current deployment has wired. */
 export const getDataPlaneStatus = createServerFn({ method: "GET" }).handler(
-  async (): Promise<DataPlaneStatus> => ({
-    geoCatalogConfigured: Boolean(process.env["GEOCATALOG_URI"]),
-    uploadConfigured: Boolean(process.env["SAMPLE_CONTAINER_URL"]),
-    auroraEndpointConfigured: Boolean(process.env["AURORA_ENDPOINT"]),
-    auroraModelDeployed: process.env["AURORA_MODEL_DEPLOYED"] === "true",
-    auroraAdapterConnected: await auroraOutputFresh(),
-  }),
+  async (): Promise<DataPlaneStatus> => {
+    const geoCatalogUrl = process.env["GEOCATALOG_URI"];
+    const foundryEndpoint = process.env["FOUNDRY_ENDPOINT"];
+    const uploadContainerUrl = process.env["SAMPLE_CONTAINER_URL"];
+    const entraTenantId = process.env["ENTRA_TENANT_ID"];
+
+    // Run every live probe in parallel and never let one failure sink the others.
+    const [
+      auroraAdapterConnected,
+      geoCatalogLive,
+      foundryLive,
+      storageLive,
+      entraLive,
+    ] = await Promise.all([
+      auroraOutputFresh(),
+      probeGeoCatalogLive(geoCatalogUrl),
+      probeFoundryLive(foundryEndpoint),
+      probeStorageContainerLive(uploadContainerUrl),
+      probeEntraLive(entraTenantId),
+    ]);
+
+    return {
+      geoCatalogConfigured: Boolean(geoCatalogUrl),
+      uploadConfigured: Boolean(uploadContainerUrl),
+      auroraEndpointConfigured: Boolean(process.env["AURORA_ENDPOINT"]),
+      auroraModelDeployed: process.env["AURORA_MODEL_DEPLOYED"] === "true",
+      auroraAdapterConnected,
+      geoCatalogLive,
+      foundryLive,
+      storageLive,
+      entraLive,
+    };
+  },
 );
+
+/**
+ * GeoCatalog liveness: list STAC collections under the app identity. A 2xx means
+ * the GeoCatalog exists AND the managed identity still has the data-plane role.
+ * Returns undefined when GeoCatalog is not configured (nothing to probe).
+ */
+async function probeGeoCatalogLive(geoCatalogUrl?: string): Promise<ProbeResult | undefined> {
+  if (!geoCatalogUrl) return undefined;
+  const token = await getManagedIdentityToken(GEOCATALOG_RESOURCE);
+  if (!token) return "unauthorized";
+  return probeReach(geoCatalogApiUrl(geoCatalogUrl, "stac/collections"), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/**
+ * Azure OpenAI (Foundry) liveness: the data-plane "list models" operation
+ * (GET /openai/models) is the cheapest authenticated call that proves the
+ * endpoint is serving and the identity has the Cognitive Services OpenAI User
+ * role — no tokens are spent (unlike a chat completion). Returns undefined when
+ * Foundry is not configured.
+ */
+async function probeFoundryLive(endpoint?: string): Promise<ProbeResult | undefined> {
+  if (!endpoint) return undefined;
+  const token = await getManagedIdentityToken(COGNITIVE_RESOURCE);
+  if (!token) return "unauthorized";
+  const url = `${endpoint.replace(/\/$/, "")}/openai/models?api-version=2024-10-21`;
+  return probeReach(url, { headers: { Authorization: `Bearer ${token}` } });
+}
+
+/**
+ * Storage liveness: Get Container Properties (restype=container) on the upload
+ * container. Needs only Storage Blob Data Reader (the app identity already has
+ * it). A HEAD keeps it body-less. Returns undefined when storage is not wired.
+ */
+async function probeStorageContainerLive(containerUrl?: string): Promise<ProbeResult | undefined> {
+  if (!containerUrl) return undefined;
+  const token = await getManagedIdentityToken(STORAGE_RESOURCE);
+  if (!token) return "unauthorized";
+  const url = `${containerUrl.replace(/\/$/, "")}?restype=container`;
+  return probeReach(url, {
+    method: "HEAD",
+    headers: { Authorization: `Bearer ${token}`, "x-ms-version": "2021-08-06" },
+  });
+}
+
+/**
+ * Entra liveness: fetch the configured tenant's OpenID Connect discovery
+ * document (public, no token). A 2xx proves the tenant exists and its identity
+ * platform is reachable — enough to detect a wrong/deleted tenant. Note: this
+ * does NOT validate the specific app registration (that would need Microsoft
+ * Graph Application.Read); it is a tenant-reachability signal. Returns undefined
+ * when no tenant id is configured.
+ */
+async function probeEntraLive(tenantId?: string): Promise<ProbeResult | undefined> {
+  if (!tenantId) return undefined;
+  const authority = process.env["ENTRA_AUTHORITY_HOST"] || "https://login.microsoftonline.com";
+  const url = `${authority.replace(/\/$/, "")}/${encodeURIComponent(tenantId)}/v2.0/.well-known/openid-configuration`;
+  return probeReach(url);
+}
+
 
 const WEATHER_EVENTS_BLOB_NAME = "weather-events.json";
 

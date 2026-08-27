@@ -36,9 +36,12 @@ export function resolveTarget() {
     t.kqlDatabase ||= (c.fabric && c.fabric.kqlDatabaseName) || t.kqlDatabase;
   } catch {}
 
-  // Local override / fallback (known-good workspace for dev).
+  // Local dev override ONLY — `target.local.json` is gitignored and never packaged.
+  // Production resolves the target purely from provisioner-set app settings (per
+  // tenant) or the deploy-written last-deploy-state.json; no backend IDs are ever
+  // committed to source or shipped in the release package.
   try {
-    const local = readJsonLoose(path.join(__dirname, 'target.json'));
+    const local = readJsonLoose(path.join(__dirname, 'target.local.json'));
     t.workspaceId ||= local.workspaceId || '';
     t.datasetId ||= local.datasetId || '';
     t.kustoUri ||= local.kustoUri || '';

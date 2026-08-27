@@ -6,7 +6,7 @@ import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { layersQuery } from "@/lib/hooks/use-ops-data";
 import { isEntraConfigured } from "@/lib/auth/config";
 import { getServiceConfig } from "@/lib/services/azure-config";
-import { getDataPlaneStatus } from "@/lib/services/azure/server";
+import { getDataPlaneStatus, type ProbeResult } from "@/lib/services/azure/server";
 
 // Honest, read-only deployment status. Infrastructure is provisioned by the
 // Bicep/ARM template ("Deploy to Azure"), not from the app — so this page reports
@@ -86,6 +86,30 @@ export function DeploymentPage() {
   const auroraAdapterConnected = status.data?.auroraAdapterConnected ?? false;
   const entraWired = isEntraConfigured();
 
+  // Turn the server-side live reachability probes into per-tile status. Unlike the
+  // env-presence flags, these flip to "Unreachable" when a resource is paused, deleted,
+  // or the app identity lost its role — the honest liveness the presence flags cannot give.
+  const liveTile = (
+    configured: boolean,
+    live: ProbeResult | undefined,
+  ): { wired: boolean; statusLabel: string } => {
+    if (!configured) return { wired: false, statusLabel: "Not configured" };
+    if (live === undefined)
+      return { wired: false, statusLabel: status.isLoading ? "Checking…" : "Configured" };
+    switch (live) {
+      case "ok":
+        return { wired: true, statusLabel: "Connected" };
+      case "unauthorized":
+        return { wired: false, statusLabel: "Access denied" };
+      default:
+        return { wired: false, statusLabel: "Unreachable" };
+    }
+  };
+  const entraTile = liveTile(entraWired, status.data?.entraLive);
+  const geoCatalogTile = liveTile(geoCatalogWired, status.data?.geoCatalogLive);
+  const foundryTile = liveTile(foundryWired, status.data?.foundryLive);
+  const storageTile = liveTile(uploadWired, status.data?.storageLive);
+
   const services: {
     name: string;
     detail: string;
@@ -95,24 +119,35 @@ export function DeploymentPage() {
   }[] = [
     {
       name: "Identity & sign-in (Microsoft Entra ID)",
-      detail: entraWired
-        ? "Directory sign-in with your tenant's MFA and conditional access"
-        : "Set ENTRA_CLIENT_ID and ENTRA_TENANT_ID to require directory sign-in — the console runs open until then",
-      wired: entraWired,
+      detail: !entraWired
+        ? "Set ENTRA_CLIENT_ID and ENTRA_TENANT_ID to require directory sign-in — the console runs open until then"
+        : entraTile.wired
+          ? "Directory sign-in with your tenant's MFA and conditional access"
+          : "Configured, but the tenant's identity metadata was unreachable — verify ENTRA_TENANT_ID is correct and the tenant still exists",
+      wired: entraTile.wired,
+      statusLabel: entraTile.statusLabel,
     },
     {
       name: "Geospatial catalog (Planetary Computer Pro)",
-      detail: "STAC collections and imagery for the operating region",
-      wired: geoCatalogWired,
+      detail: geoCatalogTile.wired || !geoCatalogWired
+        ? "STAC collections and imagery for the operating region"
+        : "Configured, but the app identity could not reach the GeoCatalog — check the resource exists and its data-plane role is still assigned",
+      wired: geoCatalogTile.wired,
       endpoint: cfg.geoCatalogUrl ? hostOf(cfg.geoCatalogUrl) : undefined,
+      statusLabel: geoCatalogTile.statusLabel,
     },
     {
       name: "AI operations assistant (Azure OpenAI)",
-      detail: cfg.foundryDeployment
-        ? `Deployment: ${cfg.foundryDeployment}`
-        : "Grounded natural-language answers",
-      wired: foundryWired,
+      detail: !foundryWired
+        ? "Grounded natural-language answers"
+        : foundryTile.wired
+          ? cfg.foundryDeployment
+            ? `Deployment: ${cfg.foundryDeployment}`
+            : "Grounded natural-language answers"
+          : "Configured, but the endpoint did not answer — check the Azure OpenAI resource exists and the app has the Cognitive Services OpenAI User role",
+      wired: foundryTile.wired,
       endpoint: cfg.foundryEndpoint ? hostOf(cfg.foundryEndpoint) : undefined,
+      statusLabel: foundryTile.statusLabel,
     },
     {
       name: "Operational data plane (Fabric Real-Time Intelligence)",
@@ -127,8 +162,11 @@ export function DeploymentPage() {
     },
     {
       name: "Data storage & upload",
-      detail: "Blob container for uploaded assets and catalog ingestion sources",
-      wired: uploadWired,
+      detail: storageTile.wired || !uploadWired
+        ? "Blob container for uploaded assets and catalog ingestion sources"
+        : "Configured, but the container did not answer — check the storage account/container exists and the app has Storage Blob Data Reader",
+      wired: storageTile.wired,
+      statusLabel: storageTile.statusLabel,
     },
     {
       name: "Aurora weather inference",

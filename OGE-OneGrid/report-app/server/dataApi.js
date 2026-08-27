@@ -71,10 +71,21 @@ export async function status() {
 }
 
 // ---- helpers to run DAX against the import model -------------------------
-function q(query) { const t = T(); return dax1(t.workspaceId, t.datasetId, query); }
-function qBatch(queries) { const t = T(); return dax(t.workspaceId, t.datasetId, queries); }
-function kq(query) { const t = T(); return kql(t.kustoUri, t.kqlDatabase, query); }
-function kqMgmt(csl) { const t = T(); return kqlMgmt(t.kustoUri, t.kqlDatabase, csl); }
+// Fail safe: never issue a query without a resolved per-tenant target. This stops a
+// misconfigured or unprovisioned deployment from silently hitting the wrong (or a
+// foreign) backend — production must supply the target via app settings / last-deploy-state.
+function requireModel(t) {
+  if (!t.workspaceId || !t.datasetId)
+    throw new Error('No Fabric semantic-model target is configured for this app.');
+}
+function requireKusto(t) {
+  if (!t.kustoUri)
+    throw new Error('No Fabric Eventhouse target is configured for this app.');
+}
+function q(query) { const t = T(); requireModel(t); return dax1(t.workspaceId, t.datasetId, query); }
+function qBatch(queries) { const t = T(); requireModel(t); return dax(t.workspaceId, t.datasetId, queries); }
+function kq(query) { const t = T(); requireKusto(t); return kql(t.kustoUri, t.kqlDatabase, query); }
+function kqMgmt(csl) { const t = T(); requireKusto(t); return kqlMgmt(t.kustoUri, t.kqlDatabase, csl); }
 
 // Persist a thumbs up/down (+ optional comment) into the Eventhouse MLFeedback table so
 // future ML model runs can learn from human corrections. Streaming ingestion = near-instant.

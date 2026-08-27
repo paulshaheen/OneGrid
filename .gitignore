@@ -1,2 +1,6 @@
 # OneGrid bundled sample datasets (LFS bytes not available in this repo)
 OGE-OneGrid/data/
+
+# Local-dev Fabric target override (per-developer backend IDs) — never commit/ship.
+# Production resolves the target per tenant via app settings / last-deploy-state.json.
+OGE-OneGrid/report-app/server/target.local.json

@@ -911,10 +911,7 @@ function Phase-ChatAgent {
     "AI_MODELS=$models",
     "AZURE_AI_SUBSCRIPTION_ID=$sub",
     "AZURE_AI_RESOURCE_GROUP=$($cfg.foundry.resourceGroup)",
-    "AZURE_AI_ACCOUNT=$($cfg.foundry.accountName)",
-    "KUSTO_CLUSTER=$($state.KustoUri)",
-    "KUSTO_DATABASE=$($cfg.fabric.kqlDatabaseName)",
-    "PBI_WORKSPACE=$($state.WorkspaceId)"
+    "AZURE_AI_ACCOUNT=$($cfg.foundry.accountName)"
   )
   if ($state.FoundryEndpoint) {
     $envVars += "AI_PROVIDER=foundry"
@@ -946,23 +943,40 @@ function Phase-ChatAgent {
   # plane; flag it so the ported Explorer personas read real Fabric/Eventhouse/PBI
   # data instead of the in-browser sample set.
   $envVars += "REPORT_API_ENABLED=1"
-  # PBI_DATASET: prefer the id from this run's semantic phase; otherwise resolve the Import
-  # model by name so 'chatagent' works even when run without 'semantic' in the same invocation.
-  $datasetId = $state.DatasetId
-  if (-not $datasetId) {
-    $datasetId = AzTry { ((Invoke-RestMethod "https://api.powerbi.com/v1.0/myorg/groups/$($state.WorkspaceId)/datasets" -Headers @{ Authorization="Bearer $(PbiTok)" }).value | Where-Object { $_.name -eq 'semantic-main-import' } | Select-Object -First 1).id }
-  }
-  if ($datasetId) { $envVars += "PBI_DATASET=$datasetId" }
-  else { Log "  WARNING: no Import model found - chat agent DAX will not work until PBI_DATASET is set (run the semantic phase first)" "Yellow" }
 
-  # Fabric Data Agent (published in the 'dataagent' phase) — enables the "Ask Fabric Data
-  # Agent" mode in the chat UI, consumed over the public MCP endpoint via the app identity.
-  $envVars += "DATA_AGENT_WORKSPACE=$($state.WorkspaceId)"
-  if ($state.DataAgentId) { $envVars += "DATA_AGENT_ID=$($state.DataAgentId)" }
-  else {
-    $daResolved = AzTry { ((FGet "workspaces/$($state.WorkspaceId)/dataAgents").value | Where-Object { $_.displayName -eq (if ($cfg.dataAgent -and $cfg.dataAgent.name) { $cfg.dataAgent.name } else { 'OneGridOntologyAgent' }) } | Select-Object -First 1).id }
-    if ($daResolved) { $envVars += "DATA_AGENT_ID=$daResolved" }
-    else { Log "  note: no published data agent found - 'Ask Fabric Data Agent' stays hidden until the 'dataagent' phase runs" "Yellow" }
+  # ---- Fabric data-plane wiring (KUSTO / Power BI / Data Agent) --------------------
+  # These come from the Fabric-building phases' in-memory state. When this chatagent run is
+  # part of the APP provisioner (no Fabric phases - e.g. the Fabric capacity is absent or
+  # failed), $state.WorkspaceId/KustoUri are empty, so we OMIT these keys entirely rather than
+  # writing blanks. Omitting (not blanking) is deliberate: App Service appsettings 'set'
+  # MERGES, so the separate Fabric provisioner sets them later without this run wiping them,
+  # and the app cleanly falls back to the deterministic sample estate until the capacity is live.
+  if ($state.KustoUri -or $state.WorkspaceId) {
+    if ($state.KustoUri) { $envVars += "KUSTO_CLUSTER=$($state.KustoUri)" }
+    $envVars += "KUSTO_DATABASE=$($cfg.fabric.kqlDatabaseName)"
+    if ($state.WorkspaceId) {
+      $envVars += "PBI_WORKSPACE=$($state.WorkspaceId)"
+      $envVars += "DATA_AGENT_WORKSPACE=$($state.WorkspaceId)"
+    }
+    # PBI_DATASET: prefer the id from this run's semantic phase; otherwise resolve the Import
+    # model by name so 'chatagent' works even when run without 'semantic' in the same invocation.
+    $datasetId = $state.DatasetId
+    if (-not $datasetId -and $state.WorkspaceId) {
+      $datasetId = AzTry { ((Invoke-RestMethod "https://api.powerbi.com/v1.0/myorg/groups/$($state.WorkspaceId)/datasets" -Headers @{ Authorization="Bearer $(PbiTok)" }).value | Where-Object { $_.name -eq 'semantic-main-import' } | Select-Object -First 1).id }
+    }
+    if ($datasetId) { $envVars += "PBI_DATASET=$datasetId" }
+    else { Log "  WARNING: no Import model found - chat agent DAX will not work until PBI_DATASET is set (run the semantic phase first)" "Yellow" }
+
+    # Fabric Data Agent (published in the 'dataagent' phase) — enables the "Ask Fabric Data
+    # Agent" mode in the chat UI, consumed over the public MCP endpoint via the app identity.
+    if ($state.DataAgentId) { $envVars += "DATA_AGENT_ID=$($state.DataAgentId)" }
+    elseif ($state.WorkspaceId) {
+      $daResolved = AzTry { ((FGet "workspaces/$($state.WorkspaceId)/dataAgents").value | Where-Object { $_.displayName -eq (if ($cfg.dataAgent -and $cfg.dataAgent.name) { $cfg.dataAgent.name } else { 'OneGridOntologyAgent' }) } | Select-Object -First 1).id }
+      if ($daResolved) { $envVars += "DATA_AGENT_ID=$daResolved" }
+      else { Log "  note: no published data agent found - 'Ask Fabric Data Agent' stays hidden until the 'dataagent' phase runs" "Yellow" }
+    }
+  } else {
+    Log "  no Fabric plane in this run - omitting KUSTO_*/PBI_*/DATA_AGENT_* so the app uses the sample estate; the Fabric provisioner wires them when the capacity is live" "Yellow"
   }
 
   # ---- Mount the FULL dashboard as an Azure App Service web app (Linux, Node) via
