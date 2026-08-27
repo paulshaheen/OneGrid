@@ -217,9 +217,12 @@ var fabricPlaneIdentityName = '${namePrefix}-fabricplane-identity'
 var deployOneGridAppEffective = deployFabricPlaneEffective && deployOneGridApp
 // The chat/report web app (Azure App Service, Linux/Node) is a first-class ARM resource so
 // ARM owns its lifecycle and its managed identity exists before the provisioner runs its
-// Fabric/Kusto/PBI grants. Names must match what the provisioner expects (see
-// onegrid-solution-provision.ps1 chatAgent.appName = '<prefix>-onegrid-app').
-var chatAgentAppName = '${namePrefix}-onegrid-app'
+// Fabric/Kusto/PBI grants. The web app name must be GLOBALLY unique (Azure App
+// Service names are unique across all of Azure), so it carries a uniqueString suffix
+// derived from the resource group — stable per RG (redeploys reuse the same site) but
+// distinct across RGs/subscriptions. The computed name is passed to the provisioner
+// via CHAT_AGENT_APP_NAME so both sides agree (see onegrid-solution-provision.ps1).
+var chatAgentAppName = '${namePrefix}-onegrid-app-${uniqueString(resourceGroup().id)}'
 var chatAgentPlanName = '${chatAgentAppName}-plan'
 // GeoCatalog Administrator (data-plane) — lets the web app identity browse tenant STAC
 // collections/imagery under managed identity.
@@ -502,6 +505,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
       { name: 'LOCATION', value: location }
       { name: 'TARGET_RESOURCE_GROUP', value: resourceGroup().name }
       { name: 'NAME_PREFIX', value: namePrefix }
+      { name: 'CHAT_AGENT_APP_NAME', value: chatAgentAppName }
       { name: 'IDENTITY_CLIENT_ID', value: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.clientId : '' }
       { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
       { name: 'ONEGRID_REF', value: oneGridRef }

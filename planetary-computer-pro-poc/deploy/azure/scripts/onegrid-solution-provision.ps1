@@ -137,7 +137,7 @@ $cfg = [ordered]@{
   }
   chatAgent = [ordered]@{
     resourceGroup   = $rg
-    appName         = "$($env:NAME_PREFIX)-onegrid-app"
+    appName         = if ($env:CHAT_AGENT_APP_NAME) { $env:CHAT_AGENT_APP_NAME } else { "$($env:NAME_PREFIX)-onegrid-app" }
     environmentName = "$($env:NAME_PREFIX)-onegrid-app-env"
   }
   governance = [ordered]@{ enabled = $false }
