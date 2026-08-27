@@ -179,6 +179,13 @@
                 }
               },
               {
+                "name": "createAuroraModelDeployment",
+                "type": "Microsoft.Common.CheckBox",
+                "label": "Deploy the Aurora model for me (official published asset)",
+                "defaultValue": false,
+                "toolTip": "Deploy the Aurora model onto the GPU endpoint using the official published asset (azureml://registries/azureml/models/Aurora/versions/4). Requires A100 quota in the region and accepted Azure Marketplace terms for Aurora. Leave unchecked to provision the workspace + endpoint only, or paste a specific asset ID below."
+              },
+              {
                 "name": "auroraModelAssetId",
                 "type": "Microsoft.Common.TextBox",
                 "label": "Aurora model asset ID (optional)",
@@ -186,7 +193,8 @@
                 "toolTip": "Registry model asset. The official storm-impact app uses azureml://registries/azureml/models/Aurora/versions/4. Leave blank to provision the workspace + endpoint only and deploy the model from the portal.",
                 "constraints": {
                   "required": false
-                }
+                },
+                "visible": "[not(steps('aiConfig').auroraSection.createAuroraModelDeployment)]"
               }
             ]
           },
@@ -372,7 +380,8 @@
       "deployAuroraModel": "[contains(steps('components').selected, 'auroraModel')]",
       "openAiDeploymentName": "[if(contains(steps('components').selected, 'aiAgent'), steps('aiConfig').aiAgentSection.openAiDeploymentName, 'gpt-5-mini')]",
       "auroraInstanceType": "[if(contains(steps('components').selected, 'auroraModel'), steps('aiConfig').auroraSection.auroraInstanceType, 'Standard_NC24ads_A100_v4')]",
-      "auroraModelAssetId": "[if(contains(steps('components').selected, 'auroraModel'), steps('aiConfig').auroraSection.auroraModelAssetId, '')]",
+      "createAuroraModelDeployment": "[and(contains(steps('components').selected, 'auroraModel'), steps('aiConfig').auroraSection.createAuroraModelDeployment)]",
+      "auroraModelAssetId": "[if(and(contains(steps('components').selected, 'auroraModel'), not(steps('aiConfig').auroraSection.createAuroraModelDeployment)), steps('aiConfig').auroraSection.auroraModelAssetId, '')]",
       "deployAuroraSchedule": "[contains(steps('components').selected, 'auroraSchedule')]",
       "auroraJobImage": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobImage, '')]",
       "auroraJobCron": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobCron, '0 1,7,13,19 * * *')]",

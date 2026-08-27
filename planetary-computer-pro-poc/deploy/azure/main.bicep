@@ -61,6 +61,9 @@ param auroraInstanceType string = 'Standard_NC24ads_A100_v4'
 @description('Registry model asset ID for the Aurora managed-compute deployment. The official Microsoft storm-impact app uses azureml://registries/azureml/models/Aurora/versions/4. Leave blank to provision the Foundry workspace + endpoint only and deploy the model from the portal (the GPU deployment needs quota + accepted terms).')
 param auroraModelAssetId string = ''
 
+@description('Deploy the Aurora model onto the GPU endpoint for me using the official published model asset (azureml://registries/azureml/models/Aurora/versions/4) instead of pasting a model asset ID. Ignored when auroraModelAssetId is supplied. Still requires A100 quota in the region and accepted Azure Marketplace terms for Aurora.')
+param createAuroraModelDeployment bool = false
+
 @description('Deploy a scheduled Azure Container Apps Job that runs the Aurora forecast pipeline on the ECMWF cycle cadence (00/06/12/18 UTC), publishing weather-events.json to the model-outputs container so the map stays live without manual runs. The template also provisions a dedicated Azure Container Registry for the pipeline image. Requires the Aurora weather model (for the GPU endpoint) and sample storage.')
 param deployAuroraSchedule bool = false
 
@@ -156,7 +159,11 @@ var auroraDeploymentName = 'aurora'
 var azureMLDataScientistRoleId = 'f6c7c914-8db3-469d-8ca1-694a8f32e121'
 // The GPU model deployment only runs when a model asset ID is supplied (it needs GPU
 // quota + accepted marketplace terms); otherwise just the workspace + endpoint deploy.
-var deployAuroraDeployment = deployAuroraModel && !empty(auroraModelAssetId)
+// When the caller ticks "deploy it for me" (createAuroraModelDeployment) and hasn't pasted
+// an id, fall back to the official published Aurora model asset.
+var auroraDefaultModelAssetId = 'azureml://registries/azureml/models/Aurora/versions/4'
+var effectiveAuroraModelAssetId = !empty(auroraModelAssetId) ? auroraModelAssetId : (createAuroraModelDeployment ? auroraDefaultModelAssetId : '')
+var deployAuroraDeployment = deployAuroraModel && !empty(effectiveAuroraModelAssetId)
 
 // Scheduled Aurora forecast job (Azure Container Apps Job). It needs the GPU endpoint
 // to call and the sample storage account for its scratch channel + published output, so
@@ -547,7 +554,7 @@ resource auroraDeployment 'Microsoft.MachineLearningServices/workspaces/onlineEn
   }
   properties: {
     endpointComputeType: 'Managed'
-    model: auroraModelAssetId
+    model: effectiveAuroraModelAssetId
     instanceType: auroraInstanceType
   }
 }

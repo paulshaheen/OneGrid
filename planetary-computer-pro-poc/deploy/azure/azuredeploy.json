@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "9564939881645201095"
+      "templateHash": "11429327564053060527"
     }
   },
   "parameters": {
@@ -109,6 +109,13 @@
       "defaultValue": "",
       "metadata": {
         "description": "Registry model asset ID for the Aurora managed-compute deployment. The official Microsoft storm-impact app uses azureml://registries/azureml/models/Aurora/versions/4. Leave blank to provision the Foundry workspace + endpoint only and deploy the model from the portal (the GPU deployment needs quota + accepted terms)."
+      }
+    },
+    "createAuroraModelDeployment": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Deploy the Aurora model onto the GPU endpoint for me using the official published model asset (azureml://registries/azureml/models/Aurora/versions/4) instead of pasting a model asset ID. Ignored when auroraModelAssetId is supplied. Still requires A100 quota in the region and accepted Azure Marketplace terms for Aurora."
       }
     },
     "deployAuroraSchedule": {
@@ -257,7 +264,9 @@
     "auroraEndpointName": "[format('aurora-{0}', variables('amlSuffix'))]",
     "auroraDeploymentName": "aurora",
     "azureMLDataScientistRoleId": "f6c7c914-8db3-469d-8ca1-694a8f32e121",
-    "deployAuroraDeployment": "[and(parameters('deployAuroraModel'), not(empty(parameters('auroraModelAssetId'))))]",
+    "auroraDefaultModelAssetId": "azureml://registries/azureml/models/Aurora/versions/4",
+    "effectiveAuroraModelAssetId": "[if(not(empty(parameters('auroraModelAssetId'))), parameters('auroraModelAssetId'), if(parameters('createAuroraModelDeployment'), variables('auroraDefaultModelAssetId'), ''))]",
+    "deployAuroraDeployment": "[and(parameters('deployAuroraModel'), not(empty(variables('effectiveAuroraModelAssetId'))))]",
     "containerAppsEnvName": "[format('{0}-cae-{1}', variables('namePrefix'), variables('amlSuffix'))]",
     "logAnalyticsName": "[format('{0}-logs-{1}', variables('namePrefix'), variables('amlSuffix'))]",
     "auroraJobName": "[format('{0}-aurora-job-{1}', variables('namePrefix'), variables('amlSuffix'))]",
@@ -734,7 +743,7 @@
       },
       "properties": {
         "endpointComputeType": "Managed",
-        "model": "[parameters('auroraModelAssetId')]",
+        "model": "[variables('effectiveAuroraModelAssetId')]",
         "instanceType": "[parameters('auroraInstanceType')]"
       },
       "dependsOn": [
