@@ -678,8 +678,10 @@ resource auroraJob 'Microsoft.App/jobs@2024-03-01' = if (deployAuroraJob) {
           name: 'aurora-pipeline'
           image: auroraJobImageRef
           resources: {
-            cpu: json('4.0')
-            memory: '8Gi'
+            // Consumption Container Apps cap at cpu 2.0 / memory 4.0Gi; the heavy compute
+            // runs on the GPU Foundry endpoint, the job just orchestrates the pipeline.
+            cpu: json('2.0')
+            memory: '4Gi'
           }
           env: [
             // Selects the job's user-assigned identity for DefaultAzureCredential.

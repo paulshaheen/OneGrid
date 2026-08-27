@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "11429327564053060527"
+      "templateHash": "2520629327794900219"
     }
   },
   "parameters": {
@@ -881,8 +881,8 @@
               "name": "aurora-pipeline",
               "image": "[variables('auroraJobImageRef')]",
               "resources": {
-                "cpu": "[json('4.0')]",
-                "memory": "8Gi"
+                "cpu": "[json('2.0')]",
+                "memory": "4Gi"
               },
               "env": [
                 {
