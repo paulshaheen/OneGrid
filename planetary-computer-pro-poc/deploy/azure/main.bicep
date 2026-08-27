@@ -176,6 +176,13 @@ var auroraJobName = '${namePrefix}-aurora-job-${amlSuffix}'
 var auroraJobIdentityName = '${namePrefix}-aurora-job-identity'
 var auroraAcrName = toLower('pcproacr${amlSuffix}')
 var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+// Contributor — the in-template ACR build (az acr build) needs registries/scheduleRun/action
+// to queue the ACR Task; AcrPull/AcrPush do not include it. Scoped to the registry only.
+var acrContributorRoleId = 'b24988ac-6180-42a0-ab88-20f7382dd24c'
+// Build the pipeline image into the auto-provisioned ACR at deploy time so the scheduled
+// job can be created against a real manifest. Only when we own the registry — a supplied
+// auroraJobImage is the caller's responsibility.
+var buildAuroraImage = deployAuroraJob && empty(auroraJobImage)
 // Scratch container the Aurora endpoint streams tensors through (the blob "channel").
 var auroraChannelContainerName = 'aurora-channel'
 var deployAuroraJob = deployAuroraSchedule && deployAuroraModel && deploySampleStorage
@@ -621,6 +628,55 @@ resource auroraJobAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   }
 }
 
+// Give the same identity Contributor on the registry so the in-template build step can
+// queue an ACR Task (az acr build). Scoped to the registry only.
+resource auroraJobAcrContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (buildAuroraImage) {
+  name: guid(auroraAcr.id, auroraJobIdentityName, acrContributorRoleId)
+  scope: auroraAcr
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrContributorRoleId)
+    principalId: deployAuroraJob ? auroraJobIdentity.properties.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Build the pipeline image INTO the auto-provisioned registry before the job is created.
+// Container Apps validates the image manifest at create time, so an empty registry makes
+// the job fail with MANIFEST_UNKNOWN. This server-side ACR Task build (az acr build) makes
+// the one-click deploy self-contained — no manual post-deploy `az acr build`.
+resource auroraImageBuild 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (buildAuroraImage) {
+  name: '${namePrefix}-aurora-image-build'
+  location: location
+  kind: 'AzureCLI'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${auroraJobIdentity.id}': {}
+    }
+  }
+  properties: {
+    azCliVersion: '2.62.0'
+    retentionInterval: 'P1D'
+    timeout: 'PT45M'
+    cleanupPreference: 'OnSuccess'
+    environmentVariables: [
+      { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
+      { name: 'ONEGRID_REF', value: oneGridRef }
+      { name: 'ACR_NAME', value: auroraAcrName }
+      { name: 'IMAGE_TAG', value: auroraJobImageTag }
+      { name: 'IDENTITY_CLIENT_ID', value: buildAuroraImage ? auroraJobIdentity.properties.clientId : '' }
+      { name: 'SUBSCRIPTION_ID', value: subscription().subscriptionId }
+    ]
+    // Single-quoted string with explicit \n escapes so the compiled scriptContent is pure
+    // LF. A multi-line ''' literal on a CRLF-saved file bakes in \r, which breaks bash in
+    // the Linux container (e.g. "set: pipefail\r: invalid option name").
+    scriptContent: 'set -euo pipefail\necho "az login --identity ($IDENTITY_CLIENT_ID)"\naz login --identity --username "$IDENTITY_CLIENT_ID" --allow-no-subscriptions -o none\naz account set --subscription "$SUBSCRIPTION_ID" -o none 2>/dev/null || true\nif ! command -v git >/dev/null 2>&1; then (apk add --no-cache git 2>/dev/null) || (apt-get update -y && apt-get install -y git); fi\nrm -rf /tmp/src\necho "cloning $ONEGRID_REPO ($ONEGRID_REF)"\ngit clone --depth 1 --branch "$ONEGRID_REF" "$ONEGRID_REPO" /tmp/src\ncd /tmp/src/planetary-computer-pro-poc\necho "building aurora-pipeline:$IMAGE_TAG into $ACR_NAME (ACR Task)"\naz acr build -r "$ACR_NAME" -t "aurora-pipeline:$IMAGE_TAG" aurora\necho "done"\n'
+  }
+  dependsOn: [
+    auroraJobAcrContributor
+  ]
+}
+
 // The job writes its scratch channel SAS and the published weather-events.json to the
 // sample storage account, so it needs Storage Blob Data Contributor there.
 resource auroraJobBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAuroraJob) {
@@ -728,6 +784,10 @@ resource auroraJob 'Microsoft.App/jobs@2024-03-01' = if (deployAuroraJob) {
       ]
     }
   }
+  dependsOn: [
+    // Ensure the image manifest exists in the registry before Container Apps validates it.
+    auroraImageBuild
+  ]
 }
 
 // ------------------------------------------------------------------------------------
@@ -755,7 +815,7 @@ output auroraJobSchedule string = deployAuroraJob ? auroraJobCron : 'not-deploye
 output auroraJobIdentityPrincipalId string = deployAuroraJob ? auroraJobIdentity.properties.principalId : 'not-deployed'
 @description('Name of the auto-provisioned Azure Container Registry for the pipeline image (empty when a custom auroraJobImage is supplied).')
 output auroraAcrName string = (deployAuroraJob && empty(auroraJobImage)) ? auroraAcrName : 'not-deployed'
-@description('One-time command to build the pipeline image into the registry so the scheduled job can run.')
+@description('The pipeline image is built into the auto-provisioned registry automatically at deploy time. Use this command only to rebuild it manually (e.g. after changing the pipeline code).')
 output auroraImageBuildCommand string = (deployAuroraJob && empty(auroraJobImage)) ? 'az acr build -r ${auroraAcrName} -t aurora-pipeline:${auroraJobImageTag} aurora' : 'not-applicable'
 output ingestIdentityClientId string = deploySampleStorage ? ingestIdentity.properties.clientId : 'not-deployed'
 output ingestIdentityObjectId string = deploySampleStorage ? ingestIdentity.properties.principalId : 'not-deployed'
