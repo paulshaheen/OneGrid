@@ -261,7 +261,7 @@
             "visible": "[contains(steps('components').selected, 'fabricPlane')]",
             "options": {
               "icon": "Info",
-              "text": "The OneGrid Fabric plane is provisioned in-template: during deployment, OneGrid deploy.ps1 runs headless as a user-assigned identity to create the Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join, and (with a connection id) the OneLake shortcut to model-outputs. Prerequisites: the Fabric tenant setting 'Service principals can create workspaces, connections, and deployment pipelines' must be ON, and the deployment identity must be an admin on the capacity below. A Fabric workspace cannot be created without a capacity, so supply an existing Fabric capacity (F-SKU or Trial). If 'OneGrid web app' is also selected, the AI Foundry account and chat/report Container App are created in this resource group too."
+              "text": "The OneGrid Fabric plane is provisioned in-template: during deployment, OneGrid deploy.ps1 runs headless as a user-assigned identity to create the Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join, and (with a connection id) the OneLake shortcut to model-outputs. Prerequisites: the Fabric tenant setting 'Service principals can create workspaces, connections, and deployment pipelines' must be ON. A Fabric workspace cannot be created without a capacity: either let the template create a new F-SKU capacity below, or supply an existing capacity (F-SKU or Trial) that the deployment identity administers. If 'OneGrid web app' is also selected, the AI Foundry account and chat/report Container App are created in this resource group too."
             }
           },
           {
@@ -274,17 +274,58 @@
             }
           },
           {
+            "name": "createFabricCapacity",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Create a new Fabric capacity for me",
+            "toolTip": "When checked, the template provisions a new Microsoft Fabric F-SKU capacity in this resource group and deploys onto it — no existing capacity needed. Note: an F-SKU is billed hourly until you pause or delete it. Leave unchecked to reuse an existing capacity below.",
+            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+          },
+          {
+            "name": "fabricCapacitySku",
+            "type": "Microsoft.Common.DropDown",
+            "label": "New Fabric capacity SKU",
+            "defaultValue": "F2",
+            "toolTip": "SKU for the capacity the template creates. F2 is the smallest and cheapest; scale up for heavier workloads.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "F2", "value": "F2" },
+                { "label": "F4", "value": "F4" },
+                { "label": "F8", "value": "F8" },
+                { "label": "F16", "value": "F16" },
+                { "label": "F32", "value": "F32" },
+                { "label": "F64", "value": "F64" },
+                { "label": "F128", "value": "F128" },
+                { "label": "F256", "value": "F256" }
+              ],
+              "required": false
+            },
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').createFabricCapacity)]"
+          },
+          {
+            "name": "fabricCapacityAdmin",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Capacity admin (email or object id, optional)",
+            "defaultValue": "",
+            "toolTip": "A user principal name (email) or Entra object id to add as an administrator of the new capacity so you can manage it in the Fabric portal. The deployment identity is always an admin. Leave blank to have only the deployment identity administer it.",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter an email (user@contoso.com), an Entra object id GUID, or leave blank."
+            },
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').createFabricCapacity)]"
+          },
+          {
             "name": "fabricCapacityId",
             "type": "Microsoft.Common.TextBox",
-            "label": "Fabric capacity (resource ID or GUID)",
+            "label": "Existing Fabric capacity (resource ID or GUID)",
             "defaultValue": "",
-            "toolTip": "An existing Microsoft Fabric capacity (F-SKU or Trial). Paste the capacity resource ID (/subscriptions/.../providers/Microsoft.Fabric/capacities/<name>) or its GUID. Required when the Fabric plane is selected.",
+            "toolTip": "An existing Microsoft Fabric capacity (F-SKU or Trial). Paste the capacity resource ID (/subscriptions/.../providers/Microsoft.Fabric/capacities/<name>) or its GUID. Required when the Fabric plane is selected and you are not creating a new capacity.",
             "constraints": {
-              "required": "[contains(steps('components').selected, 'fabricPlane')]",
+              "required": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricCapacity))]",
               "regex": "^$|^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|/subscriptions/.+/providers/Microsoft\\.Fabric/capacities/.+)$",
               "validationMessage": "Enter a Fabric capacity GUID or its full resource ID."
             },
-            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricCapacity))]"
           },
           {
             "name": "fabricWorkspaceName",
@@ -300,17 +341,25 @@
             "visible": "[contains(steps('components').selected, 'fabricPlane')]"
           },
           {
+            "name": "createFabricConnection",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Create the storage connection for me (workspace identity)",
+            "defaultValue": true,
+            "toolTip": "Have the deployment create the Fabric cloud connection to the sample storage account for you using the Fabric workspace identity (secret-free). Leave checked to skip pasting a connection GUID.",
+            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+          },
+          {
             "name": "fabricConnectionId",
             "type": "Microsoft.Common.TextBox",
             "label": "Fabric storage connection ID (optional)",
             "defaultValue": "",
-            "toolTip": "GUID of a Fabric cloud connection to the sample storage account. Needed only for the OneLake shortcut to the model-outputs container. Leave blank to provision the workspace, lakehouse, eventhouse and hazard join now and add the shortcut later.",
+            "toolTip": "GUID of an existing Fabric cloud connection to the sample storage account. Used only if you did not check 'Create the storage connection for me'. Leave blank to provision the workspace, lakehouse, eventhouse and hazard join now and add the shortcut later.",
             "constraints": {
               "required": false,
               "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
               "validationMessage": "Enter a connection GUID, e.g. 00000000-0000-0000-0000-000000000000, or leave blank."
             },
-            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricConnection))]"
           }
         ]
       }
@@ -328,9 +377,13 @@
       "auroraJobImage": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobImage, '')]",
       "auroraJobCron": "[if(contains(steps('components').selected, 'auroraSchedule'), steps('aiConfig').auroraScheduleSection.auroraJobCron, '0 1,7,13,19 * * *')]",
       "deployFabricPlane": "[contains(steps('components').selected, 'fabricPlane')]",
-      "fabricCapacityId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricCapacityId, '')]",
+      "createFabricCapacity": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').createFabricCapacity)]",
+      "fabricCapacitySku": "[if(and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').createFabricCapacity), steps('fabricConfig').fabricCapacitySku, 'F2')]",
+      "fabricCapacityAdmin": "[if(and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').createFabricCapacity), steps('fabricConfig').fabricCapacityAdmin, '')]",
+      "fabricCapacityId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricCapacity)), steps('fabricConfig').fabricCapacityId, '')]",
       "fabricWorkspaceName": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricWorkspaceName, 'OneGrid')]",
-      "fabricConnectionId": "[if(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').fabricConnectionId, '')]",
+      "createFabricConnection": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').createFabricConnection)]",
+      "fabricConnectionId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricConnection)), steps('fabricConfig').fabricConnectionId, '')]",
       "deployOneGridApp": "[contains(steps('components').selected, 'oneGridApp')]",
       "deployOneGridData": "[contains(steps('components').selected, 'oneGridData')]"
     }

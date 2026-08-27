@@ -254,10 +254,21 @@ function Phase-Workspace {
     $resp = FPost "workspaces" @{ displayName=$cfg.fabric.workspaceName }
     $ws = FWait $resp
   }
-  # assign capacity
+  # assign capacity. Accept a bare GUID, a full ARM resource id, or a capacity display
+  # name (the ARM resource name of an auto-provisioned Microsoft.Fabric/capacities). The
+  # Fabric assignToCapacity API needs the capacity GUID, so resolve non-GUIDs by matching
+  # the display name in the caller's Fabric capacities list.
   $cap = $cfg.fabric.capacityId
   if ($cap) {
-    try { FPost "workspaces/$($ws.id)/assignToCapacity" @{ capacityId = $cap } | Out-Null; Log "  assigned capacity" }
+    $capId = if ($cap -match '/capacities/') { ($cap -split '/')[-1] } else { $cap }
+    if ($capId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+      try {
+        $match = (FGet "capacities").value | Where-Object { $_.displayName -eq $capId } | Select-Object -First 1
+        if ($match) { Log "  resolved capacity '$capId' -> $($match.id)"; $capId = $match.id }
+        else { Log "  capacity '$capId' not found in Fabric capacities list (is the identity a capacity admin?)" "Yellow" }
+      } catch { Log "  capacity resolve: $($_.Exception.Message)" "Yellow" }
+    }
+    try { FPost "workspaces/$($ws.id)/assignToCapacity" @{ capacityId = $capId } | Out-Null; Log "  assigned capacity" }
     catch { Log "  capacity assign: $($_.Exception.Message)" "Yellow" }
   }
   $state.WorkspaceId = $ws.id
@@ -1129,28 +1140,99 @@ function Phase-FabricPlane {
   # --- 1) OneLake shortcut to PCP's model-outputs container -------------------
   $container = if ($cfg.pcp.modelOutputsContainer) { $cfg.pcp.modelOutputsContainer } else { 'model-outputs' }
   $shortcutName = if ($cfg.pcp.shortcutName) { $cfg.pcp.shortcutName } else { 'pcp_model_outputs' }
-  if ($lhId -and $cfg.pcp.connectionId -and ($cfg.pcp.blobEndpoint -or $cfg.pcp.storageAccountName)) {
-    $blobEndpoint = if ($cfg.pcp.blobEndpoint) { $cfg.pcp.blobEndpoint.TrimEnd('/') } else { "https://$($cfg.pcp.storageAccountName).blob.core.windows.net" }
+  $connId  = $cfg.pcp.connectionId
+  $useAdls = $false
+
+  # Optionally create the storage connection ourselves via the Fabric WORKSPACE IDENTITY
+  # (secret-free): provision the identity, grant it Storage Blob Data Reader on the sample
+  # storage, then create an ADLS Gen2 connection bound to that identity. No key/SAS stored.
+  if (-not $connId -and $cfg.pcp.createConnection -and $lhId -and $cfg.pcp.storageAccountId -and $cfg.pcp.dfsEndpoint) {
+    try {
+      $dfs = $cfg.pcp.dfsEndpoint.TrimEnd('/')
+      Log "  no connection id supplied - creating one via workspace identity"
+
+      # a) Provision (or reuse) the workspace identity; capture its service principal id.
+      $spId = ''
+      try {
+        $wi = FWait (FPost "workspaces/$ws/provisionIdentity" @{})
+        if ($wi) { $spId = $wi.servicePrincipalId }
+      } catch {
+        Log "    provisionIdentity: $($_.Exception.Message) - checking for an existing identity" "DarkYellow"
+      }
+      if (-not $spId) {
+        $wsDetail = AzTry { FGet "workspaces/$ws" }
+        if ($wsDetail -and $wsDetail.workspaceIdentity) { $spId = $wsDetail.workspaceIdentity.servicePrincipalId }
+      }
+
+      if ($spId) {
+        # b) Grant the workspace identity read access to the sample storage account.
+        az role assignment create --assignee-object-id $spId --assignee-principal-type ServicePrincipal `
+          --role "Storage Blob Data Reader" --scope $cfg.pcp.storageAccountId -o none 2>$null
+        Log "    granted workspace identity Storage Blob Data Reader; waiting for RBAC to propagate"
+        Start-Sleep -Seconds 45
+
+        # c) Create the ADLS Gen2 connection bound to the workspace identity. Test-connection
+        #    is unsupported for workspace-identity creds, so skip it.
+        $connName = "onegrid-pcp-$container-$($ws.Substring(0,8))"
+        $connBody = @{
+          connectivityType  = 'ShareableCloud'
+          displayName       = $connName
+          connectionDetails = @{
+            type           = 'AzureDataLakeStorage'
+            creationMethod = 'AzureDataLakeStorage'
+            parameters     = @(
+              @{ dataType = 'Text'; name = 'server'; value = $dfs }
+              @{ dataType = 'Text'; name = 'path';   value = $container }
+            )
+          }
+          credentialDetails = @{
+            singleSignOnType     = 'None'
+            connectionEncryption = 'NotEncrypted'
+            skipTestConnection   = $true
+            credentials          = @{ credentialType = 'WorkspaceIdentity' }
+          }
+        }
+        try {
+          $conn = FWait (FPost "connections" $connBody)
+          if ($conn) { $connId = $conn.id; $useAdls = $true; Log "    created workspace-identity connection $connId" "Green" }
+        } catch {
+          # Reuse an existing connection with the same display name if we hit a duplicate.
+          $existingConn = AzTry { (FGet "connections").value | Where-Object { $_.displayName -eq $connName } | Select-Object -First 1 }
+          if ($existingConn) { $connId = $existingConn.id; $useAdls = $true; Log "    reusing existing connection $connId" "Yellow" }
+          else { Log "    connection create failed: $($_.Exception.Message)" "Yellow" }
+        }
+      } else {
+        Log "    could not resolve workspace identity service principal - skipping connection creation" "Yellow"
+      }
+    } catch { Log "  workspace-identity connection setup failed: $($_.Exception.Message)" "Yellow" }
+  }
+
+  if ($lhId -and $connId -and ($useAdls -or $cfg.pcp.blobEndpoint -or $cfg.pcp.storageAccountName)) {
     $exists = AzTry { (Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces/$ws/items/$lhId/shortcuts" -Headers @{ Authorization="Bearer $(FTok)" }).value | Where-Object { $_.name -eq $shortcutName } }
     if ($exists) { Log "  shortcut '$shortcutName' already exists - skipping" }
     else {
-      $body = @{
-        path   = 'Files'
-        name   = $shortcutName
-        target = @{
-          type              = 'AzureBlobStorage'
-          azureBlobStorage  = @{
-            location     = $blobEndpoint
-            subpath      = "/$container"
-            connectionId = $cfg.pcp.connectionId
-          }
+      if ($useAdls) {
+        $dfs = $cfg.pcp.dfsEndpoint.TrimEnd('/')
+        $body = @{
+          path   = 'Files'
+          name   = $shortcutName
+          target = @{ type = 'AdlsGen2'; adlsGen2 = @{ location = $dfs; subpath = "/$container"; connectionId = $connId } }
         }
+        $tgtDesc = "$dfs/$container"
+      } else {
+        $blobEndpoint = if ($cfg.pcp.blobEndpoint) { $cfg.pcp.blobEndpoint.TrimEnd('/') } else { "https://$($cfg.pcp.storageAccountName).blob.core.windows.net" }
+        $body = @{
+          path   = 'Files'
+          name   = $shortcutName
+          target = @{ type = 'AzureBlobStorage'; azureBlobStorage = @{ location = $blobEndpoint; subpath = "/$container"; connectionId = $connId } }
+        }
+        $tgtDesc = "$blobEndpoint/$container"
       }
-      try { FWait (FPost "workspaces/$ws/items/$lhId/shortcuts" $body) | Out-Null; Log "  created OneLake shortcut '$shortcutName' -> $blobEndpoint/$container" "Green"; $state.PcpShortcut = $shortcutName }
-      catch { Log "  shortcut create failed (check pcp.connectionId + storage access): $($_.Exception.Message)" "Yellow" }
+      try { FWait (FPost "workspaces/$ws/items/$lhId/shortcuts" $body) | Out-Null; Log "  created OneLake shortcut '$shortcutName' -> $tgtDesc" "Green"; $state.PcpShortcut = $shortcutName }
+      catch { Log "  shortcut create failed (check connection + storage access): $($_.Exception.Message)" "Yellow" }
     }
   } else {
-    Log "  shortcut skipped: need lakehouse + pcp.connectionId + pcp.blobEndpoint/storageAccountName." "Yellow"
+    Log "  shortcut skipped: need lakehouse + a connection id (supply pcp.connectionId or set createConnection) + storage endpoint." "Yellow"
     Log "    Create a Fabric cloud connection to PCP's storage and set pcp.connectionId, then re-run: deploy.ps1 -Only fabricplane" "Yellow"
   }
 

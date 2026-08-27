@@ -83,14 +83,27 @@ param auroraJobCron string = '0 1,7,13,19 * * *'
 @description('Enable the OneGrid Fabric plane on top of this PCP backend: it provisions a Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join + composite-risk tables, and (when a connection id is supplied) a OneLake shortcut to the model-outputs container. Fabric is not an ARM resource type, so this runs as an in-template deploymentScript (Fabric REST) using the Fabric-plane identity. Requires deploySampleStorage and an existing Microsoft Fabric capacity.')
 param deployFabricPlane bool = false
 
-@description('Existing Microsoft Fabric capacity resource id or capacity GUID (F-SKU or Trial). Required when deployFabricPlane is true — a Fabric workspace cannot be created without one.')
+@description('Existing Microsoft Fabric capacity resource id or capacity GUID (F-SKU or Trial). Provide one to reuse an existing capacity. Ignored when createFabricCapacity is true (the template provisions a new one instead).')
 param fabricCapacityId string = ''
+
+@description('Create a new Microsoft Fabric capacity (F-SKU) in this resource group instead of reusing an existing one. When true, fabricCapacityId is ignored and the Fabric plane deploys onto the freshly created capacity. Note: an F-SKU is billed hourly until paused or deleted; ARM cannot create a free Trial capacity.')
+param createFabricCapacity bool = false
+
+@description('SKU for the auto-created Fabric capacity (used only when createFabricCapacity is true). F2 is the smallest; scale up for heavier workloads.')
+@allowed([ 'F2', 'F4', 'F8', 'F16', 'F32', 'F64', 'F128', 'F256', 'F512', 'F1024', 'F2048' ])
+param fabricCapacitySku string = 'F2'
+
+@description('Additional Fabric capacity administrator (used only when createFabricCapacity is true): a user principal name (email) or an Entra object id. The in-template Fabric-plane identity is always added as an admin so provisioning can assign the workspace; add a human admin here so you can manage the capacity in the Fabric portal.')
+param fabricCapacityAdmin string = ''
 
 @description('Display name of the Fabric workspace the OneGrid plane provisions.')
 param fabricWorkspaceName string = 'OneGrid'
 
 @description('GUID of a Fabric cloud connection to the sample storage account. Needed only for the OneLake shortcut to the model-outputs container; leave blank to provision the Fabric plane (workspace, lakehouse, eventhouse, hazard KQL) and add the shortcut later.')
 param fabricConnectionId string = ''
+
+@description('Instead of pasting an existing Fabric connection id, have the in-template provisioner create the storage connection for you using the Fabric workspace identity (secret-free): it provisions a workspace identity, grants it Storage Blob Data Reader on the sample storage account, creates an ADLS Gen2 connection bound to that identity, and builds the OneLake shortcut. Ignored when fabricConnectionId is supplied. Requires the Fabric tenant setting for service principals/workspace identities.')
+param createFabricConnection bool = false
 
 @description('Also stand up the OneGrid web application: the AI Foundry account (reused from the AI agent above when present) and the chat/report Container App, deployed into THIS resource group. Requires the OneGrid Fabric plane. The in-template provisioner runs OneGrid deploy.ps1 for the foundry/dataagent/chatagent phases; because this creates resources and role assignments, the Fabric-plane identity is granted Owner on this resource group.')
 param deployOneGridApp bool = false
@@ -173,6 +186,15 @@ var deployFabricPlaneEffective = deployFabricPlane && deploySampleStorage
 var fabricPlaneIdentityName = '${namePrefix}-fabricplane-identity'
 // The OneGrid web app (Foundry + Container App) rides on top of the Fabric plane.
 var deployOneGridAppEffective = deployFabricPlaneEffective && deployOneGridApp
+// Optionally provision a Fabric capacity in-template instead of requiring an existing one.
+var createFabricCapacityEffective = deployFabricPlaneEffective && createFabricCapacity
+var fabricCapacityName = toLower('${namePrefix}${uniqueString(resourceGroup().id)}fab')
+// Optionally have the provisioner create the storage connection via workspace identity
+// (only when the caller didn't supply an existing connection id).
+var createFabricConnectionEffective = deployFabricPlaneEffective && createFabricConnection && empty(fabricConnectionId)
+// User Access Administrator — lets the Fabric-plane identity grant the workspace identity
+// Storage Blob Data Reader on the sample storage account at deploy time.
+var userAccessAdministratorRoleId = '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9'
 // Owner — the OneGrid provisioner creates resources AND Azure role assignments
 // (grants the chat-app identity Storage Blob Data Reader / Cognitive Services User),
 // which Contributor cannot do. Scoped to THIS resource group only.
@@ -284,12 +306,47 @@ resource fabricPlaneIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2
   location: location
 }
 
+// Optional: provision a Fabric capacity so the deployment doesn't require a pre-existing
+// one. The in-template Fabric-plane identity is registered as a capacity admin so the
+// headless provisioner can create the workspace and assign it to this capacity. An
+// F-SKU is billed hourly until paused/deleted; ARM cannot create a free Trial capacity.
+resource fabricCapacity 'Microsoft.Fabric/capacities@2023-11-01' = if (createFabricCapacityEffective) {
+  name: fabricCapacityName
+  location: location
+  sku: {
+    name: fabricCapacitySku
+    tier: 'Fabric'
+  }
+  properties: {
+    administration: {
+      members: concat(
+        [ fabricPlaneIdentity.properties.principalId ],
+        empty(fabricCapacityAdmin) ? [] : [ fabricCapacityAdmin ]
+      )
+    }
+  }
+}
+
 resource fabricPlaneBlobReaderRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployFabricPlaneEffective) {
   name: guid(sampleStorage.id, fabricPlaneIdentityName, storageBlobDataReaderRoleId)
   scope: sampleStorage
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataReaderRoleId)
     principalId: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// When the provisioner creates the storage connection via workspace identity, it must
+// grant that workspace-identity service principal Storage Blob Data Reader at deploy time.
+// Assigning a data-plane role requires roleAssignments/write, so give the Fabric-plane
+// identity User Access Administrator scoped to the sample storage account only.
+resource fabricPlaneStorageUaaRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (createFabricConnectionEffective) {
+  name: guid(sampleStorage.id, fabricPlaneIdentityName, userAccessAdministratorRoleId)
+  scope: sampleStorage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', userAccessAdministratorRoleId)
+    principalId: createFabricConnectionEffective ? fabricPlaneIdentity.properties.principalId : ''
     principalType: 'ServicePrincipal'
   }
 }
@@ -338,12 +395,14 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
       { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
       { name: 'ONEGRID_REF', value: oneGridRef }
       { name: 'ONEGRID_PHASES', value: ogPhasesCsv }
-      { name: 'FABRIC_CAPACITY_ID', value: fabricCapacityId }
+      { name: 'FABRIC_CAPACITY_ID', value: createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId }
       { name: 'FABRIC_WORKSPACE', value: fabricWorkspaceName }
       { name: 'FABRIC_CONNECTION_ID', value: fabricConnectionId }
+      { name: 'PCP_CREATE_CONNECTION', value: string(createFabricConnectionEffective) }
       { name: 'PCP_STORAGE_ACCOUNT_NAME', value: sampleStorageName }
       { name: 'PCP_STORAGE_ACCOUNT_ID', value: deployFabricPlaneEffective ? sampleStorage.id : '' }
       { name: 'PCP_BLOB_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.blob : '' }
+      { name: 'PCP_DFS_ENDPOINT', value: deployFabricPlaneEffective ? sampleStorage.properties.primaryEndpoints.dfs : '' }
       { name: 'PCP_MODEL_CONTAINER', value: modelOutputsContainerName }
       { name: 'PCP_OPENAI_ENDPOINT', value: deployAiAgent ? openAi.properties.endpoint : '' }
       { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
@@ -358,6 +417,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
   dependsOn: [
     fabricPlaneBlobReaderRole
     fabricPlaneRgOwner
+    fabricPlaneStorageUaaRole
     modelOutputsContainer
   ]
 }
@@ -701,15 +761,15 @@ output ingestIdentityObjectId string = deploySampleStorage ? ingestIdentity.prop
 output fabricPlaneEnabled bool = deployFabricPlaneEffective
 @description('Principal (object) ID of the OneGrid Fabric-plane managed identity (has Storage Blob Data Reader on the sample storage account).')
 output fabricPlaneIdentityPrincipalId string = deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : 'not-deployed'
-@description('Existing Microsoft Fabric capacity id/GUID the OneGrid plane deploys onto (echoed from input).')
-output fabricPlaneCapacityId string = deployFabricPlaneEffective ? fabricCapacityId : 'not-deployed'
+@description('Microsoft Fabric capacity id/GUID the OneGrid plane deploys onto (the auto-created capacity resource id when createFabricCapacity is true, otherwise the supplied value).')
+output fabricPlaneCapacityId string = deployFabricPlaneEffective ? (createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId) : 'not-deployed'
 @description('Result of the in-template Fabric provisioning: workspace/lakehouse/eventhouse ids, KQL apply status, and OneLake shortcut status.')
 output fabricPlaneProvisionResult object = deployFabricPlaneEffective ? fabricPlaneScript.properties.outputs : {}
 @description('Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut.')
 output fabricPlaneConfig object = deployFabricPlaneEffective ? {
   reuseExistingFoundry: deployAiAgent
   fabric: {
-    capacityId: fabricCapacityId
+    capacityId: createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId
     workspaceName: fabricWorkspaceName
   }
   pcp: {
