@@ -562,7 +562,7 @@
           "appSettings": [
             {
               "name": "WEBSITE_RUN_FROM_PACKAGE",
-              "value": "[variables('oneGridAppPackageBlobUrl')]"
+              "value": "[parameters('oneGridAppPackageUrl')]"
             },
             {
               "name": "WEBSITE_NODE_DEFAULT_VERSION",

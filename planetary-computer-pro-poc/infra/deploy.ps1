@@ -1012,8 +1012,16 @@ function Phase-ChatAgent {
       Invoke-WebRequest -Uri $pkgSrcUrl -OutFile $tmpZip -UseBasicParsing -TimeoutSec 300
       Log "  re-hosting package in private storage: $pkgStorage/$pkgContainer/onegrid-app.zip"
       az storage blob upload --account-name $pkgStorage -c $pkgContainer -n 'onegrid-app.zip' -f $tmpZip --auth-mode login --overwrite true -o none 2>$null
-      if ($LASTEXITCODE -eq 0) { $runFromPkg = $pkgBlobUrl }
-      else { Log "  blob upload failed (exit $LASTEXITCODE) - falling back to the source URL" "Yellow" }
+      $uploadOk = ($LASTEXITCODE -eq 0)
+      # Only UPGRADE the run-from-package pointer to the private blob after VERIFYING the blob is
+      # actually present and non-empty. Otherwise keep the public source URL, so a failed/partial
+      # re-host can never leave the web app pointing at an empty blob (404 -> permanent 503).
+      $blobSize = 0
+      if ($uploadOk) {
+        try { $blobSize = [int64](az storage blob show --account-name $pkgStorage -c $pkgContainer -n 'onegrid-app.zip' --auth-mode login --query properties.contentLength -o tsv 2>$null) } catch { $blobSize = 0 }
+      }
+      if ($uploadOk -and $blobSize -gt 0) { $runFromPkg = $pkgBlobUrl }
+      else { Log "  blob re-host not verified (exit $LASTEXITCODE, size $blobSize) - falling back to the source URL" "Yellow" }
     } catch {
       Log "  package re-host failed ($($_.Exception.Message)) - falling back to the source URL" "Yellow"
     } finally {

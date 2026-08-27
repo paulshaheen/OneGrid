@@ -497,11 +497,14 @@ resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEf
       // in later by the provisioner via `az webapp config appsettings set` (which preserves
       // these). WEBSITE_RUN_FROM_PACKAGE mounts a prebuilt, self-contained zip read-only as
       // wwwroot - NO server-side build (no Oryx), so the empty-wwwroot/build-failure class of
-      // bugs cannot occur. The package lives in the deployment's PRIVATE storage account and is
-      // fetched with this app's system-assigned identity (Storage Blob Data Reader granted
-      // below) - no SAS, no public access. The provisioner uploads it before restarting.
+      // bugs cannot occur. The site is BORN pointing at the public release asset (which always
+      // exists), so it can never be bricked by a not-yet-populated private blob. The provisioner
+      // then re-hosts the zip into this deployment's PRIVATE storage account and UPGRADES this
+      // setting to the blob URL (fetched via the app's managed identity, Storage Blob Data Reader
+      // granted below - no SAS) only AFTER a verified, non-empty upload. If the re-host never runs
+      // or fails, the app keeps serving from the public URL instead of 404ing on an empty blob.
       appSettings: [
-        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: oneGridAppPackageBlobUrl }
+        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: oneGridAppPackageUrl }
         { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~22' }
         { name: 'REPORT_PORT', value: '8080' }
         { name: 'WEBSITES_PORT', value: '8080' }
