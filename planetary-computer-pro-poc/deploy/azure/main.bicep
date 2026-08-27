@@ -433,7 +433,7 @@ resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEf
     serverFarmId: chatAgentPlan.id
     httpsOnly: true
     siteConfig: {
-      linuxFxVersion: 'NODE|20-lts'
+      linuxFxVersion: 'NODE|22-lts'
       appCommandLine: 'node report-app/server/index.js'
       webSocketsEnabled: true
       alwaysOn: true
@@ -444,7 +444,7 @@ resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEf
       // these). SCM_DO_BUILD_DURING_DEPLOYMENT lets Oryx build the SPA on zip deploy.
       appSettings: [
         { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
-        { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~20' }
+        { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~22' }
         { name: 'REPORT_PORT', value: '8080' }
         { name: 'WEBSITES_PORT', value: '8080' }
       ]

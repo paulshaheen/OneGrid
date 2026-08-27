@@ -4,7 +4,7 @@
 # (fabric.js: SP -> MI -> az CLI).
 
 # ---- build the unified webapp (TanStack Start SSR) under base /webapp ----
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app/webapp
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY webapp/package.json webapp/package-lock.json ./
@@ -13,7 +13,7 @@ COPY webapp/ ./
 RUN APP_BASE_PATH=/webapp npm run build
 
 # ---- runtime: report server + webapp SSR child + chat agent (spawned) ----
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production REPORT_PORT=8080
 # report server + its only runtime dependency (ws)

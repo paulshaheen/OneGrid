@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "11664315982216445795"
+      "templateHash": "8663049029535155593"
     }
   },
   "parameters": {
@@ -521,7 +521,7 @@
         "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('chatAgentPlanName'))]",
         "httpsOnly": true,
         "siteConfig": {
-          "linuxFxVersion": "NODE|20-lts",
+          "linuxFxVersion": "NODE|22-lts",
           "appCommandLine": "node report-app/server/index.js",
           "webSocketsEnabled": true,
           "alwaysOn": true,
@@ -534,7 +534,7 @@
             },
             {
               "name": "WEBSITE_NODE_DEFAULT_VERSION",
-              "value": "~20"
+              "value": "~22"
             },
             {
               "name": "REPORT_PORT",

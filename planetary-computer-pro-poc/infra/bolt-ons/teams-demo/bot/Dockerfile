@@ -1,5 +1,5 @@
 # OneGrid Teams demo bot (Microsoft 365 Agents SDK).
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production PORT=3978
 COPY package.json package-lock.json* ./

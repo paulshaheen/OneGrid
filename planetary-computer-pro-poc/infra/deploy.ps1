@@ -1030,7 +1030,7 @@ function Phase-ChatAgent {
 
   # App settings = the chat/report env vars + the Oryx build flag. The server binds
   # REPORT_PORT (default 7700); App Service Linux/Node routes to 8080, so pin REPORT_PORT=8080.
-  $settings = @($envVars) + @('REPORT_PORT=8080','WEBSITES_PORT=8080','SCM_DO_BUILD_DURING_DEPLOYMENT=true','WEBSITE_NODE_DEFAULT_VERSION=~20')
+  $settings = @($envVars) + @('REPORT_PORT=8080','WEBSITES_PORT=8080','SCM_DO_BUILD_DURING_DEPLOYMENT=true','WEBSITE_NODE_DEFAULT_VERSION=~22')
 
   # Create the plan + web app, with a small region fallback if a region is out of capacity.
   $regions = @($cfg.location)
@@ -1056,7 +1056,7 @@ function Phase-ChatAgent {
       $plan = "$app-plan"
       Log "  creating App Service plan + web app '$app' in $loc (sku $planSku) ..."
       az appservice plan create -n $plan -g $rg -l $loc --is-linux --sku $planSku -o none 2>$null
-      az webapp create -n $app -g $rg --plan $plan --runtime 'NODE:20-lts' -o none 2>&1 | Out-Null
+      az webapp create -n $app -g $rg --plan $plan --runtime 'NODE:22-lts' -o none 2>&1 | Out-Null
       if (-not (AzTry { az webapp show -n $app -g $rg --query name -o tsv })) { Log "  web app not created in $loc - trying next region" "Yellow"; continue }
       az webapp config appsettings set -n $app -g $rg --settings @settings -o none 2>$null
       az webapp config set -n $app -g $rg --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
