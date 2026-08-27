@@ -965,72 +965,27 @@ function Phase-ChatAgent {
     else { Log "  note: no published data agent found - 'Ask Fabric Data Agent' stays hidden until the 'dataagent' phase runs" "Yellow" }
   }
 
-  # ---- Deploy the FULL dashboard as an Azure App Service web app (Linux, Node) - no
-  # container, no ACR. We stage report-app + chatagent + the governance manifest(s) and let
-  # App Service (Oryx) build the SPA on deploy. The report server then serves the built SPA +
-  # /api + the realtime WebSocket and spawns the chat agent (../chatagent) exactly like local.
+  # ---- Mount the FULL dashboard as an Azure App Service web app (Linux, Node) via
+  # WEBSITE_RUN_FROM_PACKAGE. The prebuilt, self-contained package (report-app + webapp SSR
+  # build + chatagent + node_modules) is produced by the 'Release OneGrid App' GitHub Actions
+  # workflow and published as a stable release asset. App Service mounts that zip read-only as
+  # wwwroot with NO server-side build - eliminating the empty-wwwroot / Oryx-build failures.
+  # The report server then serves the SPA + /api + the realtime WebSocket and spawns the chat
+  # agent (../chatagent) and the webapp SSR child exactly like local.
   az provider register -n Microsoft.Web --wait 1>$null 2>$null
   $app = $cfg.chatAgent.appName
 
-  # Locate the app source (report-app + chatagent). Standalone OGE-OneGrid clone => siblings
-  # of this script ($Here); monorepo layout => ../../OGE-OneGrid alongside the infra folder.
-  # Use forward slashes + Join-Path segment-by-segment so the probe works on the Linux
-  # deploymentScript container (the in-template provisioner runs pwsh on Linux) as well as
-  # locally on Windows.
-  $repoRoot   = Join-Path $Here '..' '..'
-  $candidates = @(
-    $Here,                                  # standalone clone: report-app sits next to deploy.ps1
-    (Join-Path $repoRoot 'OGE-OneGrid'),    # monorepo: OGE-OneGrid at the repo root
-    (Join-Path $Here '..' 'OGE-OneGrid')    # fallback: one level up
-  )
-  $appSrc = $candidates |
-    Where-Object { Test-Path (Join-Path $_ 'report-app') } |
-    Select-Object -First 1
-  if ($appSrc) { $appSrc = (Resolve-Path $appSrc).Path }
-  if (-not $appSrc) {
-    $state.ChatAgentFailed = $true
-    $state.ChatAgentFailReason = 'app source (report-app/webapp) not found in the clone'
-    $probed = ($candidates | ForEach-Object { try { (Resolve-Path $_ -ErrorAction Stop).Path } catch { $_ } }) -join '; '
-    Log "  app source (report-app + chatagent) not found - chat agent NOT deployed. Looked in: $probed" "Red"
-    Log "  ensure the OGE-OneGrid app source is present in the clone (it must be committed to the deployed ref) or run from a standalone report-app clone." "Yellow"
-    return
-  }
-  Log "  app source: $appSrc" "Green"
+  # Package URL: honor an explicit override (config or env, threaded from the ARM template),
+  # else default to the latest published release asset on the public repo.
+  $pkgUrl = if ($cfg.chatAgent.packageUrl) { $cfg.chatAgent.packageUrl }
+            elseif ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL }
+            else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }
+  Log "  run-from-package: $pkgUrl" "Green"
 
-  # Stage a clean deployable tree: report-app + chatagent + governance manifest(s) at the web
-  # root, plus a tiny root package.json that drives the Oryx build and the start command.
-  $stage = Join-Path $env:TEMP ("pm_webapp_" + [guid]::NewGuid().ToString('N').Substring(0,8))
-  New-Item -ItemType Directory -Force $stage | Out-Null
-  Copy-Item (Join-Path $appSrc 'report-app') $stage -Recurse -Force
-  Copy-Item (Join-Path $appSrc 'chatagent')  $stage -Recurse -Force
-  Remove-Item (Join-Path $stage 'report-app' 'node_modules') -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item (Join-Path $stage 'report-app' 'dist')         -Recurse -Force -ErrorAction SilentlyContinue
-  # The Planetary-Compute-Pro web app (the "Explorer" tab) ships in the SAME package as a
-  # sibling of report-app; the report server reverse-proxies /webapp to its SSR child. Only
-  # stage it when present (standalone clone or monorepo). Built by Oryx under base /webapp.
-  $hasWebapp = Test-Path (Join-Path $appSrc 'webapp')
-  if ($hasWebapp) {
-    Copy-Item (Join-Path $appSrc 'webapp') $stage -Recurse -Force
-    Remove-Item (Join-Path $stage 'webapp' 'node_modules') -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $stage 'webapp' 'dist')         -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $stage 'webapp' 'dist-sample')  -Recurse -Force -ErrorAction SilentlyContinue
-  } else {
-    Log "  note: webapp/ not found next to report-app - the Explorer tab will 503 until it is deployed" "Yellow"
-  }
-  Get-ChildItem (Join-Path $Here 'governance-manifest*.json') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName $stage -Force }
-  # Root package.json drives the Oryx build + start command. report-app is now backend-only
-  # (no SPA build); it just needs its runtime deps installed. The webapp is the sole frontend
-  # and is installed + built with base /webapp (its assets/routes must carry that prefix).
-  $webappBuild = if ($hasWebapp) { ' && cd ../webapp && npm install --include=dev && APP_BASE_PATH=/webapp npm run build' } else { '' }
-  $rootPkg = '{"name":"onegrid-web","version":"1.0.0","private":true,"scripts":{"build":"cd report-app && npm install' + $webappBuild + '","start":"node report-app/server/index.js"}}'
-  [IO.File]::WriteAllText((Join-Path $stage 'package.json'), $rootPkg, (New-Object System.Text.UTF8Encoding($false)))
-  $zip = "$stage.zip"
-  if (Test-Path $zip) { Remove-Item $zip -Force }
-  Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-
-  # App settings = the chat/report env vars + the Oryx build flag. The server binds
+  # App settings = the chat/report env vars + the run-from-package pointer. The server binds
   # REPORT_PORT (default 7700); App Service Linux/Node routes to 8080, so pin REPORT_PORT=8080.
-  $settings = @($envVars) + @('REPORT_PORT=8080','WEBSITES_PORT=8080','SCM_DO_BUILD_DURING_DEPLOYMENT=true','WEBSITE_NODE_DEFAULT_VERSION=~22')
+  # No SCM_DO_BUILD_DURING_DEPLOYMENT: the package is already built.
+  $settings = @($envVars) + @('REPORT_PORT=8080','WEBSITES_PORT=8080','WEBSITE_NODE_DEFAULT_VERSION=~22', "WEBSITE_RUN_FROM_PACKAGE=$pkgUrl")
 
   # Create the plan + web app, with a small region fallback if a region is out of capacity.
   $regions = @($cfg.location)
@@ -1039,21 +994,23 @@ function Phase-ChatAgent {
   $regions = $regions | Select-Object -Unique
   $appOk = $false; $fqdn = $null
 
-  # Configure settings + startup, push the zip (Oryx build), and VERIFY the deploy actually
-  # landed - the deploy command must succeed AND the site must stop returning 5xx. Checking
-  # only that the hostname resolves is not enough: an ARM-created site always resolves even
-  # when no code was deployed, which previously masked a 503 (empty wwwroot + startup command
-  # -> "Cannot find module report-app/server/index.js"). Returns @{Host;Healthy} or $null.
+  # Configure settings + startup, mount the package, and VERIFY the app actually comes up -
+  # setting WEBSITE_RUN_FROM_PACKAGE succeeds even when the URL is wrong, so we must confirm
+  # the site stops returning 5xx. Checking only that the hostname resolves is not enough: an
+  # ARM-created site always resolves even when no code is mounted, which previously masked a
+  # 503 (empty wwwroot + startup command -> "Cannot find module report-app/server/index.js").
+  # Returns @{Host;Healthy} or $null.
   function Publish-WebApp($appName, $rgName) {
     az webapp config appsettings set -n $appName -g $rgName --settings @settings -o none 2>$null
+    if ($LASTEXITCODE -ne 0) { Log "  failed to set app settings (exit $LASTEXITCODE)" "Red"; return $null }
     az webapp config set -n $appName -g $rgName --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
-    Log "  deploying app (App Service builds the SPA - several minutes)..."
-    az webapp deploy -n $appName -g $rgName --src-path $zip --type zip -o none 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { Log "  zip deploy command failed (exit $LASTEXITCODE)" "Red"; return $null }
+    # Restart so App Service (re)downloads and mounts the package from WEBSITE_RUN_FROM_PACKAGE.
+    Log "  mounting run-from-package and restarting the app..."
+    az webapp restart -n $appName -g $rgName -o none 2>$null
     $hostName = AzTry { az webapp show -n $appName -g $rgName --query defaultHostName -o tsv }
-    if (-not $hostName) { Log "  web app has no hostname after deploy" "Red"; return $null }
+    if (-not $hostName) { Log "  web app has no hostname after restart" "Red"; return $null }
     $url = "https://$hostName"
-    Log "  deploy submitted - waiting for the app to answer (Oryx build + cold start)..."
+    Log "  waiting for the app to answer (package download + cold start)..."
     $deadline = (Get-Date).AddMinutes(12)
     while ((Get-Date) -lt $deadline) {
       $code = 0
@@ -1062,7 +1019,7 @@ function Phase-ChatAgent {
       if ($code -ge 200 -and $code -lt 500) { Log "  app responded HTTP $code" "Green"; return @{ Host = $hostName; Healthy = $true } }
       Start-Sleep -Seconds 20
     }
-    Log "  app still returning 5xx after 12 min - Oryx build or startup likely failed (check 'az webapp log tail -n $appName -g $rgName')" "Yellow"
+    Log "  app still returning 5xx after 12 min - package URL or startup likely wrong (check 'az webapp log tail -n $appName -g $rgName')" "Yellow"
     return @{ Host = $hostName; Healthy = $false }
   }
 
@@ -1094,11 +1051,9 @@ function Phase-ChatAgent {
       Log "  web app not up in $loc - trying next region" "Yellow"
     }
   }
-  Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item $zip -Force -ErrorAction SilentlyContinue
   if (-not $appOk) {
     $state.ChatAgentFailed = $true
-    $state.ChatAgentFailReason = "web app did not come up in any region ($($regions -join ', ')) - likely App Service capacity/quota or Oryx build failure"
+    $state.ChatAgentFailReason = "web app did not come up in any region ($($regions -join ', ')) - likely App Service capacity/quota or a bad run-from-package URL"
     Log "  chat agent FAILED to provision in all attempted regions ($($regions -join ', ')). Re-run: deploy.ps1 -Only chatagent,permissions" "Red"
     return
   }

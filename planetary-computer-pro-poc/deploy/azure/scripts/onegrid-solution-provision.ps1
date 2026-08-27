@@ -139,6 +139,7 @@ $cfg = [ordered]@{
     resourceGroup   = $rg
     appName         = if ($env:CHAT_AGENT_APP_NAME) { $env:CHAT_AGENT_APP_NAME } else { "$($env:NAME_PREFIX)-onegrid-app" }
     environmentName = "$($env:NAME_PREFIX)-onegrid-app-env"
+    packageUrl      = if ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL } else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }
   }
   governance = [ordered]@{ enabled = $false }
 }

@@ -23,7 +23,12 @@ import { resolveTarget } from './target.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
-const SNAPSHOT_FILE = path.join(__dirname, 'governance-snapshots.json');
+// Snapshot persistence must live on a WRITABLE path. When the app runs from a mounted
+// package (WEBSITE_RUN_FROM_PACKAGE), wwwroot — and therefore this server folder — is
+// read-only, so writing next to the source silently no-ops. Prefer an explicit override,
+// then the App Service persistent /home area, then fall back to the source dir (dev/local).
+const SNAPSHOT_FILE = process.env.GOVERNANCE_SNAPSHOT_FILE
+  || (process.env.HOME ? path.join(process.env.HOME, 'data', 'governance-snapshots.json') : path.join(__dirname, 'governance-snapshots.json'));
 
 const CACHE_TTL_MS = 30_000;
 let _cache = { at: 0, data: null };
@@ -290,7 +295,10 @@ function computeChanges(principals) {
     ...removed.map((e) => ({ type: 'revoked', principalId: e.split('|')[0], resourceId: e.split('|')[1] })),
   ];
   // Persist the new snapshot (best-effort; ignored if the fs is read-only).
-  try { fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify({ at: new Date().toISOString(), edges: [...current] }, null, 2)); } catch {}
+  try {
+    fs.mkdirSync(path.dirname(SNAPSHOT_FILE), { recursive: true });
+    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify({ at: new Date().toISOString(), edges: [...current] }, null, 2));
+  } catch {}
   return { since: prev?.at || null, changes };
 }
 

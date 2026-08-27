@@ -126,6 +126,9 @@ param deployOneGridApp bool = false
 ])
 param chatAgentAppServiceSku string = 'B1'
 
+@description('URL of the prebuilt, self-contained OneGrid web app package (zip) mounted read-only via WEBSITE_RUN_FROM_PACKAGE. Defaults to the latest asset published by the "Release OneGrid App" GitHub Actions workflow. No server-side build runs; the package already contains the built webapp + node_modules.')
+param oneGridAppPackageUrl string = 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip'
+
 @description('Seed the full OneGrid historical demo dataset into the lakehouse/eventhouse (cloud-seeded from the public release bundle, ~hundreds of MB). Off by default to keep the deployment fast; enable for a fully populated demo.')
 param deployOneGridData bool = false
 
@@ -444,9 +447,11 @@ resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEf
       ftpsState: 'Disabled'
       // Static settings only; the Fabric-derived env (endpoints, dataset/agent ids) is merged
       // in later by the provisioner via `az webapp config appsettings set` (which preserves
-      // these). SCM_DO_BUILD_DURING_DEPLOYMENT lets Oryx build the SPA on zip deploy.
+      // these). WEBSITE_RUN_FROM_PACKAGE mounts a prebuilt, self-contained zip read-only as
+      // wwwroot - NO server-side build (no Oryx), so the empty-wwwroot/build-failure class of
+      // bugs cannot occur. The package is produced by the "Release OneGrid App" workflow.
       appSettings: [
-        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
+        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: oneGridAppPackageUrl }
         { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~22' }
         { name: 'REPORT_PORT', value: '8080' }
         { name: 'WEBSITES_PORT', value: '8080' }
@@ -506,6 +511,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
       { name: 'TARGET_RESOURCE_GROUP', value: resourceGroup().name }
       { name: 'NAME_PREFIX', value: namePrefix }
       { name: 'CHAT_AGENT_APP_NAME', value: chatAgentAppName }
+      { name: 'ONEGRID_APP_PACKAGE_URL', value: oneGridAppPackageUrl }
       { name: 'IDENTITY_CLIENT_ID', value: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.clientId : '' }
       { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
       { name: 'ONEGRID_REF', value: oneGridRef }

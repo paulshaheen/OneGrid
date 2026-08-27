@@ -1,0 +1,118 @@
+name: Release OneGrid App
+
+# Builds a fully self-contained, prebuilt deployment package for the OneGrid web app
+# and publishes it as a stable Release asset. The ARM/Bicep template points
+# WEBSITE_RUN_FROM_PACKAGE at this asset, so App Service mounts it read-only with
+# NO server-side build — eliminating the empty-wwwroot / Oryx-build class of failures.
+#
+# Stable download URL (public repo):
+#   https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'OGE-OneGrid/**'
+      - '.github/workflows/release-onegrid-app.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-onegrid-app
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install report-app runtime deps
+        working-directory: OGE-OneGrid/report-app
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Build webapp (SSR) with /webapp base path
+        working-directory: OGE-OneGrid/webapp
+        env:
+          APP_BASE_PATH: /webapp
+        run: |
+          npm install --include=dev --no-audit --no-fund
+          npm run build
+          # Drop dev deps so only the SSR runtime deps ship in the package.
+          npm prune --omit=dev
+
+      - name: Stage package
+        run: |
+          set -euo pipefail
+          SRC=OGE-OneGrid
+          STAGE="$RUNNER_TEMP/onegrid-app"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+
+          # report-app: server + its runtime node_modules (ws)
+          cp -R "$SRC/report-app" "$STAGE/report-app"
+          rm -rf "$STAGE/report-app/node_modules/.cache"
+
+          # webapp: prebuilt SSR output + server.mjs + pruned runtime node_modules
+          cp -R "$SRC/webapp" "$STAGE/webapp"
+          # Trim only clearly-safe artifacts (keep src/ + public/ to avoid breaking SSR/static
+          # asset resolution). Correctness over leanness.
+          rm -rf "$STAGE/webapp/dist-sample" "$STAGE/webapp/.vite" \
+                 "$STAGE/webapp/node_modules/.cache"
+
+          # chatagent bolt-on (source only; started on demand)
+          if [ -d "$SRC/chatagent" ]; then
+            cp -R "$SRC/chatagent" "$STAGE/chatagent"
+            rm -rf "$STAGE/chatagent/node_modules/.cache"
+          fi
+
+          # governance manifest(s), if present at the OGE root
+          for f in "$SRC"/governance-manifest*.json; do
+            [ -e "$f" ] && cp "$f" "$STAGE/" || true
+          done
+
+          # Root package.json: the App Service entry point.
+          cat > "$STAGE/package.json" <<'JSON'
+          {
+            "name": "onegrid-app",
+            "private": true,
+            "version": "0.0.0",
+            "type": "module",
+            "scripts": {
+              "start": "node report-app/server/index.js"
+            }
+          }
+          JSON
+
+          echo "Staged package contents:"
+          ls -la "$STAGE"
+
+      - name: Zip package (contents at archive root)
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/onegrid-app"
+          OUT="$RUNNER_TEMP/onegrid-app.zip"
+          rm -f "$OUT"
+          ( cd "$STAGE" && zip -qr "$OUT" . )
+          echo "ARTIFACT_ZIP=$OUT" >> "$GITHUB_ENV"
+          ls -la "$OUT"
+
+      - name: Publish stable release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: app-latest
+          name: OneGrid App (latest build)
+          body: |
+            Prebuilt, self-contained OneGrid web app package.
+            Consumed by the ARM template via WEBSITE_RUN_FROM_PACKAGE.
+            Commit: ${{ github.sha }}
+          files: ${{ env.ARTIFACT_ZIP }}
+          make_latest: true
