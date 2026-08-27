@@ -901,9 +901,12 @@ function Phase-ChatAgent {
 
   $sub = $cfg.subscriptionId
   $models = ($cfg.foundry.models | ForEach-Object { "$($_.deployment)~$($_.deployment)~$($_.format)" }) -join ", "
+  # Base env that does NOT depend on the Foundry phase succeeding. The web app must still
+  # stand up when Foundry is degraded (quota/soft-delete/etc.) - the AI chat panel just runs
+  # in a reduced mode until an endpoint is present. Do NOT call .TrimEnd() on a possibly-null
+  # FoundryEndpoint here: that used to throw at the top of the phase and skip the web app
+  # entirely whenever the foundry phase had failed.
   $envVars = @(
-    "AI_PROVIDER=foundry",
-    "AZURE_AI_ENDPOINT=$($state.FoundryEndpoint.TrimEnd('/'))",
     "AI_DEFAULT_MODEL=$($cfg.foundry.defaultModel)",
     "AI_MODELS=$models",
     "AZURE_AI_SUBSCRIPTION_ID=$sub",
@@ -913,6 +916,13 @@ function Phase-ChatAgent {
     "KUSTO_DATABASE=$($cfg.fabric.kqlDatabaseName)",
     "PBI_WORKSPACE=$($state.WorkspaceId)"
   )
+  if ($state.FoundryEndpoint) {
+    $envVars += "AI_PROVIDER=foundry"
+    $envVars += "AZURE_AI_ENDPOINT=$($state.FoundryEndpoint.TrimEnd('/'))"
+  } else {
+    Log "  WARNING: no Foundry endpoint (the 'foundry' phase did not produce one) - deploying the web app WITHOUT AI wiring; re-run 'deploy.ps1 -Only foundry,chatagent,permissions' once Foundry is healthy." "Yellow"
+    $state.ChatAgentDegraded = 'no-foundry-endpoint'
+  }
   # Explorer (webapp) backend wiring. The TanStack SSR child process inherits this web
   # app's env (report-app spawns it with ...process.env), and webapp/azure-config.ts binds
   # the Azure-backed providers ONLY when GEOCATALOG_URI is present - otherwise the Explorer
@@ -964,14 +974,28 @@ function Phase-ChatAgent {
 
   # Locate the app source (report-app + chatagent). Standalone OGE-OneGrid clone => siblings
   # of this script ($Here); monorepo layout => ../../OGE-OneGrid alongside the infra folder.
-  $appSrc = if (Test-Path (Join-Path $Here 'report-app')) { $Here }
-            elseif (Test-Path (Join-Path $Here '..\..\OGE-OneGrid\report-app')) { (Resolve-Path (Join-Path $Here '..\..\OGE-OneGrid')).Path }
-            else { $null }
+  # Use forward slashes + Join-Path segment-by-segment so the probe works on the Linux
+  # deploymentScript container (the in-template provisioner runs pwsh on Linux) as well as
+  # locally on Windows.
+  $repoRoot   = Join-Path $Here '..' '..'
+  $candidates = @(
+    $Here,                                  # standalone clone: report-app sits next to deploy.ps1
+    (Join-Path $repoRoot 'OGE-OneGrid'),    # monorepo: OGE-OneGrid at the repo root
+    (Join-Path $Here '..' 'OGE-OneGrid')    # fallback: one level up
+  )
+  $appSrc = $candidates |
+    Where-Object { Test-Path (Join-Path $_ 'report-app') } |
+    Select-Object -First 1
+  if ($appSrc) { $appSrc = (Resolve-Path $appSrc).Path }
   if (-not $appSrc) {
     $state.ChatAgentFailed = $true
-    Log "  app source (report-app + chatagent) not found near '$Here' - chat agent NOT deployed." "Red"
+    $state.ChatAgentFailReason = 'app source (report-app/webapp) not found in the clone'
+    $probed = ($candidates | ForEach-Object { try { (Resolve-Path $_ -ErrorAction Stop).Path } catch { $_ } }) -join '; '
+    Log "  app source (report-app + chatagent) not found - chat agent NOT deployed. Looked in: $probed" "Red"
+    Log "  ensure the OGE-OneGrid app source is present in the clone (it must be committed to the deployed ref) or run from a standalone report-app clone." "Yellow"
     return
   }
+  Log "  app source: $appSrc" "Green"
 
   # Stage a clean deployable tree: report-app + chatagent + governance manifest(s) at the web
   # root, plus a tiny root package.json that drives the Oryx build and the start command.
@@ -979,17 +1003,17 @@ function Phase-ChatAgent {
   New-Item -ItemType Directory -Force $stage | Out-Null
   Copy-Item (Join-Path $appSrc 'report-app') $stage -Recurse -Force
   Copy-Item (Join-Path $appSrc 'chatagent')  $stage -Recurse -Force
-  Remove-Item (Join-Path $stage 'report-app\node_modules') -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item (Join-Path $stage 'report-app\dist')         -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $stage 'report-app' 'node_modules') -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item (Join-Path $stage 'report-app' 'dist')         -Recurse -Force -ErrorAction SilentlyContinue
   # The Planetary-Compute-Pro web app (the "Explorer" tab) ships in the SAME package as a
   # sibling of report-app; the report server reverse-proxies /webapp to its SSR child. Only
   # stage it when present (standalone clone or monorepo). Built by Oryx under base /webapp.
   $hasWebapp = Test-Path (Join-Path $appSrc 'webapp')
   if ($hasWebapp) {
     Copy-Item (Join-Path $appSrc 'webapp') $stage -Recurse -Force
-    Remove-Item (Join-Path $stage 'webapp\node_modules') -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $stage 'webapp\dist')         -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item (Join-Path $stage 'webapp\dist-sample')  -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $stage 'webapp' 'node_modules') -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $stage 'webapp' 'dist')         -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $stage 'webapp' 'dist-sample')  -Recurse -Force -ErrorAction SilentlyContinue
   } else {
     Log "  note: webapp/ not found next to report-app - the Explorer tab will 503 until it is deployed" "Yellow"
   }
@@ -1032,6 +1056,7 @@ function Phase-ChatAgent {
   Remove-Item $zip -Force -ErrorAction SilentlyContinue
   if (-not $appOk) {
     $state.ChatAgentFailed = $true
+    $state.ChatAgentFailReason = "web app did not come up in any region ($($regions -join ', ')) - likely App Service capacity/quota or Oryx build failure"
     Log "  chat agent FAILED to provision in all attempted regions ($($regions -join ', ')). Re-run: deploy.ps1 -Only chatagent,permissions" "Red"
     return
   }
@@ -1738,7 +1763,7 @@ if ($DataPlane -or ($Only -contains 'dataplane')) {
 
 # Collect non-fatal failures recorded by phases into the summary.
 if ($state.EventhouseSchemaApplied -eq $false) { $script:phaseErrors += "core : eventhouse schema not applied (PiEvents/streaming tables missing)" }
-if ($state.ChatAgentFailed)                     { $script:phaseErrors += "chatagent : container app did not provision (region capacity/build)" }
+if ($state.ChatAgentFailed)                     { $script:phaseErrors += "chatagent : web app did not provision ($(if ($state.ChatAgentFailReason) { $state.ChatAgentFailReason } else { 'app source missing or region capacity/build failure' }))" }
 
 # Organize items into folders (after all items exist).
 if ($state.WorkspaceId) { Log "Organizing workspace into folders..."; Apply-Folders $state.WorkspaceId }
@@ -1750,7 +1775,7 @@ if ($script:phaseErrors.Count -eq 0) {
   Log "DEPLOY FINISHED WITH $($script:phaseErrors.Count) ISSUE(S):" "Yellow"
   $script:phaseErrors | ForEach-Object { Log "  - $_" "Yellow" }
 }
-if ($state.AppUrl)        { Log "Chat agent: $($state.AppUrl)" "Green" }
+if ($state.AppUrl)        { Log "Chat agent: $($state.AppUrl)$(if ($state.ChatAgentDegraded) { " (degraded: $($state.ChatAgentDegraded))" })" "Green" }
 elseif ($state.ChatAgentFailed) { Log "Chat agent: NOT DEPLOYED (see issues above)" "Yellow" }
 Log "Workspace:  https://app.fabric.microsoft.com/groups/$($state.WorkspaceId)" "Green"
 [IO.File]::WriteAllText((Join-Path $Here "last-deploy-state.json"), ($state | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
