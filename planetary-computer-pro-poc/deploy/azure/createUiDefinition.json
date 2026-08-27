@@ -368,6 +368,29 @@
               "validationMessage": "Enter a connection GUID, e.g. 00000000-0000-0000-0000-000000000000, or leave blank."
             },
             "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricConnection))]"
+          },
+          {
+            "name": "chatAgentAppServiceSku",
+            "type": "Microsoft.Common.DropDown",
+            "label": "OneGrid web app plan (App Service SKU)",
+            "defaultValue": "B1 (Basic - low cost)",
+            "toolTip": "Pricing tier for the App Service plan that hosts the OneGrid chat/report web app. Basic (B1-B3) is low cost for demos; Standard (S1-S3) adds autoscale/slots; Premium v3 (P0v3-P3v3) gives production CPU/memory and faster cold-start. Only applies when the OneGrid web app is selected.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "B1 (Basic - low cost)", "value": "B1" },
+                { "label": "B2 (Basic)", "value": "B2" },
+                { "label": "B3 (Basic)", "value": "B3" },
+                { "label": "S1 (Standard)", "value": "S1" },
+                { "label": "S2 (Standard)", "value": "S2" },
+                { "label": "S3 (Standard)", "value": "S3" },
+                { "label": "P0v3 (Premium v3)", "value": "P0v3" },
+                { "label": "P1v3 (Premium v3)", "value": "P1v3" },
+                { "label": "P2v3 (Premium v3)", "value": "P2v3" },
+                { "label": "P3v3 (Premium v3)", "value": "P3v3" }
+              ],
+              "required": false
+            },
+            "visible": "[contains(steps('components').selected, 'oneGridApp')]"
           }
         ]
       }
@@ -394,6 +417,7 @@
       "createFabricConnection": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').createFabricConnection)]",
       "fabricConnectionId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricConnection)), steps('fabricConfig').fabricConnectionId, '')]",
       "deployOneGridApp": "[contains(steps('components').selected, 'oneGridApp')]",
+      "chatAgentAppServiceSku": "[if(contains(steps('components').selected, 'oneGridApp'), steps('fabricConfig').chatAgentAppServiceSku, 'B1')]",
       "deployOneGridData": "[contains(steps('components').selected, 'oneGridData')]"
     }
   }

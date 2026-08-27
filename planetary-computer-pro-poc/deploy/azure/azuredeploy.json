@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "2828841279099124478"
+      "templateHash": "11664315982216445795"
     }
   },
   "parameters": {
@@ -222,6 +222,25 @@
         "description": "Also stand up the OneGrid web application: the AI Foundry account (reused from the AI agent above when present) and the chat/report Container App, deployed into THIS resource group. Requires the OneGrid Fabric plane. The in-template provisioner runs OneGrid deploy.ps1 for the foundry/dataagent/chatagent phases; because this creates resources and role assignments, the Fabric-plane identity is granted Owner on this resource group."
       }
     },
+    "chatAgentAppServiceSku": {
+      "type": "string",
+      "defaultValue": "B1",
+      "allowedValues": [
+        "B1",
+        "B2",
+        "B3",
+        "S1",
+        "S2",
+        "S3",
+        "P0v3",
+        "P1v3",
+        "P2v3",
+        "P3v3"
+      ],
+      "metadata": {
+        "description": "App Service plan pricing tier for the OneGrid chat/report web app. B1 (Basic) is the low-cost default; pick a Premium v3 tier (P0v3/P1v3/P2v3/P3v3) for production-grade CPU/memory, autoscale, and better cold-start. Only applies when the OneGrid web app is deployed."
+      }
+    },
     "deployOneGridData": {
       "type": "bool",
       "defaultValue": false,
@@ -283,6 +302,9 @@
     "deployFabricPlaneEffective": "[and(parameters('deployFabricPlane'), parameters('deploySampleStorage'))]",
     "fabricPlaneIdentityName": "[format('{0}-fabricplane-identity', variables('namePrefix'))]",
     "deployOneGridAppEffective": "[and(variables('deployFabricPlaneEffective'), parameters('deployOneGridApp'))]",
+    "chatAgentAppName": "[format('{0}-onegrid-app', variables('namePrefix'))]",
+    "chatAgentPlanName": "[format('{0}-plan', variables('chatAgentAppName'))]",
+    "geoCatalogAdminRoleId": "c9c97b9c-105d-4bb5-a2a7-7d15666c2484",
     "createFabricCapacityEffective": "[and(variables('deployFabricPlaneEffective'), parameters('createFabricCapacity'))]",
     "fabricCapacityName": "[toLower(format('{0}{1}fab', variables('namePrefix'), uniqueString(resourceGroup().id)))]",
     "createFabricConnectionEffective": "[and(and(variables('deployFabricPlaneEffective'), parameters('createFabricConnection')), empty(parameters('fabricConnectionId')))]",
@@ -472,6 +494,96 @@
       ]
     },
     {
+      "condition": "[variables('deployOneGridAppEffective')]",
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('chatAgentPlanName')]",
+      "location": "[parameters('location')]",
+      "kind": "linux",
+      "sku": {
+        "name": "[parameters('chatAgentAppServiceSku')]"
+      },
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "condition": "[variables('deployOneGridAppEffective')]",
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-12-01",
+      "name": "[variables('chatAgentAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('chatAgentPlanName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "NODE|20-lts",
+          "appCommandLine": "node report-app/server/index.js",
+          "webSocketsEnabled": true,
+          "alwaysOn": true,
+          "minTlsVersion": "1.2",
+          "ftpsState": "Disabled",
+          "appSettings": [
+            {
+              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+              "value": "true"
+            },
+            {
+              "name": "WEBSITE_NODE_DEFAULT_VERSION",
+              "value": "~20"
+            },
+            {
+              "name": "REPORT_PORT",
+              "value": "8080"
+            },
+            {
+              "name": "WEBSITES_PORT",
+              "value": "8080"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('chatAgentPlanName'))]"
+      ]
+    },
+    {
+      "condition": "[variables('deployOneGridAppEffective')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]",
+      "name": "[guid(if(variables('deployOneGridAppEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), resourceGroup().id), variables('chatAgentAppName'), variables('storageBlobDataReaderRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataReaderRoleId'))]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01', 'full').identity.principalId, '')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+      ]
+    },
+    {
+      "condition": "[variables('deployOneGridAppEffective')]",
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName'))]",
+      "name": "[guid(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), variables('chatAgentAppName'), variables('geoCatalogAdminRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('geoCatalogAdminRoleId'))]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01', 'full').identity.principalId, '')]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
+        "[resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName'))]"
+      ]
+    },
+    {
       "condition": "[variables('deployFabricPlaneEffective')]",
       "type": "Microsoft.Resources/deploymentScripts",
       "apiVersion": "2023-08-01",
@@ -591,6 +703,7 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.MachineLearningServices/workspaces/onlineEndpoints', variables('amlWorkspaceName'), variables('auroraEndpointName'))]",
+        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
         "[resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName'))]",
         "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('storageBlobDataReaderRoleId')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]",
@@ -1161,9 +1274,9 @@
     "oneGridAppUrl": {
       "type": "string",
       "metadata": {
-        "description": "Public URL of the OneGrid chat/report web app (from the in-template provisioner). Empty until the container app finishes its first build."
+        "description": "Public URL of the OneGrid chat/report web app (the ARM-declared App Service). Serves once the provisioner finishes the first Oryx build + code deploy."
       },
-      "value": "[if(variables('deployOneGridAppEffective'), string(reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-onegrid-provision', variables('namePrefix'))), '2023-08-01').outputs.appUrl), 'not-deployed')]"
+      "value": "[if(variables('deployOneGridAppEffective'), format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01').defaultHostName), 'not-deployed')]"
     }
   }
 }

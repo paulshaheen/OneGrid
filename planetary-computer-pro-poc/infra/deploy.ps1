@@ -1038,19 +1038,34 @@ function Phase-ChatAgent {
   else { $regions += @('eastus','westus3','centralus','westeurope') | Where-Object { $_ -ne $cfg.location } }
   $regions = $regions | Select-Object -Unique
   $appOk = $false; $fqdn = $null
-  foreach ($loc in $regions) {
-    $plan = "$app-plan"
-    Log "  creating App Service plan + web app '$app' in $loc ..."
-    az appservice plan create -n $plan -g $rg -l $loc --is-linux --sku B1 -o none 2>$null
-    az webapp create -n $app -g $rg --plan $plan --runtime 'NODE:20-lts' -o none 2>&1 | Out-Null
-    if (-not (AzTry { az webapp show -n $app -g $rg --query name -o tsv })) { Log "  web app not created in $loc - trying next region" "Yellow"; continue }
+  # When the one-click ARM template is used, the App Service plan + web app (+ its managed
+  # identity and the storage/GeoCatalog role grants) are already declared as ARM resources.
+  # In that case deploy straight into the existing site - no create, no region fallback.
+  $existingLoc = AzTry { az webapp show -n $app -g $rg --query location -o tsv }
+  if ($existingLoc) {
+    Log "  App Service '$app' already exists ($existingLoc) - deploying into it (skipping plan/web app create)"
     az webapp config appsettings set -n $app -g $rg --settings @settings -o none 2>$null
     az webapp config set -n $app -g $rg --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
     Log "  deploying app (App Service builds the SPA - several minutes)..."
     az webapp deploy -n $app -g $rg --src-path $zip --type zip -o none 2>&1 | Out-Null
     $fqdn = AzTry { az webapp show -n $app -g $rg --query defaultHostName -o tsv }
-    if ($fqdn) { $appOk = $true; $state.ChatAgentLocation = $loc; break }
-    Log "  web app not up in $loc - trying next region" "Yellow"
+    if ($fqdn) { $appOk = $true; $state.ChatAgentLocation = $existingLoc }
+  } else {
+    $planSku = if ($cfg.chatAgent -and $cfg.chatAgent.appServiceSku) { $cfg.chatAgent.appServiceSku } else { 'B1' }
+    foreach ($loc in $regions) {
+      $plan = "$app-plan"
+      Log "  creating App Service plan + web app '$app' in $loc (sku $planSku) ..."
+      az appservice plan create -n $plan -g $rg -l $loc --is-linux --sku $planSku -o none 2>$null
+      az webapp create -n $app -g $rg --plan $plan --runtime 'NODE:20-lts' -o none 2>&1 | Out-Null
+      if (-not (AzTry { az webapp show -n $app -g $rg --query name -o tsv })) { Log "  web app not created in $loc - trying next region" "Yellow"; continue }
+      az webapp config appsettings set -n $app -g $rg --settings @settings -o none 2>$null
+      az webapp config set -n $app -g $rg --startup-file 'node report-app/server/index.js' --web-sockets-enabled true -o none 2>$null
+      Log "  deploying app (App Service builds the SPA - several minutes)..."
+      az webapp deploy -n $app -g $rg --src-path $zip --type zip -o none 2>&1 | Out-Null
+      $fqdn = AzTry { az webapp show -n $app -g $rg --query defaultHostName -o tsv }
+      if ($fqdn) { $appOk = $true; $state.ChatAgentLocation = $loc; break }
+      Log "  web app not up in $loc - trying next region" "Yellow"
+    }
   }
   Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item $zip -Force -ErrorAction SilentlyContinue

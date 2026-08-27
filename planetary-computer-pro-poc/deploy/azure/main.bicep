@@ -111,6 +111,21 @@ param createFabricConnection bool = false
 @description('Also stand up the OneGrid web application: the AI Foundry account (reused from the AI agent above when present) and the chat/report Container App, deployed into THIS resource group. Requires the OneGrid Fabric plane. The in-template provisioner runs OneGrid deploy.ps1 for the foundry/dataagent/chatagent phases; because this creates resources and role assignments, the Fabric-plane identity is granted Owner on this resource group.')
 param deployOneGridApp bool = false
 
+@description('App Service plan pricing tier for the OneGrid chat/report web app. B1 (Basic) is the low-cost default; pick a Premium v3 tier (P0v3/P1v3/P2v3/P3v3) for production-grade CPU/memory, autoscale, and better cold-start. Only applies when the OneGrid web app is deployed.')
+@allowed([
+  'B1'
+  'B2'
+  'B3'
+  'S1'
+  'S2'
+  'S3'
+  'P0v3'
+  'P1v3'
+  'P2v3'
+  'P3v3'
+])
+param chatAgentAppServiceSku string = 'B1'
+
 @description('Seed the full OneGrid historical demo dataset into the lakehouse/eventhouse (cloud-seeded from the public release bundle, ~hundreds of MB). Off by default to keep the deployment fast; enable for a fully populated demo.')
 param deployOneGridData bool = false
 
@@ -200,6 +215,15 @@ var deployFabricPlaneEffective = deployFabricPlane && deploySampleStorage
 var fabricPlaneIdentityName = '${namePrefix}-fabricplane-identity'
 // The OneGrid web app (Foundry + Container App) rides on top of the Fabric plane.
 var deployOneGridAppEffective = deployFabricPlaneEffective && deployOneGridApp
+// The chat/report web app (Azure App Service, Linux/Node) is a first-class ARM resource so
+// ARM owns its lifecycle and its managed identity exists before the provisioner runs its
+// Fabric/Kusto/PBI grants. Names must match what the provisioner expects (see
+// onegrid-solution-provision.ps1 chatAgent.appName = '<prefix>-onegrid-app').
+var chatAgentAppName = '${namePrefix}-onegrid-app'
+var chatAgentPlanName = '${chatAgentAppName}-plan'
+// GeoCatalog Administrator (data-plane) — lets the web app identity browse tenant STAC
+// collections/imagery under managed identity.
+var geoCatalogAdminRoleId = 'c9c97b9c-105d-4bb5-a2a7-7d15666c2484'
 // Optionally provision a Fabric capacity in-template instead of requiring an existing one.
 var createFabricCapacityEffective = deployFabricPlaneEffective && createFabricCapacity
 var fabricCapacityName = toLower('${namePrefix}${uniqueString(resourceGroup().id)}fab')
@@ -378,6 +402,79 @@ resource fabricPlaneRgOwner 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
+// The OneGrid chat/report web app is declared here as first-class ARM resources (App Service
+// on Linux/Node) rather than being created imperatively inside the provisioner. Declaring the
+// plan + site + its managed identity means ARM owns their lifecycle (a failure surfaces on the
+// deployment instead of being silently swallowed by a script phase), and the app's identity
+// exists minutes before the provisioner issues Fabric/Kusto/PBI grants \u2014 which avoids the
+// "All provided principals must be existing" propagation errors. The provisioner's chatagent
+// phase then only pushes code (Oryx build) and patches the Fabric-derived app settings it
+// computes at run time.
+resource chatAgentPlan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployOneGridAppEffective) {
+  name: chatAgentPlanName
+  location: location
+  kind: 'linux'
+  sku: {
+    name: chatAgentAppServiceSku
+  }
+  properties: {
+    reserved: true
+  }
+}
+
+resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEffective) {
+  name: chatAgentAppName
+  location: location
+  kind: 'app,linux'
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    serverFarmId: chatAgentPlan.id
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'NODE|20-lts'
+      appCommandLine: 'node report-app/server/index.js'
+      webSocketsEnabled: true
+      alwaysOn: true
+      minTlsVersion: '1.2'
+      ftpsState: 'Disabled'
+      // Static settings only; the Fabric-derived env (endpoints, dataset/agent ids) is merged
+      // in later by the provisioner via `az webapp config appsettings set` (which preserves
+      // these). SCM_DO_BUILD_DURING_DEPLOYMENT lets Oryx build the SPA on zip deploy.
+      appSettings: [
+        { name: 'SCM_DO_BUILD_DURING_DEPLOYMENT', value: 'true' }
+        { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~20' }
+        { name: 'REPORT_PORT', value: '8080' }
+        { name: 'WEBSITES_PORT', value: '8080' }
+      ]
+    }
+  }
+}
+
+// Fabric-independent data-plane grants for the web app identity, declared here so they are in
+// place (and propagated) before the provisioner runs. Foundry/Cognitive grants stay in the
+// provisioner because the Foundry account may be created there (created-vs-reused).
+resource chatAgentStorageReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
+  name: guid(deployOneGridAppEffective ? sampleStorage.id : resourceGroup().id, chatAgentAppName, storageBlobDataReaderRoleId)
+  scope: sampleStorage
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataReaderRoleId)
+    principalId: deployOneGridAppEffective ? chatAgentSite.identity.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource chatAgentGeoCatalogAdmin 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
+  name: guid(geoCatalog.id, chatAgentAppName, geoCatalogAdminRoleId)
+  scope: geoCatalog
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', geoCatalogAdminRoleId)
+    principalId: deployOneGridAppEffective ? chatAgentSite.identity.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // In-template provisioning of the whole OneGrid solution. Fabric workspaces/lakehouses/
 // eventhouses/KQL, the AI Foundry account, and the chat/report Container App are not ARM
 // resource types, so we run OneGrid's own orchestrator (deploy.ps1) headless as a
@@ -433,6 +530,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
     fabricPlaneRgOwner
     fabricPlaneStorageUaaRole
     modelOutputsContainer
+    chatAgentSite
   ]
 }
 
@@ -864,5 +962,5 @@ output fabricPlaneCommand string = deployFabricPlaneEffective ? (empty(fabricCon
 output oneGridAppEnabled bool = deployOneGridAppEffective
 @description('OneGrid deploy.ps1 phases the in-template provisioner ran (mapped from the selected components).')
 output oneGridPhases string = deployFabricPlaneEffective ? ogPhasesCsv : 'not-deployed'
-@description('Public URL of the OneGrid chat/report web app (from the in-template provisioner). Empty until the container app finishes its first build.')
-output oneGridAppUrl string = deployOneGridAppEffective ? string(fabricPlaneScript.properties.outputs.appUrl) : 'not-deployed'
+@description('Public URL of the OneGrid chat/report web app (the ARM-declared App Service). Serves once the provisioner finishes the first Oryx build + code deploy.')
+output oneGridAppUrl string = deployOneGridAppEffective ? 'https://${chatAgentSite.properties.defaultHostName}' : 'not-deployed'
