@@ -1158,7 +1158,12 @@ function Phase-ChatAgent {
         if ($signinClientId) {
           $objId = AzTry { az ad app show --id $signinClientId --query id -o tsv }
           # Ensure the SPA redirect URI is present (MERGE, so re-deploys / extra hosts are kept).
-          $existing = @(AzTry { az ad app show --id $signinClientId --query "spa.redirectUris" -o json | ConvertFrom-Json })
+          # NOTE: read the current URIs with a RAW az call + ConvertFrom-Json, NOT AzTry - AzTry
+          # pipes through Out-String and would return a stringified blob instead of a real array,
+          # which on a re-deploy could write back a malformed redirect URI.
+          $existing = @()
+          $existingJson = az ad app show --id $signinClientId --query "spa.redirectUris" -o json 2>$null
+          if ($existingJson) { try { $existing = @($existingJson | ConvertFrom-Json) } catch { $existing = @() } }
           if ($existing -notcontains $redirect) {
             $uris = @($existing + $redirect | Where-Object { $_ } | Select-Object -Unique)
             $body = @{ spa = @{ redirectUris = $uris } } | ConvertTo-Json -Depth 5 -Compress
