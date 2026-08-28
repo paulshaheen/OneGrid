@@ -391,6 +391,36 @@
               "required": false
             },
             "visible": "[contains(steps('components').selected, 'oneGridApp')]"
+          },
+          {
+            "name": "signInInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[contains(steps('components').selected, 'oneGridApp')]",
+            "options": {
+              "icon": "Info",
+              "text": "The OneGrid web app signs users in with Microsoft Entra ID (SPA, auth-code + PKCE, redirect https://<app-host>/auth/callback). Choose to have the deployment create the sign-in app registration for you, or bring your own. Auto-create requires the deployment identity to hold Microsoft Graph 'Application.ReadWrite.OwnedBy'; if it doesn't, either uncheck and paste an existing app's client ID, or leave it checked and add the redirect URI manually afterwards (the app still runs, only the sign-in tile stays unconfigured until then)."
+            }
+          },
+          {
+            "name": "createSignInApp",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Create the sign-in (Entra SPA) app registration for me",
+            "defaultValue": true,
+            "toolTip": "When checked, the provisioner creates (or reuses) a public SPA app registration named '<app>-signin', adds the redirect URI, and sets ENTRA_CLIENT_ID/ENTRA_TENANT_ID on the web app. Uncheck to bring your own existing app registration below.",
+            "visible": "[contains(steps('components').selected, 'oneGridApp')]"
+          },
+          {
+            "name": "entraSignInClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Existing sign-in app registration (client ID)",
+            "defaultValue": "",
+            "toolTip": "Client (application) ID of an existing Entra SPA app registration to use for sign-in. Its SPA redirect URIs must include https://<app-host>/auth/callback. Required when you are not auto-creating the sign-in app.",
+            "constraints": {
+              "required": "[and(contains(steps('components').selected, 'oneGridApp'), not(steps('fabricConfig').createSignInApp))]",
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter an app registration client ID GUID, e.g. 00000000-0000-0000-0000-000000000000."
+            },
+            "visible": "[and(contains(steps('components').selected, 'oneGridApp'), not(steps('fabricConfig').createSignInApp))]"
           }
         ]
       }
@@ -418,6 +448,8 @@
       "fabricConnectionId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricConnection)), steps('fabricConfig').fabricConnectionId, '')]",
       "deployOneGridApp": "[contains(steps('components').selected, 'oneGridApp')]",
       "chatAgentAppServiceSku": "[if(contains(steps('components').selected, 'oneGridApp'), steps('fabricConfig').chatAgentAppServiceSku, 'B1')]",
+      "enableEntraSignIn": "[contains(steps('components').selected, 'oneGridApp')]",
+      "entraSignInClientId": "[if(and(contains(steps('components').selected, 'oneGridApp'), not(steps('fabricConfig').createSignInApp)), steps('fabricConfig').entraSignInClientId, '')]",
       "deployOneGridData": "[contains(steps('components').selected, 'oneGridData')]"
     }
   }
