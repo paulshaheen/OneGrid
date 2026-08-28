@@ -35,19 +35,47 @@ function Log($m, $c = 'Cyan') { Write-Host "[$(Get-Date -f HH:mm:ss)] $m" -Foreg
 $env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
-# --- 1. Toolchain: git + az CLI (the AzurePowerShell image has pwsh + Az modules) --
+# --- 1. Toolchain: git + az CLI --------------------------------------------------
+# The AzurePowerShell deployment-script image is CBL-Mariner (RPM/tdnf), NOT Debian,
+# so apt-get / InstallAzureCLIDeb silently no-op here (that is why nothing wired: az
+# was never installed, so every `az` call in deploy.ps1 failed). Install via whichever
+# package manager the base image actually ships, running as root first with a sudo
+# fallback. `az` is REQUIRED by deploy.ps1; `git` is optional - the clone step below
+# falls back to a source-zip download when git is unavailable.
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
-if (-not (Have 'git')) {
-  Log 'installing git...'
-  & bash -c 'export DEBIAN_FRONTEND=noninteractive; (sudo apt-get update -y && sudo apt-get install -y git) 2>/dev/null || (apt-get update -y && apt-get install -y git)'
+function Install-Pkg([string]$pkgs) {
+  $mgrs = @(
+    @{ n = 'tdnf';     c = "tdnf install -y $pkgs" },
+    @{ n = 'dnf';      c = "dnf install -y $pkgs" },
+    @{ n = 'microdnf'; c = "microdnf install -y $pkgs" },
+    @{ n = 'yum';      c = "yum install -y $pkgs" },
+    @{ n = 'apt-get';  c = "apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y $pkgs" },
+    @{ n = 'apk';      c = "apk add --no-cache $pkgs" }
+  )
+  foreach ($m in $mgrs) {
+    if (Get-Command $m.n -ErrorAction SilentlyContinue) {
+      Log "installing '$pkgs' via $($m.n)..."
+      try { & bash -c "($($m.c)) 2>&1 || (sudo $($m.c) 2>&1)" | Out-Null } catch { Log "install '$pkgs' via $($m.n) reported: $($_.Exception.Message)" 'Yellow' }
+      return $true
+    }
+  }
+  Log "no supported package manager found to install '$pkgs'" 'Yellow'
+  return $false
 }
+
 if (-not (Have 'az')) {
-  Log 'installing az CLI...'
-  & bash -c 'curl -sL https://aka.ms/InstallAzureCLIDeb | (sudo bash 2>/dev/null || bash)'
+  Log 'az CLI missing - installing...'
+  Install-Pkg 'azure-cli' | Out-Null
+  if (-not (Have 'az')) { try { & bash -c 'curl -sL https://aka.ms/InstallAzureCLIDeb | (sudo bash 2>/dev/null || bash)' 2>$null | Out-Null } catch {} }
+  if (-not (Have 'az')) { foreach ($pip in @('pip3','pip')) { if (Have $pip) { Log "installing az CLI via $pip..."; try { & bash -c "$pip install --quiet azure-cli 2>&1" | Out-Null } catch {}; if (Have 'az') { break } } } }
 }
-if (-not (Have 'git')) { throw 'git is required but could not be installed in the deployment container.' }
-if (-not (Have 'az'))  { throw 'az CLI is required but could not be installed in the deployment container.' }
+if (-not (Have 'git')) {
+  Log 'git missing - installing...'
+  Install-Pkg 'git' | Out-Null
+}
+if (-not (Have 'az')) { throw 'az CLI is required but could not be installed in the deployment container.' }
+# NOTE: git is intentionally NOT hard-required - the clone step falls back to a zip download.
 
 # --- 2. Log the az CLI in as the deployment identity ------------------------------
 # The script service already ran Connect-AzAccount -Identity for Az PowerShell, but
@@ -78,9 +106,29 @@ $repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/
 $ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }
 $work = Join-Path ([IO.Path]::GetTempPath()) 'onegrid'
 if (Test-Path $work) { Remove-Item $work -Recurse -Force }
-Log "cloning $repo ($ref)..."
 $env:GIT_LFS_SKIP_SMUDGE = '1'   # data is cloud-seeded from the release bundle, not LFS
-& git clone --depth 1 --branch $ref $repo $work
+$cloned = $false
+if (Have 'git') {
+  Log "cloning $repo ($ref) via git..."
+  try { & git clone --depth 1 --branch $ref $repo $work 2>&1 | Out-Null } catch { Log "git clone failed: $($_.Exception.Message)" 'Yellow' }
+  $cloned = (Test-Path $work) -and (@(Get-ChildItem $work -Force -ErrorAction SilentlyContinue).Count -gt 0)
+}
+if (-not $cloned) {
+  # git-less fallback: download the branch tarball from GitHub codeload (no git, no LFS).
+  # Invoke-WebRequest + Expand-Archive are native to pwsh, so this needs no extra tooling.
+  $slug = ($repo -replace '^https?://github\.com/', '' -replace '\.git$', '')
+  $zipUrl = "https://codeload.github.com/$slug/zip/refs/heads/$ref"
+  Log "git unavailable/failed - downloading source zip: $zipUrl"
+  if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+  $zip = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-src.zip'
+  Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing
+  $extract = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-extract'
+  if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+  Expand-Archive -Path $zip -DestinationPath $extract -Force
+  $inner = Get-ChildItem $extract -Directory | Select-Object -First 1  # GitHub nests under <repo>-<ref>/
+  if (-not $inner) { throw "source zip $zipUrl did not expand to a directory" }
+  Move-Item $inner.FullName $work
+}
 
 # Locate the orchestrator. The OneGrid monorepo keeps it at
 # planetary-computer-pro-poc/infra/deploy.ps1; a flat/standalone repo keeps it at root.
