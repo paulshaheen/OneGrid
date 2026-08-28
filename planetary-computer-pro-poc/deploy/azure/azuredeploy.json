@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "2792475572066167604"
+      "templateHash": "17801952210918256965"
     }
   },
   "parameters": {
@@ -459,25 +459,6 @@
       "location": "[parameters('location')]"
     },
     {
-      "condition": "[variables('createFabricCapacityEffective')]",
-      "type": "Microsoft.Fabric/capacities",
-      "apiVersion": "2023-11-01",
-      "name": "[variables('fabricCapacityName')]",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "[parameters('fabricCapacitySku')]",
-        "tier": "Fabric"
-      },
-      "properties": {
-        "administration": {
-          "members": "[concat(createArray(reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId), if(empty(parameters('fabricCapacityAdmin')), createArray(), createArray(parameters('fabricCapacityAdmin'))))]"
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]"
-      ]
-    },
-    {
       "condition": "[variables('deployFabricPlaneEffective')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -681,14 +662,14 @@
         "retentionInterval": "P1D",
         "timeout": "PT3H",
         "cleanupPreference": "OnSuccess",
-        "environmentVariables": "[concat(createArray(createObject('name', 'SUBSCRIPTION_ID', 'value', subscription().subscriptionId), createObject('name', 'LOCATION', 'value', parameters('location')), createObject('name', 'TARGET_RESOURCE_GROUP', 'value', resourceGroup().name), createObject('name', 'NAME_PREFIX', 'value', variables('namePrefix')), createObject('name', 'CHAT_AGENT_APP_NAME', 'value', variables('chatAgentAppName')), createObject('name', 'ONEGRID_APP_PACKAGE_URL', 'value', parameters('oneGridAppPackageUrl')), createObject('name', 'ONEGRID_APP_PACKAGE_BLOB_URL', 'value', variables('oneGridAppPackageBlobUrl')), createObject('name', 'ONEGRID_APP_STORAGE_ACCOUNT', 'value', variables('sampleStorageName')), createObject('name', 'ONEGRID_APP_PACKAGE_CONTAINER', 'value', variables('onegridAppPackageContainerName')), createObject('name', 'IDENTITY_CLIENT_ID', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').clientId, '')), createObject('name', 'ONEGRID_REPO', 'value', parameters('oneGridRepoUrl')), createObject('name', 'ONEGRID_REF', 'value', parameters('oneGridRef')), createObject('name', 'FABRIC_WORKSPACE', 'value', parameters('fabricWorkspaceName')), createObject('name', 'FABRIC_CONNECTION_ID', 'value', parameters('fabricConnectionId')), createObject('name', 'PCP_CREATE_CONNECTION', 'value', string(variables('createFabricConnectionEffective'))), createObject('name', 'PCP_STORAGE_ACCOUNT_NAME', 'value', variables('sampleStorageName')), createObject('name', 'PCP_STORAGE_ACCOUNT_ID', 'value', if(variables('deployFabricPlaneEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '')), createObject('name', 'PCP_BLOB_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, '')), createObject('name', 'PCP_DFS_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.dfs, '')), createObject('name', 'PCP_MODEL_CONTAINER', 'value', variables('modelOutputsContainerName')), createObject('name', 'PCP_OPENAI_ENDPOINT', 'value', if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, '')), createObject('name', 'PCP_OPENAI_ACCOUNT_ID', 'value', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '')), createObject('name', 'PCP_GEOCATALOG_URI', 'value', reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri), createObject('name', 'PCP_GEOCATALOG_ID', 'value', resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName'))), createObject('name', 'PCP_SAMPLE_CONTAINER', 'value', variables('sampleContainerName')), createObject('name', 'PCP_AURORA_ENDPOINT', 'value', if(parameters('deployAuroraModel'), reference(resourceId('Microsoft.MachineLearningServices/workspaces/onlineEndpoints', variables('amlWorkspaceName'), variables('auroraEndpointName')), '2023-10-01').scoringUri, '')), createObject('name', 'PCP_AURORA_DEPLOYED', 'value', string(variables('deployAuroraDeployment'))), createObject('name', 'ENTRA_SIGNIN_ENABLED', 'value', if(parameters('enableEntraSignIn'), 'true', 'false')), createObject('name', 'ENTRA_SIGNIN_CLIENT_ID', 'value', parameters('entraSignInClientId'))), createArray(createObject('name', 'ONEGRID_PHASES', 'value', variables('ogFabricPhasesCsv')), createObject('name', 'FABRIC_CAPACITY_ID', 'value', if(variables('createFabricCapacityEffective'), resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName')), parameters('fabricCapacityId')))))]",
+        "environmentVariables": "[concat(createArray(createObject('name', 'SUBSCRIPTION_ID', 'value', subscription().subscriptionId), createObject('name', 'LOCATION', 'value', parameters('location')), createObject('name', 'TARGET_RESOURCE_GROUP', 'value', resourceGroup().name), createObject('name', 'NAME_PREFIX', 'value', variables('namePrefix')), createObject('name', 'CHAT_AGENT_APP_NAME', 'value', variables('chatAgentAppName')), createObject('name', 'ONEGRID_APP_PACKAGE_URL', 'value', parameters('oneGridAppPackageUrl')), createObject('name', 'ONEGRID_APP_PACKAGE_BLOB_URL', 'value', variables('oneGridAppPackageBlobUrl')), createObject('name', 'ONEGRID_APP_STORAGE_ACCOUNT', 'value', variables('sampleStorageName')), createObject('name', 'ONEGRID_APP_PACKAGE_CONTAINER', 'value', variables('onegridAppPackageContainerName')), createObject('name', 'IDENTITY_CLIENT_ID', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').clientId, '')), createObject('name', 'ONEGRID_REPO', 'value', parameters('oneGridRepoUrl')), createObject('name', 'ONEGRID_REF', 'value', parameters('oneGridRef')), createObject('name', 'FABRIC_WORKSPACE', 'value', parameters('fabricWorkspaceName')), createObject('name', 'FABRIC_CONNECTION_ID', 'value', parameters('fabricConnectionId')), createObject('name', 'PCP_CREATE_CONNECTION', 'value', string(variables('createFabricConnectionEffective'))), createObject('name', 'PCP_STORAGE_ACCOUNT_NAME', 'value', variables('sampleStorageName')), createObject('name', 'PCP_STORAGE_ACCOUNT_ID', 'value', if(variables('deployFabricPlaneEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '')), createObject('name', 'PCP_BLOB_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, '')), createObject('name', 'PCP_DFS_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.dfs, '')), createObject('name', 'PCP_MODEL_CONTAINER', 'value', variables('modelOutputsContainerName')), createObject('name', 'PCP_OPENAI_ENDPOINT', 'value', if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, '')), createObject('name', 'PCP_OPENAI_ACCOUNT_ID', 'value', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '')), createObject('name', 'PCP_GEOCATALOG_URI', 'value', reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri), createObject('name', 'PCP_GEOCATALOG_ID', 'value', resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName'))), createObject('name', 'PCP_SAMPLE_CONTAINER', 'value', variables('sampleContainerName')), createObject('name', 'PCP_AURORA_ENDPOINT', 'value', if(parameters('deployAuroraModel'), reference(resourceId('Microsoft.MachineLearningServices/workspaces/onlineEndpoints', variables('amlWorkspaceName'), variables('auroraEndpointName')), '2023-10-01').scoringUri, '')), createObject('name', 'PCP_AURORA_DEPLOYED', 'value', string(variables('deployAuroraDeployment'))), createObject('name', 'ENTRA_SIGNIN_ENABLED', 'value', if(parameters('enableEntraSignIn'), 'true', 'false')), createObject('name', 'ENTRA_SIGNIN_CLIENT_ID', 'value', parameters('entraSignInClientId'))), createArray(createObject('name', 'ONEGRID_PHASES', 'value', variables('ogFabricPhasesCsv')), createObject('name', 'FABRIC_CAPACITY_ID', 'value', if(variables('createFabricCapacityEffective'), reference(resourceId('Microsoft.Resources/deployments', format('{0}-fabric-capacity', variables('namePrefix'))), '2025-04-01').outputs.capacityId.value, parameters('fabricCapacityId')))))]",
         "scriptContent": "[variables('$fxv#1')]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.Resources/deploymentScripts', format('{0}-onegrid-provision-app', variables('namePrefix')))]",
         "[resourceId('Microsoft.MachineLearningServices/workspaces/onlineEndpoints', variables('amlWorkspaceName'), variables('auroraEndpointName'))]",
         "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
-        "[resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName'))]",
+        "[resourceId('Microsoft.Resources/deployments', format('{0}-fabric-capacity', variables('namePrefix')))]",
         "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('storageBlobDataReaderRoleId')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]",
         "[resourceId('Microsoft.Authorization/roleAssignments', guid(resourceGroup().id, variables('fabricPlaneIdentityName'), variables('ownerRoleId')))]",
@@ -1099,6 +1080,106 @@
         "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppsEnvName'))]",
         "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
       ]
+    },
+    {
+      "condition": "[variables('createFabricCapacityEffective')]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('{0}-fabric-capacity', variables('namePrefix'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "capacityName": {
+            "value": "[variables('fabricCapacityName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "sku": {
+            "value": "[parameters('fabricCapacitySku')]"
+          },
+          "fabricPlanePrincipalId": "[if(variables('deployFabricPlaneEffective'), createObject('value', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId), createObject('value', ''))]",
+          "fabricCapacityAdmin": {
+            "value": "[parameters('fabricCapacityAdmin')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "13530378722941750948"
+            }
+          },
+          "parameters": {
+            "capacityName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Fabric capacity to create."
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the capacity."
+              }
+            },
+            "sku": {
+              "type": "string",
+              "metadata": {
+                "description": "Fabric capacity SKU (F2..F2048)."
+              }
+            },
+            "fabricPlanePrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Object id of the in-template Fabric-plane identity. Always registered as a capacity admin so the headless provisioner can create/assign the workspace."
+              }
+            },
+            "fabricCapacityAdmin": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional additional Fabric capacity administrator (UPN/email or Entra object id)."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Fabric/capacities",
+              "apiVersion": "2023-11-01",
+              "name": "[parameters('capacityName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "[parameters('sku')]",
+                "tier": "Fabric"
+              },
+              "properties": {
+                "administration": {
+                  "members": "[concat(createArray(parameters('fabricPlanePrincipalId')), if(empty(parameters('fabricCapacityAdmin')), createArray(), createArray(parameters('fabricCapacityAdmin'))))]"
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "capacityId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource id of the created Fabric capacity."
+              },
+              "value": "[resourceId('Microsoft.Fabric/capacities', parameters('capacityName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]"
+      ]
     }
   ],
   "outputs": {
@@ -1218,7 +1299,7 @@
       "metadata": {
         "description": "Microsoft Fabric capacity id/GUID the OneGrid plane deploys onto (the auto-created capacity resource id when createFabricCapacity is true, otherwise the supplied value)."
       },
-      "value": "[if(variables('deployFabricPlaneEffective'), if(variables('createFabricCapacityEffective'), resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName')), parameters('fabricCapacityId')), 'not-deployed')]"
+      "value": "[if(variables('deployFabricPlaneEffective'), if(variables('createFabricCapacityEffective'), reference(resourceId('Microsoft.Resources/deployments', format('{0}-fabric-capacity', variables('namePrefix'))), '2025-04-01').outputs.capacityId.value, parameters('fabricCapacityId')), 'not-deployed')]"
     },
     "fabricPlaneProvisionResult": {
       "type": "object",
@@ -1239,7 +1320,7 @@
       "metadata": {
         "description": "Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut."
       },
-      "value": "[if(variables('deployFabricPlaneEffective'), createObject('reuseExistingFoundry', parameters('deployAiAgent'), 'fabric', createObject('capacityId', if(variables('createFabricCapacityEffective'), resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName')), parameters('fabricCapacityId')), 'workspaceName', parameters('fabricWorkspaceName')), 'pcp', createObject('storageAccountName', variables('sampleStorageName'), 'storageAccountId', resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'blobEndpoint', reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, 'modelOutputsContainer', variables('modelOutputsContainerName'), 'shortcutName', 'pcp_model_outputs', 'connectionId', '', 'openAiEndpoint', if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, ''), 'openAiAccountId', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), ''), 'geoCatalogUri', reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri)), createObject())]"
+      "value": "[if(variables('deployFabricPlaneEffective'), createObject('reuseExistingFoundry', parameters('deployAiAgent'), 'fabric', createObject('capacityId', if(variables('createFabricCapacityEffective'), reference(resourceId('Microsoft.Resources/deployments', format('{0}-fabric-capacity', variables('namePrefix'))), '2025-04-01').outputs.capacityId.value, parameters('fabricCapacityId')), 'workspaceName', parameters('fabricWorkspaceName')), 'pcp', createObject('storageAccountName', variables('sampleStorageName'), 'storageAccountId', resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'blobEndpoint', reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, 'modelOutputsContainer', variables('modelOutputsContainerName'), 'shortcutName', 'pcp_model_outputs', 'connectionId', '', 'openAiEndpoint', if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, ''), 'openAiAccountId', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), ''), 'geoCatalogUri', reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri)), createObject())]"
     },
     "fabricPlaneCommand": {
       "type": "string",

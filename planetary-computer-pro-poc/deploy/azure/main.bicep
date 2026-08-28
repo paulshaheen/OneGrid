@@ -394,20 +394,21 @@ resource fabricPlaneIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2
 // one. The in-template Fabric-plane identity is registered as a capacity admin so the
 // headless provisioner can create the workspace and assign it to this capacity. An
 // F-SKU is billed hourly until paused/deleted; ARM cannot create a free Trial capacity.
-resource fabricCapacity 'Microsoft.Fabric/capacities@2023-11-01' = if (createFabricCapacityEffective) {
-  name: fabricCapacityName
-  location: location
-  sku: {
-    name: fabricCapacitySku
-    tier: 'Fabric'
-  }
-  properties: {
-    administration: {
-      members: concat(
-        [ fabricPlaneIdentity.properties.principalId ],
-        empty(fabricCapacityAdmin) ? [] : [ fabricCapacityAdmin ]
-      )
-    }
+//
+// This is a NESTED deployment (modules/fabric-capacity.bicep) rather than an inline
+// resource so a zero-quota capacity that sits in "Creating" for a long time before
+// failing cannot starve the parent deployment's scheduler. The independent app-plane
+// provisioner in the parent runs in parallel and wires GeoCatalog/Foundry/storage/Aurora
+// immediately; only the fabric-plane provisioner (which references this module's output)
+// waits on the capacity.
+module fabricCapacityModule 'modules/fabric-capacity.bicep' = if (createFabricCapacityEffective) {
+  name: '${namePrefix}-fabric-capacity'
+  params: {
+    capacityName: fabricCapacityName
+    location: location
+    sku: fabricCapacitySku
+    fabricPlanePrincipalId: deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : ''
+    fabricCapacityAdmin: fabricCapacityAdmin
   }
 }
 
@@ -645,7 +646,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
     cleanupPreference: 'OnSuccess'
     environmentVariables: concat(provisionCommonEnv, [
       { name: 'ONEGRID_PHASES', value: ogFabricPhasesCsv }
-      { name: 'FABRIC_CAPACITY_ID', value: createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId }
+      { name: 'FABRIC_CAPACITY_ID', value: createFabricCapacityEffective ? fabricCapacityModule.outputs.capacityId : fabricCapacityId }
     ])
     scriptContent: loadTextContent('scripts/onegrid-solution-provision.ps1')
   }
@@ -1054,7 +1055,7 @@ output fabricPlaneEnabled bool = deployFabricPlaneEffective
 @description('Principal (object) ID of the OneGrid Fabric-plane managed identity (has Storage Blob Data Reader on the sample storage account).')
 output fabricPlaneIdentityPrincipalId string = deployFabricPlaneEffective ? fabricPlaneIdentity.properties.principalId : 'not-deployed'
 @description('Microsoft Fabric capacity id/GUID the OneGrid plane deploys onto (the auto-created capacity resource id when createFabricCapacity is true, otherwise the supplied value).')
-output fabricPlaneCapacityId string = deployFabricPlaneEffective ? (createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId) : 'not-deployed'
+output fabricPlaneCapacityId string = deployFabricPlaneEffective ? (createFabricCapacityEffective ? fabricCapacityModule.outputs.capacityId : fabricCapacityId) : 'not-deployed'
 @description('Result of the in-template Fabric provisioning: workspace/lakehouse/eventhouse ids, KQL apply status, and OneLake shortcut status.')
 output fabricPlaneProvisionResult object = deployFabricPlaneEffective ? fabricPlaneScript.properties.outputs : {}
 @description('Result of the in-template app-plane provisioning (Foundry + chat/report web app wiring for GeoCatalog/OpenAI/storage/Aurora). Runs independently of the Fabric capacity.')
@@ -1063,7 +1064,7 @@ output appPlaneProvisionResult object = deployAppProvision ? appProvisionScript.
 output fabricPlaneConfig object = deployFabricPlaneEffective ? {
   reuseExistingFoundry: deployAiAgent
   fabric: {
-    capacityId: createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId
+    capacityId: createFabricCapacityEffective ? fabricCapacityModule.outputs.capacityId : fabricCapacityId
     workspaceName: fabricWorkspaceName
   }
   pcp: {
