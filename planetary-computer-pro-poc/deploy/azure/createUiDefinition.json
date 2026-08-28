@@ -163,7 +163,7 @@
                 "visible": true,
                 "options": {
                   "icon": "Warning",
-                  "text": "Aurora runs on a GPU managed-compute endpoint (Standard_NC24ads_A100_v4). The Foundry workspace + endpoint always deploy; the GPU model only deploys when you supply a model asset ID and have A100 quota + accepted marketplace terms."
+                  "text": "Aurora runs on a GPU managed-compute endpoint (Standard_NC24ads_A100_v4). The Foundry workspace + endpoint always deploy. The GPU model only deploys when 'Deploy the Aurora model for me' is checked (or you paste an asset ID) AND you hold DEDICATED Standard_NC24ads_A100_v4 quota (not 0) in this region plus accepted Aurora marketplace terms. IMPORTANT: the Azure ML studio Model-catalog 'use shared quota / 168-hour temporary endpoint' option is studio-ONLY - this template cannot use it, so on a subscription with 0 dedicated A100 quota the model deployment fails with a capacity error. If you lack dedicated quota, leave the box unchecked (the template still builds the workspace + endpoint), deploy Aurora from the studio, then set the app's AURORA_ENDPOINT to the scoring URL it generates."
                 }
               },
               {
@@ -183,7 +183,7 @@
                 "type": "Microsoft.Common.CheckBox",
                 "label": "Deploy the Aurora model for me (official published asset)",
                 "defaultValue": false,
-                "toolTip": "Deploy the Aurora model onto the GPU endpoint using the official published asset (azureml://registries/azureml/models/Aurora/versions/4). Requires A100 quota in the region and accepted Azure Marketplace terms for Aurora. Leave unchecked to provision the workspace + endpoint only, or paste a specific asset ID below."
+                "toolTip": "Deploy the Aurora model onto the GPU endpoint using the official published asset (azureml://registries/azureml/models/Aurora/versions/4). Requires DEDICATED Standard_NC24ads_A100_v4 quota (not 0) in the region and accepted Azure Marketplace terms for Aurora. The studio's shared-quota / 168-hour temporary-endpoint path does NOT apply to template deployments, so with 0 dedicated quota this will fail with a capacity error - leave it unchecked and deploy the model from the studio instead. Leave unchecked to provision the workspace + endpoint only, or paste a specific asset ID below."
               },
               {
                 "name": "auroraModelAssetId",
