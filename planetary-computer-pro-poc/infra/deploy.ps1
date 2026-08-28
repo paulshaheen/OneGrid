@@ -1127,6 +1127,63 @@ function Phase-ChatAgent {
   if ($cfg.pcp -and $cfg.pcp.geoCatalogId -and $appId) {
     az role assignment create --assignee-object-id $appId --assignee-principal-type ServicePrincipal --role "c9c97b9c-105d-4bb5-a2a7-7d15666c2484" --scope $cfg.pcp.geoCatalogId -o none 2>$null
   }
+
+  # ---- Entra ID sign-in app registration (customer sign-in) -----------------------
+  # The Explorer signs users in with MSAL (SPA, OAuth2 auth-code + PKCE). That needs a public
+  # client app registration whose SPA redirect URI is this site's /auth/callback, plus the
+  # ENTRA_CLIENT_ID / ENTRA_TENANT_ID app settings (public identifiers, NOT secrets). Wiring it
+  # here makes a brand-new deployment have working sign-in with NO manual portal steps. Two
+  # supported paths:
+  #   1. Pre-created: pass signin.clientId (e.g. an org-governed app reg) - wired as-is.
+  #   2. Auto-create: this identity creates/reuses the registration via Microsoft Graph, which
+  #      requires the deployment identity to hold Graph 'Application.ReadWrite.OwnedBy'. If it
+  #      lacks that, we log guidance and leave sign-in 'not configured' (the app still runs).
+  $signinEnabled = $true
+  try { if ($null -ne $cfg.signin -and $cfg.signin.PSObject.Properties['enabled']) { $signinEnabled = [bool]$cfg.signin.enabled } } catch {}
+  if ($signinEnabled) {
+    $tenantId = AzTry { az account show --query tenantId -o tsv }
+    $redirect = "https://$fqdn/auth/callback"
+    $signinClientId = $null
+    if ($cfg.signin -and $cfg.signin.clientId) {
+      $signinClientId = $cfg.signin.clientId
+      Log "  sign-in: using pre-supplied app registration $signinClientId"
+    } else {
+      $signinName = "$($cfg.chatAgent.appName)-signin"
+      try {
+        $signinClientId = AzTry { az ad app list --filter "displayName eq '$signinName'" --query "[0].appId" -o tsv }
+        if (-not $signinClientId) {
+          Log "  sign-in: creating Entra app registration '$signinName'"
+          $signinClientId = az ad app create --display-name $signinName --sign-in-audience AzureADMyOrg --query appId -o tsv 2>$null
+        }
+        if ($signinClientId) {
+          $objId = AzTry { az ad app show --id $signinClientId --query id -o tsv }
+          # Ensure the SPA redirect URI is present (MERGE, so re-deploys / extra hosts are kept).
+          $existing = @(AzTry { az ad app show --id $signinClientId --query "spa.redirectUris" -o json | ConvertFrom-Json })
+          if ($existing -notcontains $redirect) {
+            $uris = @($existing + $redirect | Where-Object { $_ } | Select-Object -Unique)
+            $body = @{ spa = @{ redirectUris = $uris } } | ConvertTo-Json -Depth 5 -Compress
+            $bf = Join-Path $env:TEMP ("spa-" + [guid]::NewGuid().ToString('N').Substring(0,8) + ".json")
+            Set-Content -Path $bf -Value $body -Encoding ascii
+            az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$objId" --headers "Content-Type=application/json" --body "@$bf" -o none 2>$null
+            Remove-Item $bf -Force -ErrorAction SilentlyContinue
+          }
+          # Service principal in this tenant so users can consent/sign in (idempotent).
+          az ad sp create --id $signinClientId -o none 2>$null
+        }
+      } catch {
+        Log "  sign-in: could not auto-create the app registration ($($_.Exception.Message)). Grant the deployment identity Microsoft Graph 'Application.ReadWrite.OwnedBy', or pass signin.clientId. Sign-in stays 'not configured'." "Yellow"
+        $signinClientId = $null
+      }
+    }
+    if ($signinClientId -and $tenantId) {
+      az webapp config appsettings set -n $cfg.chatAgent.appName -g $rg --settings "ENTRA_CLIENT_ID=$signinClientId" "ENTRA_TENANT_ID=$tenantId" -o none 2>$null
+      $state.SigninClientId = $signinClientId
+      Log "  sign-in wired: client=$signinClientId tenant=$tenantId redirect=$redirect" "Green"
+    } else {
+      Log "  sign-in NOT wired (no client id resolved) - the 'Identity & sign-in' card stays 'not configured'" "Yellow"
+    }
+  }
+
   $state.AppPrincipalId = $appId
   $state.AppUrl = "https://$fqdn"
   Log "  chat agent = $($state.AppUrl)" "Green"

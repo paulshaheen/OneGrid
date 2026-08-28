@@ -144,6 +144,12 @@ $cfg = [ordered]@{
     packageStorageAccount = $env:ONEGRID_APP_STORAGE_ACCOUNT
     packageContainer = if ($env:ONEGRID_APP_PACKAGE_CONTAINER) { $env:ONEGRID_APP_PACKAGE_CONTAINER } else { 'onegrid-app-package' }
   }
+  signin = [ordered]@{
+    # Entra ID sign-in wiring for the Explorer. enabled=false skips it entirely; clientId lets
+    # an org supply a pre-created (governed) SPA app registration instead of auto-creating one.
+    enabled  = ($env:ENTRA_SIGNIN_ENABLED -ne 'false')
+    clientId = $env:ENTRA_SIGNIN_CLIENT_ID
+  }
   governance = [ordered]@{ enabled = $false }
 }
 $cfgPath = Join-Path $deployDir 'config.json'

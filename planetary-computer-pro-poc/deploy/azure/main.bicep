@@ -37,6 +37,12 @@ param deploySampleStorage bool = true
 @description('Deploy an Azure OpenAI (Microsoft Foundry) account + model deployment for agentic / reasoning GeoAI scenarios against the GeoCatalog.')
 param deployAiAgent bool = true
 
+@description('Enable automatic Entra ID sign-in wiring for the Explorer web app. When true, the provisioner creates (or reuses) a SPA app registration and sets ENTRA_CLIENT_ID/ENTRA_TENANT_ID. Auto-create requires the deployment identity to hold Microsoft Graph Application.ReadWrite.OwnedBy; otherwise supply entraSignInClientId.')
+param enableEntraSignIn bool = true
+
+@description('Optional pre-created Entra ID (SPA) app registration client ID for sign-in. Supply this when the deployment identity cannot create app registrations. Its SPA redirect URI must include https://<app-host>/auth/callback.')
+param entraSignInClientId string = ''
+
 @description('Name of the Azure OpenAI (Foundry) model deployment.')
 param openAiDeploymentName string = 'gpt-5-mini'
 
@@ -574,6 +580,8 @@ var provisionCommonEnv = [
   { name: 'PCP_SAMPLE_CONTAINER', value: sampleContainerName }
   { name: 'PCP_AURORA_ENDPOINT', value: deployAuroraModel ? auroraEndpoint.properties.scoringUri : '' }
   { name: 'PCP_AURORA_DEPLOYED', value: string(deployAuroraDeployment) }
+  { name: 'ENTRA_SIGNIN_ENABLED', value: enableEntraSignIn ? 'true' : 'false' }
+  { name: 'ENTRA_SIGNIN_CLIENT_ID', value: entraSignInClientId }
 ]
 
 // --- APP plane -----------------------------------------------------------------------
