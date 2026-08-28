@@ -36,45 +36,34 @@ $env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 # --- 1. Toolchain: git + az CLI --------------------------------------------------
-# The AzurePowerShell deployment-script image is CBL-Mariner (RPM/tdnf), NOT Debian,
-# so apt-get / InstallAzureCLIDeb silently no-op here (that is why nothing wired: az
-# was never installed, so every `az` call in deploy.ps1 failed). Install via whichever
-# package manager the base image actually ships, running as root first with a sudo
-# fallback. `az` is REQUIRED by deploy.ps1; `git` is optional - the clone step below
-# falls back to a source-zip download when git is unavailable.
+# The AzurePowerShell deployment-script image is Ubuntu 22.04 (per MS docs: an Az
+# PowerShell module version >= 9 runs on Ubuntu 22.04), executing as root, with
+# apt-get + curl available but NO az CLI, git, python or sudo preinstalled. deploy.ps1
+# shells out to the az CLI, so `az` is REQUIRED; `git` is optional - the clone step
+# below falls back to a source-zip download when git is unavailable.
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
-function Install-Pkg([string]$pkgs) {
-  $mgrs = @(
-    @{ n = 'tdnf';     c = "tdnf install -y $pkgs" },
-    @{ n = 'dnf';      c = "dnf install -y $pkgs" },
-    @{ n = 'microdnf'; c = "microdnf install -y $pkgs" },
-    @{ n = 'yum';      c = "yum install -y $pkgs" },
-    @{ n = 'apt-get';  c = "apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get install -y $pkgs" },
-    @{ n = 'apk';      c = "apk add --no-cache $pkgs" }
-  )
-  foreach ($m in $mgrs) {
-    if (Get-Command $m.n -ErrorAction SilentlyContinue) {
-      Log "installing '$pkgs' via $($m.n)..."
-      try { & bash -c "($($m.c)) 2>&1 || (sudo $($m.c) 2>&1)" | Out-Null } catch { Log "install '$pkgs' via $($m.n) reported: $($_.Exception.Message)" 'Yellow' }
-      return $true
-    }
-  }
-  Log "no supported package manager found to install '$pkgs'" 'Yellow'
-  return $false
+function Invoke-Bash([string]$cmd) {
+  # Run a bash command, streaming its combined output to the deployment-script log.
+  & bash -c $cmd 2>&1 | ForEach-Object { Log "  $_" 'DarkGray' }
+  return $LASTEXITCODE
 }
 
 if (-not (Have 'az')) {
-  Log 'az CLI missing - installing...'
-  Install-Pkg 'azure-cli' | Out-Null
-  if (-not (Have 'az')) { try { & bash -c 'curl -sL https://aka.ms/InstallAzureCLIDeb | (sudo bash 2>/dev/null || bash)' 2>$null | Out-Null } catch {} }
-  if (-not (Have 'az')) { foreach ($pip in @('pip3','pip')) { if (Have $pip) { Log "installing az CLI via $pip..."; try { & bash -c "$pip install --quiet azure-cli 2>&1" | Out-Null } catch {}; if (Have 'az') { break } } } }
+  Log 'az CLI missing - installing via the Microsoft apt installer (aka.ms/InstallAzureCLIDeb)...'
+  # Canonical Debian/Ubuntu install path: it adds the Microsoft apt repo and installs
+  # azure-cli plus its bundled python runtime. azure-cli is NOT in the default Ubuntu
+  # repos, so a plain `apt-get install azure-cli` fails - this installer is required.
+  # We run as root, so no sudo is needed (and sudo is absent from the image).
+  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; curl -sL https://aka.ms/InstallAzureCLIDeb | bash' | Out-Null
+  $env:PATH = "$env:PATH:/usr/bin:/usr/local/bin"
 }
+if (-not (Have 'az')) { throw 'az CLI is required but could not be installed in the deployment container (Ubuntu 22.04 / apt).' }
+
 if (-not (Have 'git')) {
-  Log 'git missing - installing...'
-  Install-Pkg 'git' | Out-Null
+  Log 'git missing - installing via apt-get...'
+  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; apt-get update -y && apt-get install -y git' | Out-Null
 }
-if (-not (Have 'az')) { throw 'az CLI is required but could not be installed in the deployment container.' }
 # NOTE: git is intentionally NOT hard-required - the clone step falls back to a zip download.
 
 # --- 2. Log the az CLI in as the deployment identity ------------------------------
@@ -82,7 +71,13 @@ if (-not (Have 'az')) { throw 'az CLI is required but could not be installed in 
 # deploy.ps1 shells out to the az CLI, which needs its own login.
 Log 'az login --identity...'
 if ($env:IDENTITY_CLIENT_ID) {
-  & az login --identity --username $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors | Out-Null
+  # az CLI 2.71+ removed `--username` for managed-identity login; the current flag is
+  # `--client-id`. Try it first, then fall back to `--username` for older CLI images.
+  & az login --identity --client-id $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Log 'az login --client-id failed; retrying with legacy --username flag...' 'Yellow'
+    & az login --identity --username $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors | Out-Null
+  }
 } else {
   & az login --identity --allow-no-subscriptions --only-show-errors | Out-Null
 }
@@ -210,7 +205,11 @@ Log "running deploy.ps1 -Only $($phases -join ',')"
 Push-Location $deployDir
 try {
   if ($phases.Count -gt 0) {
-    & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath -Only $phases
+    # `pwsh -File` cannot pass a multi-element array (it keeps only the first token, so
+    # -Only foundry,chatagent silently became just 'foundry'). Use -Command so PowerShell
+    # PARSES the phase list as real syntax and binds it as a proper [string[]].
+    $only = ($phases -join ',')
+    & pwsh -NoProfile -Command "& '$deployScript' -ConfigPath '$cfgPath' -Only $only"
   } else {
     & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath
   }

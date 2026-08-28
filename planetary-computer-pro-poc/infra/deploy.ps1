@@ -243,6 +243,12 @@ else { Log "  telemetry OFF (no install data is sent to Microsoft)" "DarkGray" }
 $state = @{}   # collects created IDs across phases
 $script:phaseErrors = @()   # non-fatal phase issues, summarized at the end
 
+# Normalize -Only so a single comma-joined token also works. `pwsh -File` cannot pass a
+# multi-element array (it either keeps only the first token or delivers one "a,b" string),
+# so callers that shell out via -File must pass the phases as one comma-joined value. Split
+# any comma-joined elements back into a flat list; a normal in-shell array is unaffected.
+if ($Only) { $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+
 function Should($p){ return (-not $Only) -or ($Only -contains $p) }
 
 # ============================ PHASE: workspace ================================
@@ -1006,7 +1012,7 @@ function Phase-ChatAgent {
   $pkgContainer = if ($cfg.chatAgent.packageContainer) { $cfg.chatAgent.packageContainer } else { 'onegrid-app-package' }
   $runFromPkg   = $pkgSrcUrl
   if ($pkgStorage -and $pkgBlobUrl) {
-    $tmpZip = Join-Path $env:TEMP ("onegrid-app-" + [guid]::NewGuid().ToString('N').Substring(0,8) + ".zip")
+    $tmpZip = Join-Path ([IO.Path]::GetTempPath()) ("onegrid-app-" + [guid]::NewGuid().ToString('N').Substring(0,8) + ".zip")
     try {
       Log "  staging package: downloading $pkgSrcUrl"
       Invoke-WebRequest -Uri $pkgSrcUrl -OutFile $tmpZip -UseBasicParsing -TimeoutSec 300
@@ -1167,7 +1173,7 @@ function Phase-ChatAgent {
           if ($existing -notcontains $redirect) {
             $uris = @($existing + $redirect | Where-Object { $_ } | Select-Object -Unique)
             $body = @{ spa = @{ redirectUris = $uris } } | ConvertTo-Json -Depth 5 -Compress
-            $bf = Join-Path $env:TEMP ("spa-" + [guid]::NewGuid().ToString('N').Substring(0,8) + ".json")
+            $bf = Join-Path ([IO.Path]::GetTempPath()) ("spa-" + [guid]::NewGuid().ToString('N').Substring(0,8) + ".json")
             Set-Content -Path $bf -Value $body -Encoding ascii
             az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$objId" --headers "Content-Type=application/json" --body "@$bf" -o none 2>$null
             Remove-Item $bf -Force -ErrorAction SilentlyContinue
