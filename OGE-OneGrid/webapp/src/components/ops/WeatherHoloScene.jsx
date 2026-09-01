@@ -582,7 +582,7 @@ function WindSwirl({ radius, windMph, color = "#a9d8ff" }) {
 }
 
 // ── Full storm layer: history, forecast track, animated cone, wind field ─────
-function StormLayer({ event, hour }) {
+function StormLayer({ event, hour, showTrack = true, showWind = true }) {
   const pos = useMemo(() => interpolate(event, hour), [event, hour]);
   const bucket = Math.round(hour);
 
@@ -661,7 +661,7 @@ function StormLayer({ event, hour }) {
 
   return (
     <group>
-      {history && (
+      {showTrack && history && (
         <Line
           points={history}
           color="#7f93ad"
@@ -675,20 +675,21 @@ function StormLayer({ event, hour }) {
           renderOrder={20}
         />
       )}
-      {forecastSegs.map((s, i) => (
-        <Line
-          key={`fs${i}`}
-          points={s.points}
-          color={s.color}
-          lineWidth={2.6}
-          transparent
-          opacity={0.95}
-          depthTest={false}
-          renderOrder={21}
-        />
-      ))}
+      {showTrack &&
+        forecastSegs.map((s, i) => (
+          <Line
+            key={`fs${i}`}
+            points={s.points}
+            color={s.color}
+            lineWidth={2.6}
+            transparent
+            opacity={0.95}
+            depthTest={false}
+            renderOrder={21}
+          />
+        ))}
 
-      {coneGeom && (
+      {showTrack && coneGeom && (
         <mesh geometry={coneGeom} renderOrder={19}>
           <meshBasicMaterial
             color={token("--cone", "#7aa7ff")}
@@ -702,7 +703,7 @@ function StormLayer({ event, hour }) {
           />
         </mesh>
       )}
-      {coneOutline && (
+      {showTrack && coneOutline && (
         <Line
           points={coneOutline}
           color={token("--cone", "#7aa7ff")}
@@ -714,7 +715,7 @@ function StormLayer({ event, hour }) {
         />
       )}
 
-      {eye && (
+      {eye && showWind && (
         <group position={[eye[0], 0.5, eye[1]]}>
           <WindSwirl radius={windRadius} windMph={pos.windMph} />
         </group>
@@ -865,7 +866,7 @@ function WellMarker({ asset, level, selected, hovered, onSelect, onHover, height
 }
 
 // ── Camera: intro sweep, click-to-zoom on assets, click-to-recenter on the map ─
-function CameraRig({ focus, focusKey, recenter, recenterKey, entry }) {
+function CameraRig({ focus, focusKey, recenter, recenterKey, entry, entryKey }) {
   const controls = useRef();
   const { camera } = useThree();
   // If we drilled in from the globe, frame the chosen storm region; otherwise do
@@ -946,6 +947,22 @@ function CameraRig({ focus, focusKey, recenter, recenterKey, entry }) {
     a.active = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recenterKey]);
+  // If the focus storm arrives after the scene has already mounted (async
+  // weather load), frame it once the entry point becomes available.
+  useEffect(() => {
+    if (!entry) return;
+    const c = controls.current;
+    if (!c) return;
+    const a = anim.current;
+    a.fromPos.copy(camera.position);
+    a.toPos.set(entry[0], 96, entry[2] + 120);
+    a.fromTgt.copy(c.target);
+    a.toTgt.set(entry[0], 4, entry[2]);
+    a.elapsed = 0;
+    a.dur = 1.8;
+    a.active = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryKey]);
   useFrame((_, dt) => {
     const c = controls.current;
     if (!c) return;
@@ -1382,7 +1399,19 @@ function GlobeScene({ storms, hour, onEnter, accent = "#3f96ff" }) {
   );
 }
 
-function Scene({ assets, risks, events, hour, selectedId, onSelect, entry, onBackToGlobe }) {
+function Scene({
+  assets,
+  risks,
+  events,
+  hour,
+  selectedId,
+  onSelect,
+  entry,
+  onBackToGlobe,
+  showAssets = true,
+  showTrack = true,
+  showWind = true,
+}) {
   const [hovered, setHovered] = useState(null);
   const [pivot, setPivot] = useState(null);
   const map = useMemo(() => buildUSMap(), []);
@@ -1420,6 +1449,7 @@ function Scene({ assets, risks, events, hour, selectedId, onSelect, entry, onBac
       });
     }
     for (const a of assets) {
+      if (!showAssets) break;
       const sel = selectedId === a.id;
       const hov = hovered === a.id;
       if (!(LABEL_TYPES.has(a.type) || sel || hov)) continue;
@@ -1434,7 +1464,7 @@ function Scene({ assets, risks, events, hour, selectedId, onSelect, entry, onBac
       });
     }
     return out;
-  }, [storms, hour, assets, selectedId, hovered, risks, map]);
+  }, [storms, hour, assets, selectedId, hovered, risks, map, showAssets]);
 
   // World position of the selected asset, for click-to-zoom.
   const focus = useMemo(() => {
@@ -1450,8 +1480,7 @@ function Scene({ assets, risks, events, hour, selectedId, onSelect, entry, onBac
     if (!entry) return null;
     const [x, z] = project(entry.lon, entry.lat);
     return [x, 4, z];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [entry]);
 
   return (
     <>
@@ -1480,29 +1509,31 @@ function Scene({ assets, risks, events, hour, selectedId, onSelect, entry, onBac
         />
       ))}
       {storms.map((s) => (
-        <StormLayer key={s.id} event={s} hour={hour} />
+        <StormLayer key={s.id} event={s} hour={hour} showTrack={showTrack} showWind={showWind} />
       ))}
-      {assets.map((a) => {
-        const Marker = MAJOR_SET.has(a.type) ? AssetPin : WellMarker;
-        return (
-          <Marker
-            key={a.id}
-            asset={a}
-            level={risks?.get?.(a.id)?.level}
-            selected={selectedId === a.id}
-            hovered={hovered === a.id}
-            onSelect={onSelect}
-            onHover={setHovered}
-            heightAt={map.heightAt}
-          />
-        );
-      })}
+      {showAssets &&
+        assets.map((a) => {
+          const Marker = MAJOR_SET.has(a.type) ? AssetPin : WellMarker;
+          return (
+            <Marker
+              key={a.id}
+              asset={a}
+              level={risks?.get?.(a.id)?.level}
+              selected={selectedId === a.id}
+              hovered={hovered === a.id}
+              onSelect={onSelect}
+              onHover={setHovered}
+              heightAt={map.heightAt}
+            />
+          );
+        })}
       <CameraRig
         focus={focus}
         focusKey={selectedId}
         recenter={pivot?.point}
         recenterKey={pivot?.key}
         entry={entryWorld}
+        entryKey={entry?.key}
       />
       {/* Rendered after CameraRig so its projection runs once the camera is
           finalised for the frame — keeps labels pinned to their markers. */}
@@ -1546,9 +1577,20 @@ export default function WeatherHoloScene({
   onSelect,
   autoPlay = false,
   initialFocusEventId,
+  layers,
 }) {
-  const storms = events && events.length ? events : event ? [event] : [];
+  const storms = useMemo(
+    () => (events && events.length ? events : event ? [event] : []),
+    [events, event],
+  );
   const focusStorm = initialFocusEventId ? storms.find((s) => s.id === initialFocusEventId) : null;
+  // Built-in layer toggles that map to real 3D geometry. When no `layers` map is
+  // supplied (an embed without controls) everything shows; otherwise honour the
+  // same on/off semantics as the 2D map. Overlays without a 3D representation
+  // (ensemble, previous cycle, rain, flood, satellite, GeoCatalog) stay 2D-only.
+  const showAssets = layers ? !!layers.assets : true;
+  const showTrack = layers ? !!layers.track : true;
+  const showWind = layers ? !!layers.wind : true;
   // When embedded (e.g. the Overview) we auto-advance our own playhead so the
   // storm animates without an external timeline.
   const [internalHour, setInternalHour] = useState(0);
@@ -1566,6 +1608,25 @@ export default function WeatherHoloScene({
     const p = interpolate(focusStorm, 0);
     return p ? { lon: p.lon, lat: p.lat, key: 1 } : null;
   });
+  // Weather data loads asynchronously, so `storms` is empty on the first
+  // render(s). Seed the opening view (globe drill-in, or a framed focus storm)
+  // once systems become available — but only once, so later user navigation
+  // (entering a storm, returning to the globe) is preserved.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current) return;
+    if (initialFocusEventId) {
+      const fs = storms.find((s) => s.id === initialFocusEventId);
+      if (!fs) return;
+      const p = interpolate(fs, 0);
+      setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
+      setLevel("map");
+      seeded.current = true;
+    } else if (storms.length) {
+      setLevel("globe");
+      seeded.current = true;
+    }
+  }, [storms, initialFocusEventId]);
   const allowGlobe = !initialFocusEventId && storms.length > 0;
   return (
     <Canvas
@@ -1597,6 +1658,9 @@ export default function WeatherHoloScene({
           onSelect={onSelect}
           entry={entry}
           onBackToGlobe={allowGlobe ? () => setLevel("globe") : null}
+          showAssets={showAssets}
+          showTrack={showTrack}
+          showWind={showWind}
         />
       )}
     </Canvas>
