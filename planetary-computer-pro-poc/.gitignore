@@ -19,6 +19,11 @@ Thumbs.db
 *.parameters.local.json
 .env
 
+# OneGrid deploy.ps1 local artifacts: config.json holds a generated refresh-SP
+# secret; last-deploy-state.json holds run state. Never commit these.
+infra/config.json
+infra/last-deploy-state.json
+
 # Node / web app (webapp + pcp-web-sample)
 node_modules/
 dist/

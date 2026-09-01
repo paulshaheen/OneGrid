@@ -977,7 +977,7 @@ function Phase-ChatAgent {
     # Agent" mode in the chat UI, consumed over the public MCP endpoint via the app identity.
     if ($state.DataAgentId) { $envVars += "DATA_AGENT_ID=$($state.DataAgentId)" }
     elseif ($state.WorkspaceId) {
-      $daResolved = AzTry { ((FGet "workspaces/$($state.WorkspaceId)/dataAgents").value | Where-Object { $_.displayName -eq (if ($cfg.dataAgent -and $cfg.dataAgent.name) { $cfg.dataAgent.name } else { 'OneGridOntologyAgent' }) } | Select-Object -First 1).id }
+      $daResolved = AzTry { ((FGet "workspaces/$($state.WorkspaceId)/dataAgents").value | Where-Object { $_.displayName -eq $(if ($cfg.dataAgent -and $cfg.dataAgent.name) { $cfg.dataAgent.name } else { 'OneGridOntologyAgent' }) } | Select-Object -First 1).id }
       if ($daResolved) { $envVars += "DATA_AGENT_ID=$daResolved" }
       else { Log "  note: no published data agent found - 'Ask Fabric Data Agent' stays hidden until the 'dataagent' phase runs" "Yellow" }
     }
