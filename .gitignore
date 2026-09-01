@@ -1,5 +1,12 @@
 # OneGrid bundled sample datasets (LFS bytes not available in this repo)
-OGE-OneGrid/data/
+OGE-OneGrid/data/*
+# ...but keep the data-engineering source artifacts (spec, notebook, reference tracks)
+!OGE-OneGrid/data/MODEL.md
+!OGE-OneGrid/data/HANDOFF.md
+!OGE-OneGrid/data/notebooks/
+!OGE-OneGrid/data/notebooks/**
+!OGE-OneGrid/data/reference/
+!OGE-OneGrid/data/reference/**
 
 # Local-dev Fabric target override (per-developer backend IDs) — never commit/ship.
 # Production resolves the target per tenant via app settings / last-deploy-state.json.
