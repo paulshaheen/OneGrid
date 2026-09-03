@@ -7,6 +7,7 @@
 
 import type { OpsBase } from "@/components/ops/ops-nav";
 import type { PlatformServices } from "@/lib/services/interfaces";
+import { useSampleData } from "@/lib/services/azure-config";
 import {
   AzureAlertService,
   AzureAssetService,
@@ -53,7 +54,7 @@ const sampleServices: PlatformServices = {
 
 /** Pick the provider set for the current console base. */
 export function getServices(_base: OpsBase): PlatformServices {
-  return import.meta.env.VITE_USE_SAMPLE_DATA === "true" ? sampleServices : tenantServices;
+  return useSampleData() ? sampleServices : tenantServices;
 }
 
 export type { PlatformServices };

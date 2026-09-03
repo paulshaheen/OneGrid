@@ -141,6 +141,9 @@ function RuntimeConfigScript() {
     // sets REPORT_API_ENABLED=1, so the ported personas read live Fabric/Eventhouse/
     // PBI data through the same-origin /api instead of the deterministic sample set.
     reportApiEnabled: process.env["REPORT_API_ENABLED"] === "1",
+    // Runtime override to force the synthetic sample estate on a live-built package
+    // (no rebuild): set the App Service app setting USE_SAMPLE_DATA=true.
+    useSampleData: process.env["USE_SAMPLE_DATA"] === "true",
   };
   const json = JSON.stringify(config).replace(/</g, "\\u003c");
   return <script dangerouslySetInnerHTML={{ __html: `window.__APP_CONFIG__=${json}` }} />;

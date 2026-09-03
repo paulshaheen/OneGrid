@@ -26,6 +26,7 @@ type RuntimeConfig = {
   foundryEndpoint?: string;
   foundryDeployment?: string;
   reportApiEnabled?: boolean;
+  useSampleData?: boolean;
 };
 
 declare global {
@@ -67,4 +68,24 @@ function readReportApiEnabled(): boolean {
  */
 export function isAzureConfigured(): boolean {
   return getServiceConfig().geoCatalogUrl !== "";
+}
+
+/**
+ * True when the console should serve the synthetic sample estate (GoM platforms +
+ * demo storms) instead of the live Azure providers. Enabled three ways, in order:
+ *   1. build-time `VITE_USE_SAMPLE_DATA=true` (the marketing/sample build), or
+ *   2. runtime `USE_SAMPLE_DATA=true` — an App Service setting injected onto
+ *      window.__APP_CONFIG__, so ONE live-built package can serve sample or live
+ *      by flipping an app setting (no rebuild), or
+ *   3. implicitly when no GeoCatalog is wired (an unconfigured deployment or the
+ *      public demo), matching the tenant-vs-sample contract documented above.
+ */
+export function useSampleData(): boolean {
+  if ((import.meta.env as Record<string, string | undefined>)["VITE_USE_SAMPLE_DATA"] === "true") {
+    return true;
+  }
+  const runtime = typeof window !== "undefined" ? window.__APP_CONFIG__?.useSampleData : undefined;
+  if (typeof runtime === "boolean") return runtime;
+  if (typeof process !== "undefined" && process.env?.["USE_SAMPLE_DATA"] === "true") return true;
+  return !isAzureConfigured();
 }
