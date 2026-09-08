@@ -4,6 +4,9 @@
   "subscriptionId": "",
   "location": "eastus2",
 
+  "//deployUnifiedModel": "OPTIONAL. When true, the 'unified' phase generates the conformed og.* tables (dims + reliability + weather facts) in this deployment's lakehouse and deploys the Direct Lake 'OneGridModel' over them, then points the app (PBI_DATASET) at it so Weather and Digital Twin share one asset spine. REPORT_API_ENABLED is already set, so the webapp reads assets + weather from the report /api. Default false keeps the twin Import model as the target.",
+  "deployUnifiedModel": false,
+
   "fabric": {
     "//capacityId": "REQUIRED. Existing Fabric capacity resource id or capacity GUID. A workspace cannot be created without a capacity (F-SKU or Trial).",
     "capacityId": "",

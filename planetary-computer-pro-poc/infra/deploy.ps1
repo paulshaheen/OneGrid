@@ -770,6 +770,44 @@ function New-FoundryAccount($name, $rg) {
   return ($LASTEXITCODE -eq 0)
 }
 
+# ============================ PHASE: unified model ===========================
+# Makes the conformed OneGrid model the app's semantic target: generates the og.*
+# tables (dims + reliability + weather facts) in THIS deployment's lakehouse, then
+# deploys the Direct Lake 'OneGridModel' over them and records it as $state.DatasetId
+# so Phase-ChatAgent points the app (PBI_DATASET) at the unified model. REPORT_API_ENABLED
+# is already set by Phase-ChatAgent, so the webapp reads /api (assets + weather) from it.
+# Opt-in + non-fatal: set config `deployUnifiedModel: true` to enable. When off, deploys
+# are unchanged (the twin Import model remains the target).
+function Phase-Unified {
+  if ($cfg.deployUnifiedModel -ne $true) { Log "PHASE unified: skipped (set config deployUnifiedModel=true to enable)" "DarkGray"; return }
+  $ws = $state.WorkspaceId
+  if (-not $ws -or -not $state.LakehouseId) { Log "PHASE unified: need workspace + lakehouse - run 'core' first" "Yellow"; return }
+  Log "PHASE unified: og.* tables + Direct Lake OneGridModel"
+  $map = @{ $SRC.WorkspaceId = $ws; $SRC.LakehouseId = $state.LakehouseId }
+
+  # 1) Seed the HURDAT best-track csv the generator reads (Files/reference/…).
+  $hurdat = Join-Path $Here "fabric\reference\hurdat2_gulf.csv"
+  if (Test-Path $hurdat) {
+    try { OneLakePut $ws $state.LakehouseId $hurdat "reference/hurdat2_gulf.csv"; Log "  seeded reference/hurdat2_gulf.csv" }
+    catch { Log "  hurdat upload failed: $($_.Exception.Message)" "Yellow" }
+  } else { Log "  hurdat csv missing at $hurdat" "Yellow" }
+
+  # 2) Upsert (rebind ws/lakehouse) + run the generator notebook -> og.* Delta tables.
+  $nbFolder = Join-Path $Here "fabric\notebooks\generate_onegrid_data"
+  if (-not (Test-Path $nbFolder)) { Log "  generate_onegrid_data notebook missing - skipping" "Yellow"; return }
+  $nb = UpsertItem $ws "notebooks" "generate_onegrid_data" (BuildNotebookDefinition $nbFolder $map)
+  Log "  running generate_onegrid_data (builds og.* tables; PiEvents disabled)..."
+  if (-not (Run-FabricNotebook $ws $nb.id "generate_onegrid_data" 90)) { Log "  generator did not complete cleanly - OneGridModel may find no og.* tables" "Yellow" }
+
+  # 3) Make the new og.* tables visible to the SQL endpoint, then deploy the Direct Lake model.
+  try { Sync-SqlEndpointMetadata $ws $state.LakehouseId } catch {}
+  $smFolder = Join-Path $Here "fabric\semanticmodel\OneGridModel"
+  if (-not (Test-Path $smFolder)) { Log "  OneGridModel definition missing - skipping" "Yellow"; return }
+  $sm = UpsertItem $ws "semanticModels" "OneGridModel" (BuildDefinition $smFolder $map)
+  $state.DatasetId = $sm.id     # app PBI_DATASET now targets the unified model (Direct Lake - no refresh needed)
+  Log "  OneGridModel = $($sm.id)  (set as the app's semantic target)" "Green"
+}
+
 function Phase-Foundry {
   Log "PHASE foundry: account + model deployments"
   # Reuse PCP's existing Azure OpenAI (Foundry) account instead of standing up a second
@@ -1854,6 +1892,7 @@ $phases = [ordered]@{
   data        = { Phase-Data }
   semantic    = { Phase-Semantic }
   oge         = { Phase-OGE }
+  unified     = { Phase-Unified }
   governance  = { Phase-Governance }
   foundry     = { Phase-Foundry }
   dataagent   = { Phase-DataAgent }

@@ -141,6 +141,7 @@ $reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure
 $cfg = [ordered]@{
   subscriptionId = $env:SUBSCRIPTION_ID
   location       = $env:LOCATION
+  deployUnifiedModel = ($env:DEPLOY_UNIFIED_MODEL -eq 'true')   # unify Weather + Digital Twin onto OneGridModel
   fabric = [ordered]@{
     capacityId      = $env:FABRIC_CAPACITY_ID
     workspaceName   = $(if ($env:FABRIC_WORKSPACE) { $env:FABRIC_WORKSPACE } else { 'OneGrid' })
@@ -201,6 +202,9 @@ Log "config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.f
 
 # --- 5. Run the orchestrator for the selected phases ------------------------------
 $phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+# When the unified model is requested and an explicit phase subset is given, make sure the
+# 'unified' phase is included (with no -Only, deploy.ps1 runs all phases and it self-gates).
+if (($env:DEPLOY_UNIFIED_MODEL -eq 'true') -and $phases.Count -gt 0 -and ($phases -notcontains 'unified')) { $phases += 'unified' }
 Log "running deploy.ps1 -Only $($phases -join ',')"
 Push-Location $deployDir
 try {

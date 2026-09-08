@@ -138,6 +138,9 @@ param oneGridAppPackageUrl string = 'https://github.com/paulshaheen/OneGrid/rele
 @description('Seed the full OneGrid historical demo dataset into the lakehouse/eventhouse (cloud-seeded from the public release bundle, ~hundreds of MB). Off by default to keep the deployment fast; enable for a fully populated demo.')
 param deployOneGridData bool = false
 
+@description('Unify Weather + Digital Twin onto one asset spine: the provisioner\'s \'unified\' phase generates the conformed og.* tables (dims + reliability + weather facts) in this deployment\'s lakehouse and deploys the Direct Lake OneGridModel over them, then targets the app (PBI_DATASET) at it. Requires the OneGrid Fabric plane + app. Off by default (keeps the twin Import model as the target).')
+param deployUnifiedModel bool = false
+
 @description('Git repository the in-template provisioner clones OneGrid deploy.ps1 + accelerator content from. The OneGrid monorepo keeps the orchestrator at planetary-computer-pro-poc/infra/deploy.ps1.')
 param oneGridRepoUrl string = 'https://github.com/paulshaheen/OneGrid.git'
 
@@ -555,6 +558,7 @@ resource chatAgentGeoCatalogAdmin 'Microsoft.Authorization/roleAssignments@2022-
 var provisionCommonEnv = [
   { name: 'SUBSCRIPTION_ID', value: subscription().subscriptionId }
   { name: 'LOCATION', value: location }
+  { name: 'DEPLOY_UNIFIED_MODEL', value: string(deployUnifiedModel) }
   { name: 'TARGET_RESOURCE_GROUP', value: resourceGroup().name }
   { name: 'NAME_PREFIX', value: namePrefix }
   { name: 'CHAT_AGENT_APP_NAME', value: chatAgentAppName }

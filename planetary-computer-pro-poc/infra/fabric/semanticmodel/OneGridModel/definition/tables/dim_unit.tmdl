@@ -1,0 +1,34 @@
+table dim_unit
+	lineageTag: 0b20898c-c337-5974-a164-420b060e43ac
+
+	column unit_id
+		dataType: string
+		lineageTag: 558598f2-3b73-50c0-97cc-a1d89c11c2ce
+		summarizeBy: none
+		sourceColumn: unit_id
+
+	column site_id
+		dataType: string
+		lineageTag: 24dad10d-e9d3-5996-9016-f4cf25c6e5d9
+		summarizeBy: none
+		sourceColumn: site_id
+
+	column unit_name
+		dataType: string
+		lineageTag: f42dd789-9c8c-5cef-bbb5-acf537e67c48
+		summarizeBy: none
+		sourceColumn: unit_name
+
+	column unit_type
+		dataType: string
+		lineageTag: a20641bb-129f-5649-97fd-2cd3cd36bcad
+		summarizeBy: none
+		sourceColumn: unit_type
+
+	partition dim_unit = entity
+		mode: directLake
+		source
+			entityName: dim_unit
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

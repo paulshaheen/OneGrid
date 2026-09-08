@@ -1,0 +1,22 @@
+table daily_narrative
+	lineageTag: 500c0c9a-bfc1-560f-8e64-5ad960df5211
+
+	column narrative_date
+		dataType: string
+		lineageTag: 9d7fc1ea-b03c-5274-b770-9ead27047dee
+		summarizeBy: none
+		sourceColumn: narrative_date
+
+	column narrative_text
+		dataType: string
+		lineageTag: a319a72e-30db-5f19-aee9-baaed8881eee
+		summarizeBy: none
+		sourceColumn: narrative_text
+
+	partition daily_narrative = entity
+		mode: directLake
+		source
+			entityName: daily_narrative
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

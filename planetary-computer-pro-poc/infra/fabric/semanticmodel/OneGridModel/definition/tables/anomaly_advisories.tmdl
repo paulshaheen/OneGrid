@@ -1,0 +1,64 @@
+table anomaly_advisories
+	lineageTag: d568f9b5-2275-5d3d-98e7-d10f50653026
+
+	column Tag
+		dataType: string
+		lineageTag: 54be102d-2e31-562c-84a2-91e7213fb8c9
+		summarizeBy: none
+		sourceColumn: Tag
+
+	column asset_id
+		dataType: string
+		lineageTag: cd048ba8-ac79-5208-bcfc-9be8384028b5
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column severity
+		dataType: string
+		lineageTag: 5a377013-81e4-5f14-9d32-d9d5d07d42c3
+		summarizeBy: none
+		sourceColumn: severity
+
+	column peak_abs_z
+		dataType: double
+		lineageTag: c2120ada-9ca8-500e-8bab-2bb6d92da6da
+		summarizeBy: none
+		sourceColumn: peak_abs_z
+
+	column duration_h
+		dataType: double
+		lineageTag: bd2f9556-d134-5204-9e45-fddafa440c86
+		summarizeBy: none
+		sourceColumn: duration_h
+
+	column advisory_message
+		dataType: string
+		lineageTag: dc8155fc-2089-52cb-b456-d107b27176d8
+		summarizeBy: none
+		sourceColumn: advisory_message
+
+	column latest_value
+		dataType: double
+		lineageTag: af245b95-eb46-5583-8e5c-4f477791fe3b
+		summarizeBy: none
+		sourceColumn: latest_value
+
+	column baseline_median
+		dataType: double
+		lineageTag: cc3317b5-c110-596c-b421-fe78775713af
+		summarizeBy: none
+		sourceColumn: baseline_median
+
+	column anomaly_direction
+		dataType: string
+		lineageTag: ab0b368b-2c39-567d-8b47-1374a6d47e00
+		summarizeBy: none
+		sourceColumn: anomaly_direction
+
+	partition anomaly_advisories = entity
+		mode: directLake
+		source
+			entityName: anomaly_advisories
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

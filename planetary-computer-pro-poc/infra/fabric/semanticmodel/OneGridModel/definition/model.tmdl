@@ -1,0 +1,27 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation PBI_QueryOrder = ["DirectLake - OneGridLake"]
+
+ref table dim_site
+ref table dim_unit
+ref table dim_asset
+ref table dim_tag
+ref table aakr_health
+ref table watchlist
+ref table anomaly_advisories
+ref table root_cause
+ref table predictions_shortterm
+ref table predictions_longterm
+ref table fact_work_requests
+ref table daily_narrative
+ref table dim_weather_event
+ref table WeatherForecast
+ref table fact_asset_exposure
+ref table fact_posture
+

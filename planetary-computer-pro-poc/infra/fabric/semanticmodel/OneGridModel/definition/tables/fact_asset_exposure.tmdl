@@ -1,0 +1,85 @@
+table fact_asset_exposure
+	lineageTag: 526cddf9-e20e-58dc-9d0f-7b83d4bd9aec
+
+	column asset_id
+		dataType: string
+		lineageTag: 0109a991-60cb-54cf-b4d9-10b80c976c2d
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column site_id
+		dataType: string
+		lineageTag: 26ad9ac2-f78d-50ba-8a7e-c6ab3eed4651
+		summarizeBy: none
+		sourceColumn: site_id
+
+	column cycle_id
+		dataType: string
+		lineageTag: 524a062e-4d7f-56c4-9993-4a8fa984bdfe
+		summarizeBy: none
+		sourceColumn: cycle_id
+
+	column hazard_kind
+		dataType: string
+		lineageTag: 303b8da1-7c61-5ae6-8259-92b9a0be7747
+		summarizeBy: none
+		sourceColumn: hazard_kind
+
+	column score
+		dataType: int64
+		formatString: 0
+		lineageTag: 69bc13cf-89bc-5cd3-8fa6-4e91ac79174c
+		summarizeBy: none
+		sourceColumn: score
+
+	column level
+		dataType: string
+		lineageTag: 9ab72621-c638-54f3-a254-f7137d2b532a
+		summarizeBy: none
+		sourceColumn: level
+
+	column primary_threat
+		dataType: string
+		lineageTag: d4bc19d1-f38f-5bf0-9c37-41f1fcbfbcd0
+		summarizeBy: none
+		sourceColumn: primary_threat
+
+	column forecast_wind_mph
+		dataType: double
+		lineageTag: 188719af-5e95-5f0f-86c2-e0757f296bf3
+		summarizeBy: none
+		sourceColumn: forecast_wind_mph
+
+	column rainfall_in
+		dataType: double
+		lineageTag: d7d7b25d-5674-59c6-8766-7e45eb8a73d0
+		summarizeBy: none
+		sourceColumn: rainfall_in
+
+	column distance_mi
+		dataType: int64
+		formatString: 0
+		lineageTag: 232e15b4-e165-5c07-a169-dfee37d751e1
+		summarizeBy: none
+		sourceColumn: distance_mi
+
+	column hours_to_impact
+		dataType: int64
+		formatString: 0
+		lineageTag: 3bf2a230-d835-58ff-bbac-20be1e554b3a
+		summarizeBy: none
+		sourceColumn: hours_to_impact
+
+	column inside_threat_area
+		dataType: boolean
+		lineageTag: 98c1890b-1b6b-58b8-9058-f77518236b82
+		summarizeBy: none
+		sourceColumn: inside_threat_area
+
+	partition fact_asset_exposure = entity
+		mode: directLake
+		source
+			entityName: fact_asset_exposure
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

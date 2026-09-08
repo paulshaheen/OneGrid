@@ -1,0 +1,7 @@
+expression 'DirectLake - OneGridLake' =
+		let
+		    Source = AzureStorage.DataLake("https://onelake.dfs.fabric.microsoft.com/163ba38c-3869-406f-adb7-37cbc981390c/7e08480c-cf8d-4206-901d-38b74dbe35d9", [HierarchicalNavigation=true])
+		in
+		    Source
+	lineageTag: 0dcca037-e748-5fb8-928f-fc5b08567d4c
+

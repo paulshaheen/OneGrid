@@ -1,0 +1,90 @@
+table fact_work_requests
+	lineageTag: 6ab29e09-6733-55d9-8768-68b7ad18889f
+
+	column wr_id
+		dataType: string
+		lineageTag: 226c5577-bc81-55f0-9f1b-ddecdc70dd51
+		summarizeBy: none
+		sourceColumn: wr_id
+
+	column problem_descr
+		dataType: string
+		lineageTag: d1ac06ec-8353-5ad7-8938-2af88d52c4d4
+		summarizeBy: none
+		sourceColumn: problem_descr
+
+	column location
+		dataType: string
+		lineageTag: a19847f0-7f48-5eee-8c7d-d47d993cc2e3
+		summarizeBy: none
+		sourceColumn: location
+
+	column parent_descr
+		dataType: string
+		lineageTag: 8d3affd5-4a9d-5dd3-a121-2687996bde35
+		summarizeBy: none
+		sourceColumn: parent_descr
+
+	column entity_descr
+		dataType: string
+		lineageTag: acf749e3-6b09-5c90-9fe0-b9fd8284afbe
+		summarizeBy: none
+		sourceColumn: entity_descr
+
+	column wr_type
+		dataType: string
+		lineageTag: f4a8df6d-a289-50bd-96e9-f3f0e9504c30
+		summarizeBy: none
+		sourceColumn: wr_type
+
+	column wr_status
+		dataType: string
+		lineageTag: f49df824-a245-5a95-a0d0-8087789f46fc
+		summarizeBy: none
+		sourceColumn: wr_status
+
+	column wr_status_id
+		dataType: string
+		lineageTag: 062812b1-11c6-5ec3-9335-6958aee22754
+		summarizeBy: none
+		sourceColumn: wr_status_id
+
+	column priority
+		dataType: int64
+		formatString: 0
+		lineageTag: 14ddb9eb-3212-5a9e-ac86-0294b7cda29d
+		summarizeBy: none
+		sourceColumn: priority
+
+	column priority_rank
+		dataType: int64
+		formatString: 0
+		lineageTag: 32dd25d2-6a6b-57fb-be78-5e199f04992c
+		summarizeBy: none
+		sourceColumn: priority_rank
+
+	column site_name
+		dataType: string
+		lineageTag: 5d01153d-575c-55c4-9ff7-ef0b5e71711e
+		summarizeBy: none
+		sourceColumn: site_name
+
+	column asset_id
+		dataType: string
+		lineageTag: f09a34fb-3f40-520d-ac89-78a4e4293a96
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column create_date
+		dataType: string
+		lineageTag: bcc3feec-b037-55db-b630-6c282a414e55
+		summarizeBy: none
+		sourceColumn: create_date
+
+	partition fact_work_requests = entity
+		mode: directLake
+		source
+			entityName: fact_work_requests
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

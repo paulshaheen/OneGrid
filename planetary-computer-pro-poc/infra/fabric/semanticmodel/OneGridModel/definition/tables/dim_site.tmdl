@@ -1,0 +1,64 @@
+table dim_site
+	lineageTag: bbff5037-1f35-5e17-8a67-d621aaa946a4
+
+	column site_id
+		dataType: string
+		lineageTag: fcdaa7de-d4c5-5e63-bb3c-5745caaa9000
+		summarizeBy: none
+		sourceColumn: site_id
+
+	column site_name
+		dataType: string
+		lineageTag: d3a87c6a-4a46-5ad8-b7a3-d641692bfa6a
+		summarizeBy: none
+		sourceColumn: site_name
+
+	column site_type
+		dataType: string
+		lineageTag: 6045b103-24bd-5260-9487-d4a3c05854af
+		summarizeBy: none
+		sourceColumn: site_type
+
+	column region
+		dataType: string
+		lineageTag: 66867833-3782-55cb-8d16-835fbfac2fda
+		summarizeBy: none
+		sourceColumn: region
+
+	column lat
+		dataType: double
+		lineageTag: 66e25e8f-90be-573f-8bf9-30891bf65747
+		summarizeBy: none
+		sourceColumn: lat
+
+	column lon
+		dataType: double
+		lineageTag: c9ccf2aa-4bb9-51c9-8f36-4f027f8768ec
+		summarizeBy: none
+		sourceColumn: lon
+
+	column operator
+		dataType: string
+		lineageTag: 9be057f0-69cf-59b2-b242-86375f0c313a
+		summarizeBy: none
+		sourceColumn: operator
+
+	column business_unit
+		dataType: string
+		lineageTag: 2660674e-dcfc-5c51-859a-df685e385f7b
+		summarizeBy: none
+		sourceColumn: business_unit
+
+	column criticality
+		dataType: string
+		lineageTag: cf29e86e-bf52-5ac4-a026-8614cc380d0e
+		summarizeBy: none
+		sourceColumn: criticality
+
+	partition dim_site = entity
+		mode: directLake
+		source
+			entityName: dim_site
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

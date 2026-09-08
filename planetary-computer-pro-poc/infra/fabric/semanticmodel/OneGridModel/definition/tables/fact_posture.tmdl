@@ -1,0 +1,43 @@
+table fact_posture
+	lineageTag: 6171c42b-e0fc-5449-802b-4f186f12fa55
+
+	column site_id
+		dataType: string
+		lineageTag: be7a932a-35a3-5ab0-9e17-099b79ee93f6
+		summarizeBy: none
+		sourceColumn: site_id
+
+	column posture_level
+		dataType: int64
+		formatString: 0
+		lineageTag: c76573d3-f330-505e-8498-975a6858dd43
+		summarizeBy: none
+		sourceColumn: posture_level
+
+	column pob_current
+		dataType: int64
+		formatString: 0
+		lineageTag: 3d49c6c4-f08f-5914-921a-1e280dc5886d
+		summarizeBy: none
+		sourceColumn: pob_current
+
+	column pob_normal
+		dataType: int64
+		formatString: 0
+		lineageTag: 91d7f1cd-8690-5b64-b632-2332d396c47c
+		summarizeBy: none
+		sourceColumn: pob_normal
+
+	column decision_owner
+		dataType: string
+		lineageTag: b12c99da-dc8e-5de9-a4a6-c68f0925dc2d
+		summarizeBy: none
+		sourceColumn: decision_owner
+
+	partition fact_posture = entity
+		mode: directLake
+		source
+			entityName: fact_posture
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

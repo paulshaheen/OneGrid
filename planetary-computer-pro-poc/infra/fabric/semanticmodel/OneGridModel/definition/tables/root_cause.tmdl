@@ -1,0 +1,58 @@
+table root_cause
+	lineageTag: 6ce3516d-d984-55d7-b3d4-a6bd583f7f2b
+
+	column asset_id
+		dataType: string
+		lineageTag: 55fa5304-1fe3-583a-9d37-4a601c693b8b
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column tag
+		dataType: string
+		lineageTag: f0457af9-2cf8-5a80-9f1a-ea2dc4c497d1
+		summarizeBy: none
+		sourceColumn: tag
+
+	column failure_mechanism
+		dataType: string
+		lineageTag: 0670ffef-ec42-5c7d-989a-9a24709500a5
+		summarizeBy: none
+		sourceColumn: failure_mechanism
+
+	column root_cause
+		dataType: string
+		lineageTag: 57a50599-9580-55fc-9f5d-8941067fffb5
+		summarizeBy: none
+		sourceColumn: root_cause
+
+	column priority
+		dataType: string
+		lineageTag: e6ba20df-bb8f-50cb-9144-d408980aa07c
+		summarizeBy: none
+		sourceColumn: priority
+
+	column confidence
+		dataType: double
+		lineageTag: 4748de7a-cfc2-5e57-ac12-3e829400bf39
+		summarizeBy: none
+		sourceColumn: confidence
+
+	column recommended_action
+		dataType: string
+		lineageTag: 3199f225-c36b-5d5a-b990-55cc24d43d76
+		summarizeBy: none
+		sourceColumn: recommended_action
+
+	column contributing_tag_names
+		dataType: string
+		lineageTag: 5b0bd8bb-7201-5c40-aba6-f9ee8e58a4b4
+		summarizeBy: none
+		sourceColumn: contributing_tag_names
+
+	partition root_cause = entity
+		mode: directLake
+		source
+			entityName: root_cause
+			schemaName: og
+			expressionSource: 'DirectLake - OneGridLake'
+

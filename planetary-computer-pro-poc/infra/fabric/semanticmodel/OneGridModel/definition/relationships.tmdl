@@ -1,0 +1,52 @@
+relationship 9f459403-1f69-5222-86af-590c7244a153
+	fromColumn: dim_unit.site_id
+	toColumn: dim_site.site_id
+
+relationship 1a677f25-c2ed-5718-b423-574b091e263d
+	fromColumn: dim_asset.unit_id
+	toColumn: dim_unit.unit_id
+
+relationship 2e06e128-0fe0-5da8-b8ce-59e61adbdca1
+	fromColumn: dim_tag.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 1e35d5ab-833b-5ec2-ab45-6e59195213b2
+	fromColumn: aakr_health.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 29ae74b7-08f6-5018-980e-a274002a8214
+	fromColumn: watchlist.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship bb912a94-30f1-5220-af96-d836ec2b3893
+	fromColumn: anomaly_advisories.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship f6309c34-cfc2-5124-bc0f-40ec3f4ae23b
+	fromColumn: root_cause.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 220a218b-2bd8-567b-be8f-f881da84fefc
+	fromColumn: predictions_shortterm.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 307324df-9a94-53a0-9ede-8d0f941ccb3a
+	fromColumn: predictions_longterm.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship bc0ab641-f57b-5337-bafd-075ff06d3092
+	fromColumn: fact_work_requests.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 38f7650e-58d5-5af9-89fd-84fec2d172af
+	fromColumn: fact_asset_exposure.asset_id
+	toColumn: dim_asset.asset_id
+
+relationship 14cd47b1-4b3f-5a63-bd7a-bbd52a1918fd
+	fromColumn: fact_posture.site_id
+	toColumn: dim_site.site_id
+
+relationship d7c30dbb-be09-571d-bc9d-072c4365d673
+	fromColumn: WeatherForecast.event_id
+	toColumn: dim_weather_event.event_id
+
