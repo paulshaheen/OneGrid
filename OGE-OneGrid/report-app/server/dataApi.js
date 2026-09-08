@@ -119,7 +119,7 @@ export function fleetHealth() {
       'EVALUATE ROW("avg_health", AVERAGE(aakr_health[health_score]), "min_health", MIN(aakr_health[health_score]), "scored_assets", DISTINCTCOUNT(aakr_health[asset_id]), "total_assets", DISTINCTCOUNT(dim_asset[asset_id]))',
       'EVALUATE ROW("watch_rows", COUNTROWS(watchlist), "watch_assets", DISTINCTCOUNT(watchlist[asset_id]))',
       'EVALUATE ROW("anom_rows", COUNTROWS(anomaly_advisories), "anom_assets", DISTINCTCOUNT(anomaly_advisories[asset_id]), "crit", COUNTROWS(FILTER(anomaly_advisories, UPPER(anomaly_advisories[severity]) = "CRITICAL")), "high", COUNTROWS(FILTER(anomaly_advisories, UPPER(anomaly_advisories[severity]) = "HIGH")))',
-      'EVALUATE ROW("open_wr", COUNTROWS(FILTER(fact_work_requests, ISBLANK(fact_work_requests[complete_date]))), "total_wr", COUNTROWS(fact_work_requests))',
+      `EVALUATE ROW("open_wr", COUNTROWS(FILTER(fact_work_requests, NOT(UPPER(fact_work_requests[wr_status_id]) IN ${daxStrList(TERMINAL_WR)}))), "total_wr", COUNTROWS(fact_work_requests))`,
       'EVALUATE SUMMARIZECOLUMNS(predictions_shortterm[alert_level], "n", COUNTROWS(predictions_shortterm))',
       'EVALUATE SUMMARIZECOLUMNS(predictions_longterm[risk_level], "n", COUNTROWS(predictions_longterm))',
     ]);
@@ -143,15 +143,44 @@ export function fleetHealth() {
 // ===========================================================================
 //  FLEET ASSETS — one composite health record per asset for the grid/tiles.
 // ===========================================================================
+// Conformed asset dimension: dim_asset ⋈ dim_unit ⋈ dim_site, projected to the
+// SAME shape the reliability code has always used — `plant` = dim_site[site_name],
+// `unit` = dim_unit[unit_name] — plus the site's lat/lon/region/site_type so every
+// equipment leaf inherits its location. This replaces the old dim_asset[plant] /
+// dim_asset[unit] columns (the pre-unification twin schema). Joined in JS so it
+// works regardless of the model's relationship definitions.
+function assetDimRows() {
+  return cached('assetDim', 60_000, async () => {
+    const [assets, units, sites] = await qBatch([
+      'EVALUATE SELECTCOLUMNS(dim_asset, "asset_id", dim_asset[asset_id], "name", dim_asset[asset_display_name], "unit_id", dim_asset[unit_id], "site_id", dim_asset[site_id], "category", dim_asset[equipment_category], "group", dim_asset[equipment_group], "running_tag", dim_asset[running_tag])',
+      'EVALUATE SELECTCOLUMNS(dim_unit, "unit_id", dim_unit[unit_id], "unit_name", dim_unit[unit_name], "unit_type", dim_unit[unit_type])',
+      'EVALUATE SELECTCOLUMNS(dim_site, "site_id", dim_site[site_id], "site_name", dim_site[site_name], "lat", dim_site[lat], "lon", dim_site[lon], "region", dim_site[region], "site_type", dim_site[site_type], "operator", dim_site[operator])',
+    ]);
+    const unitById = Object.fromEntries(units.map((u) => [u.unit_id, u]));
+    const siteById = Object.fromEntries(sites.map((s) => [s.site_id, s]));
+    return assets.map((a) => {
+      const u = unitById[a.unit_id] || {}, s = siteById[a.site_id] || {};
+      return {
+        asset_id: a.asset_id, name: a.name, category: a.category, group: a.group, running_tag: a.running_tag,
+        unit: u.unit_name || a.unit_id, unit_id: a.unit_id, unit_type: u.unit_type || '',
+        plant: s.site_name || a.site_id, site_id: a.site_id,
+        lat: num(s.lat), lon: num(s.lon), region: s.region || '', site_type: s.site_type || '', operator: s.operator || '',
+      };
+    });
+  });
+}
+
 export function fleetAssets() {
   return cached('fleetAssets', 30_000, async () => {
-    const [assets, health, watch, anom, predS, predL] = await qBatch([
-      'EVALUATE SELECTCOLUMNS(dim_asset, "asset_id", dim_asset[asset_id], "name", dim_asset[asset_display_name], "unit", dim_asset[unit], "plant", dim_asset[plant], "category", dim_asset[equipment_category], "group", dim_asset[equipment_group], "running_tag", dim_asset[running_tag])',
-      'EVALUATE SUMMARIZECOLUMNS(aakr_health[asset_id], "health", MAX(aakr_health[health_score]), "anomaly_pct", MAX(aakr_health[anomaly_pct]), "max_abs_z", MAX(aakr_health[max_abs_z]))',
-      'EVALUATE SUMMARIZECOLUMNS(watchlist[asset_id], "watch_n", COUNTROWS(watchlist), "max_risk", MAX(watchlist[risk_contribution]))',
-      'EVALUATE SUMMARIZECOLUMNS(anomaly_advisories[asset_id], "anom_n", COUNTROWS(anomaly_advisories), "max_z", MAX(anomaly_advisories[peak_abs_z]))',
-      'EVALUATE SUMMARIZECOLUMNS(predictions_shortterm[asset_id], "stop_prob", MAX(predictions_shortterm[stop_probability]))',
-      'EVALUATE SUMMARIZECOLUMNS(predictions_longterm[asset_id], "risk_score", MAX(predictions_longterm[risk_score]), "surv7", MIN(predictions_longterm[survival_probability_7d]), "risk_level", MAX(predictions_longterm[risk_level]))',
+    const [assets, [health, watch, anom, predS, predL]] = await Promise.all([
+      assetDimRows(),
+      qBatch([
+        'EVALUATE SUMMARIZECOLUMNS(aakr_health[asset_id], "health", MAX(aakr_health[health_score]), "anomaly_pct", MAX(aakr_health[anomaly_pct]), "max_abs_z", MAX(aakr_health[max_abs_z]))',
+        'EVALUATE SUMMARIZECOLUMNS(watchlist[asset_id], "watch_n", COUNTROWS(watchlist), "max_risk", MAX(watchlist[risk_contribution]))',
+        'EVALUATE SUMMARIZECOLUMNS(anomaly_advisories[asset_id], "anom_n", COUNTROWS(anomaly_advisories), "max_z", MAX(anomaly_advisories[peak_abs_z]))',
+        'EVALUATE SUMMARIZECOLUMNS(predictions_shortterm[asset_id], "stop_prob", MAX(predictions_shortterm[stop_probability]))',
+        'EVALUATE SUMMARIZECOLUMNS(predictions_longterm[asset_id], "risk_score", MAX(predictions_longterm[risk_score]), "surv7", MIN(predictions_longterm[survival_probability_7d]), "risk_level", MAX(predictions_longterm[risk_level]))',
+      ]),
     ]);
     const idx = (rows, key) => Object.fromEntries(rows.map((r) => [r[key] ?? r.asset_id, r]));
     const H = idx(health, 'asset_id'), W = idx(watch, 'asset_id'), A = idx(anom, 'asset_id'), PS = idx(predS, 'asset_id'), PL = idx(predL, 'asset_id');
@@ -184,6 +213,7 @@ export function fleetAssets() {
       return {
         asset_id: id, name: a.name || id, unit: a.unit, plant: a.plant, category: a.category, group: a.group,
         running_tag: a.running_tag,
+        lat: a.lat, lon: a.lon, site_id: a.site_id, region: a.region, site_type: a.site_type,
         health, condition, anomaly_pct: num(h.anomaly_pct), max_z: maxZ, watch_n: watchN, anom_n: anomN,
         stop_prob: stopProb, risk_score: num(pl.risk_score), survival_7d: num(pl.surv7), risk_level: pl.risk_level,
         status, score: condition,
@@ -240,7 +270,14 @@ async function assetDetailUncached(id) {
     const byTag = Object.fromEntries(snap.map((r) => [r.tag, r]));
     for (const t of tags) { const v = byTag[t.tag]; if (v) { t.value = v.value; t.ts = v.ts; } }
   } catch { /* KQL optional; model still shows structure + alert zones */ }
-  return { asset: asset[0] || null, rootCause: rc, watchlist: wl, anomalies: an, predShort: ps, predLong: pl, tags };
+  // Enrich the raw dim_asset row with its conformed site/unit labels + coordinates
+  // (og dim_asset no longer carries plant/unit columns; they come from dim_site/dim_unit).
+  let assetRow = asset[0] || null;
+  if (assetRow) {
+    const dim = (await assetDimRows().catch(() => [])).find((x) => x.asset_id === id);
+    if (dim) assetRow = { ...assetRow, name: assetRow.asset_display_name || dim.name, plant: dim.plant, unit: dim.unit, site_id: dim.site_id, lat: dim.lat, lon: dim.lon, region: dim.region, site_type: dim.site_type };
+  }
+  return { asset: assetRow, rootCause: rc, watchlist: wl, anomalies: an, predShort: ps, predLong: pl, tags };
 }
 
 // ===========================================================================
@@ -263,8 +300,8 @@ export function anomaliesTop(limit = 60) {
 const TERMINAL_WR = ['COMPLETE', 'CANCELLED', 'CLOSED', 'CANCEL'];
 async function fleetPlants() {
   return cached('fleetPlants', 300_000, async () => {
-    const rows = await q('EVALUATE VALUES(dim_asset[plant])');
-    return rows.map((r) => r['dim_asset[plant]'] ?? r.plant).filter(Boolean);
+    const rows = await q('EVALUATE VALUES(dim_site[site_name])');
+    return rows.map((r) => r['dim_site[site_name]'] ?? r.site_name).filter(Boolean);
   });
 }
 function daxStrList(vals) { return '{' + vals.map((v) => `"${String(v).replace(/"/g, '')}"`).join(',') + '}'; }
@@ -314,10 +351,10 @@ export async function workOrdersSummary() {
 export async function assetWorkOrders(assetId, limit = 40) {
   const id = String(assetId).replace(/"/g, '');
   return cached('assetWO:' + id + ':' + limit, 60_000, async () => {
-    const arows = await q(`EVALUATE FILTER(dim_asset, dim_asset[asset_id] = "${id}")`);
-    const a = arows[0] || {};
-    const plant = a.plant, unit = a.unit;                            // e.g. RV2
-    const name = String(a.asset_display_name || a.name || '');
+    const dims = await assetDimRows();
+    const a = dims.find((x) => x.asset_id === id) || {};
+    const plant = a.plant, unit = a.unit;                            // site_name / unit_name
+    const name = String(a.name || '');
     if (!plant) return { asset_id: id, rows: [], matchedBy: 'none' };
     const unitNum = (String(unit).match(/(\d+)/) || [])[1];           // "2"
     const kws = [];
@@ -351,6 +388,7 @@ export async function assetWorkOrders(assetId, limit = 40) {
 // Outages / derates from the Eventhouse (PCIOutages) for the Fleet Availability drill-down.
 export function outages() {
   return cached('outages', 30_000, async () => {
+    if (!T().kustoUri) return { rows: [], summary: { total: 0, active: 0, planned: 0, forced: 0, activeDerateMW: 0, plantsAffected: 0 } };
     const rows = await kq(`PCIOutages
       | extend isActive = (outage_status == "Active") or (isnull(end_date) and begin_date <= now())
       | project outage_id, plant, unit_name, event_type, outage_status, priority, mw, reason, begin_date, end_date, isActive
@@ -450,12 +488,14 @@ function parseBriefing(text) {
 // ===========================================================================
 export function facilityModel() {
   return cached('facility', 60_000, async () => {
-    const [assets, watchTags, anomTags, rcTags, health] = await qBatch([
-      'EVALUATE SELECTCOLUMNS(dim_asset, "asset_id", dim_asset[asset_id], "name", dim_asset[asset_display_name], "unit", dim_asset[unit], "plant", dim_asset[plant], "category", dim_asset[equipment_category], "group", dim_asset[equipment_group], "running_tag", dim_asset[running_tag])',
-      'EVALUATE SUMMARIZECOLUMNS(watchlist[asset_id], watchlist[tag_name], watchlist[descriptor], watchlist[engineering_units])',
-      'EVALUATE SUMMARIZECOLUMNS(anomaly_advisories[asset_id], anomaly_advisories[Tag])',
-      'EVALUATE SUMMARIZECOLUMNS(root_cause[asset_id], root_cause[tag], root_cause[descriptor])',
-      'EVALUATE SUMMARIZECOLUMNS(aakr_health[asset_id], "health", MAX(aakr_health[health_score]), "max_z", MAX(aakr_health[max_abs_z]))',
+    const [assets, [watchTags, anomTags, rcTags, health]] = await Promise.all([
+      assetDimRows(),
+      qBatch([
+        'EVALUATE SUMMARIZECOLUMNS(watchlist[asset_id], watchlist[tag_name], watchlist[descriptor])',
+        'EVALUATE SUMMARIZECOLUMNS(anomaly_advisories[asset_id], anomaly_advisories[Tag])',
+        'EVALUATE SUMMARIZECOLUMNS(root_cause[asset_id], root_cause[tag])',
+        'EVALUATE SUMMARIZECOLUMNS(aakr_health[asset_id], "health", MAX(aakr_health[health_score]), "max_z", MAX(aakr_health[max_abs_z]))',
+      ]),
     ]);
     // Live-panel tags come from ALL of an asset's PI signal sources (watchlist + anomalies +
     // root cause), not just the watchlist — otherwise assets flagged only by anomalies
@@ -568,6 +608,7 @@ async function tagValuesReal(tags, sinceMinutes) {
 
 export async function tagValues(tags, sinceMinutes) {
   if (!tags || !tags.length) return [];
+  if (!T().kustoUri) return []; // no Eventhouse configured (e.g. unified model has no live historian) — degrade
   const real = [], mirror = new Map(); // cloneTag -> {src, prefix}
   for (const t of tags) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
   const results = [];
@@ -606,6 +647,7 @@ async function tagStatsReal(tags) {
 
 export async function tagStats(tags) {
   if (!tags || !tags.length) return {};
+  if (!T().kustoUri) return {}; // no Eventhouse configured — degrade to no live stats
   const real = [], mirror = new Map();
   for (const t of tags) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
   const out = {};
@@ -627,6 +669,7 @@ export async function tagStats(tags) {
 // a live stream is currently flowing (seeding active) vs. showing historical last-knowns.
 export function realtimePulse() {
   return cached('rtpulse', 5_000, async () => {
+    if (!T().kustoUri) return { lastTs: null, live: false, totalTags: 0, plants: 0, events5m: 0, liveTags: 0, eventsPerMin: 0 };
     const rows = await kq('PiEvents | summarize lastTs=max(Ts), totalTags=dcount(Tag), plants=dcount(Plant)');
     const recent = await kq('PiEvents | where Ts > ago(5m) | summarize c=count(), tags=dcount(Tag)');
     const r = rows[0] || {}, rc = recent[0] || {};
@@ -641,6 +684,7 @@ export function realtimePulse() {
 }
 
 export async function tagTrend(tag, hours = 24, bin = 15) {
+  if (!T().kustoUri) return []; // no Eventhouse configured — no trend series
   const t = String(tag).replace(/"/g, '');
   const query = `PiEvents | where Ts > ago(${hours}h) | where Tag == "${t}" | summarize v=avg(todouble(Value)) by bin(Ts, ${bin}m) | order by Ts asc | project Ts, v`;
   const rows = await kq(query);
