@@ -436,9 +436,36 @@ function isWeatherEvent(value: unknown): value is WeatherEvent {
   );
 }
 
+/** Base URL of the OneGrid report-app /api. In the integrated deployment the
+ * report-app hosts both the webapp and /api on the same host; override with
+ * REPORT_API_URL when they are split. */
+function reportApiBase(): string {
+  return process.env["REPORT_API_URL"] || "http://127.0.0.1:7700";
+}
+
+/** Minimal runtime guard for an Asset row from /api/assets-geo (id + coordinates). */
+function isAssetLike(value: unknown): value is Asset {
+  if (!value || typeof value !== "object") return false;
+  const a = value as Record<string, unknown>;
+  return typeof a["id"] === "string" && isCoordinate(a["lat"], a["lon"]);
+}
+
 /** Load storm objects produced by the Aurora post-processing job. */
 export const listAuroraWeatherEvents = createServerFn({ method: "GET" }).handler(
   async (): Promise<WeatherEvent[]> => {
+    // Unified model: when the report-app /api data plane is wired, weather events
+    // come from the conformed OneGridModel (dim_weather_event + WeatherForecast),
+    // so the same dim_asset spine carries both twin health and storm exposure.
+    if (process.env["REPORT_API_ENABLED"] === "1") {
+      try {
+        const res = await fetch(`${reportApiBase()}/api/weather/events`, { headers: { Accept: "application/json" } });
+        if (!res.ok) return [];
+        const payload = (await res.json()) as unknown;
+        return Array.isArray(payload) ? payload.filter(isWeatherEvent) : [];
+      } catch {
+        return [];
+      }
+    }
     const containerUrl = process.env["UPLOAD_CONTAINER_URL"];
     if (!containerUrl) return [];
     const token = await getManagedIdentityToken(STORAGE_RESOURCE);
@@ -712,6 +739,19 @@ function parseGeoJsonAssets(text: string): Asset[] {
  */
 export const listUploadedAssets = createServerFn({ method: "GET" }).handler(
   async (): Promise<Asset[]> => {
+    // Unified model: when the report-app /api data plane is wired, assets come
+    // from the conformed dim_asset ⋈ dim_site (every equipment leaf inherits its
+    // site's coordinates), instead of an operator-uploaded CSV/GeoJSON.
+    if (process.env["REPORT_API_ENABLED"] === "1") {
+      try {
+        const res = await fetch(`${reportApiBase()}/api/assets-geo`, { headers: { Accept: "application/json" } });
+        if (!res.ok) return [];
+        const payload = (await res.json()) as unknown;
+        return Array.isArray(payload) ? payload.filter(isAssetLike) : [];
+      } catch {
+        return [];
+      }
+    }
     const containerUrl = process.env["SAMPLE_CONTAINER_URL"];
     if (!containerUrl) return [];
     const token = await getManagedIdentityToken(STORAGE_RESOURCE);

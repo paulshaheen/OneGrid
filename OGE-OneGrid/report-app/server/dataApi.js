@@ -862,12 +862,13 @@ export function posture() {
   });
 }
 
-// og site_type -> webapp AssetType. power_plant has no current enum member; it is
-// passed through and the true site_type is always in metadata (UI enum extended in §4.3).
+// og site_type -> webapp AssetType. power_plant has no current enum member, so it
+// maps to the closest existing type (refinery: a large fixed thermal/process
+// facility); the true site_type is always preserved in Asset.metadata.siteType.
 const SITE_TYPE_TO_ASSET = {
   offshore_platform: 'offshore_platform', well: 'well', pipeline: 'pipeline',
   refinery: 'refinery', port: 'port', lng: 'lng_terminal', terminal: 'storage',
-  power_plant: 'power_plant',
+  power_plant: 'refinery',
 };
 
 // Asset[] = dim_asset ⋈ dim_site, so each equipment leaf carries its site's
