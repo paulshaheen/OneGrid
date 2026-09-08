@@ -646,3 +646,215 @@ export async function tagTrend(tag, hours = 24, bin = 15) {
   const rows = await kq(query);
   return rows.map((r) => ({ ts: r.Ts, v: num(r.v) }));
 }
+
+// ===========================================================================
+//  WEATHER / EXPOSURE / POSTURE / GEO  (Domain B — unified og.* model)
+//  ------------------------------------------------------------------------
+//  The conformed model shares dim_asset/dim_site with the reliability twin, so
+//  the SAME equipment carries both storm exposure (here) and twin health
+//  (above). These read the Direct-Lake Delta weather facts — all small
+//  (<1000 rows) so a plain EVALUATE is safe and we shape/join in JS to stay
+//  independent of the model's relationship definitions. Output shapes mirror
+//  webapp/src/lib/domain/types.ts (WeatherEvent, AssetRisk, AssetPosture, Asset).
+// ===========================================================================
+
+const bool = (v) => v === true || v === 1 || /^true$/i.test(String(v));
+
+// og hazard_kind -> WeatherEvent.kind (current UI enum). high_wind/winter_storm
+// collapse to severe_convective until the enum is extended (webapp types.ts).
+const HAZARD_TO_KIND = {
+  hurricane: 'hurricane', tropical_storm: 'tropical_storm', flood: 'flood',
+  severe_convective: 'severe_convective', high_wind: 'severe_convective', winter_storm: 'severe_convective',
+};
+const REGION_BASIN = {
+  gulf_offshore: 'Gulf of Mexico', gulf_coast: 'Gulf of Mexico', south: 'Gulf Coast',
+  midwest: 'Continental US', mountain_west: 'Mountain West',
+  west_coast: 'Eastern Pacific / West Coast', northeast: 'Atlantic / Northeast',
+};
+
+function toForecastPoint(r) {
+  return {
+    hour: num(r.hour), lat: num(r.lat), lon: num(r.lon), windMph: num(r.wind_mph),
+    coneRadiusMi: num(r.cone_radius_mi), category: num(r.category), pressureMb: num(r.pressure_mb),
+  };
+}
+
+// Assemble WeatherEvent[] from dim_weather_event + WeatherForecast. Forecast
+// points with hour<0 are the past track (history, as [lon,lat]); hour>=0 are the
+// forward forecast (ForecastPoint[]).
+function buildEvents(eventRows, fcRows) {
+  const byEvent = new Map();
+  for (const r of fcRows) {
+    if (!r.event_id) continue;
+    if (!byEvent.has(r.event_id)) byEvent.set(r.event_id, []);
+    byEvent.get(r.event_id).push(r);
+  }
+  return eventRows.map((e) => {
+    const pts = (byEvent.get(e.event_id) || []).slice().sort((a, b) => num(a.hour) - num(b.hour));
+    const history = pts.filter((p) => num(p.hour) < 0).map((p) => [num(p.lon), num(p.lat)]);
+    const forecast = pts.filter((p) => num(p.hour) >= 0).map(toForecastPoint);
+    return {
+      id: e.event_id,
+      name: e.name,
+      kind: HAZARD_TO_KIND[e.hazard_kind] || 'severe_convective',
+      status: e.status,
+      basin: REGION_BASIN[e.region] || e.region || '',
+      currentCategory: num(e.category),
+      currentWindMph: num(e.current_wind_mph),
+      gustMph: num(e.gust_mph),
+      pressureMb: num(e.pressure_mb),
+      movementDeg: num(e.movement_deg),
+      movementMph: num(e.movement_mph),
+      lat: num(e.lat),
+      lon: num(e.lon),
+      confidence: e.status === 'active' ? 'high' : e.status === 'forecast' ? 'moderate' : 'low',
+      modelSource: 'OneGrid unified model (HURDAT2 best-track / SPC outlook)',
+      updatedAtIso: e.updated_at || new Date().toISOString(),
+      expectedLandfall: '',
+      // unified-model extras (harmless to consumers that ignore them)
+      hazardKind: e.hazard_kind,
+      region: e.region,
+      history,
+      forecast,
+    };
+  });
+}
+
+export function weatherEvents() {
+  return cached('weatherEvents', 30_000, async () => {
+    const [events, fc] = await qBatch(['EVALUATE dim_weather_event', 'EVALUATE WeatherForecast']);
+    return buildEvents(events, fc);
+  });
+}
+
+export async function weatherEvent(id) {
+  const events = await weatherEvents();
+  return events.find((e) => e.id === id) || null;
+}
+
+function riskFactors(r) {
+  const f = [];
+  const threat = r.primary_threat, dist = num(r.distance_mi), wind = num(r.forecast_wind_mph), rain = num(r.rainfall_in);
+  if (threat && threat !== 'monitoring only') f.push({ label: 'Primary threat', detail: String(threat), points: num(r.score) || 0 });
+  if (wind != null) f.push({ label: 'Forecast wind', detail: `${wind} mph sustained`, points: 0 });
+  if (rain != null && rain >= 1) f.push({ label: 'Rainfall', detail: `${rain} in`, points: 0 });
+  if (dist != null) f.push({ label: 'Distance to threat', detail: `${dist} mi`, points: 0 });
+  if (bool(r.inside_threat_area)) f.push({ label: 'Inside threat area', detail: 'Within forecast cone / outlook polygon', points: 0 });
+  return f;
+}
+const RECS_BY_LEVEL = {
+  critical: ['Evacuate non-essential personnel', 'Secure and shut in production', 'Activate incident command'],
+  high: ['Prepare for down-manning', 'Secure loose equipment', 'Confirm evacuation logistics'],
+  elevated: ['Increase monitoring cadence', 'Stage response resources', 'Brief crews on the outlook'],
+  monitor: ['Monitor forecast updates', 'Verify contingency readiness'],
+  normal: [],
+};
+
+// AssetRisk[] from fact_asset_exposure. Exposure has no event_id, so eventId is
+// resolved from hazard_kind (preferring an active event of that hazard).
+export function exposure() {
+  return cached('exposure', 30_000, async () => {
+    const [exp, events] = await qBatch(['EVALUATE fact_asset_exposure', 'EVALUATE dim_weather_event']);
+    const hazToEvent = {};
+    for (const e of events) {
+      if (!e.hazard_kind) continue;
+      if (!hazToEvent[e.hazard_kind] || e.status === 'active') hazToEvent[e.hazard_kind] = e.event_id;
+    }
+    return exp.map((r) => ({
+      assetId: r.asset_id,
+      score: num(r.score),
+      level: r.level,
+      eventId: hazToEvent[r.hazard_kind] || null,
+      distanceMi: num(r.distance_mi),
+      forecastWindMph: num(r.forecast_wind_mph),
+      rainfallIn: num(r.rainfall_in),
+      hoursToImpact: num(r.hours_to_impact),
+      tsWindEtaH: null,
+      hurWindEtaH: null,
+      evacWindowH: null,
+      insideCone: bool(r.inside_threat_area),
+      factors: riskFactors(r),
+      recommendations: RECS_BY_LEVEL[r.level] || [],
+      // unified-model extras
+      siteId: r.site_id,
+      hazardKind: r.hazard_kind,
+      cycleId: r.cycle_id,
+      primaryThreat: r.primary_threat,
+    }));
+  });
+}
+
+// og posture is site-grain (level 0–4, POB, owner). Gates/production_status
+// aren't stored, so we derive a production status from the level and default the
+// decision gates. Keyed by site (assetId=site_id) to match the current weather UI.
+const POSTURE_PROD = { 0: 'producing', 1: 'producing', 2: 'reduced', 3: 'reduced', 4: 'shut_in' };
+const GATE_IDS = ['T-120', 'T-96', 'T-72', 'T-48', 'T-24'];
+
+export function posture() {
+  return cached('weatherPosture', 30_000, async () => {
+    const [post, sites] = await qBatch(['EVALUATE fact_posture', 'EVALUATE dim_site']);
+    const siteById = Object.fromEntries(sites.map((s) => [s.site_id, s]));
+    return post.map((r) => {
+      const lvl = num(r.posture_level) ?? 0;
+      const gates = {};
+      for (const g of GATE_IDS) gates[g] = lvl >= 1 ? 'not_started' : 'not_required';
+      const s = siteById[r.site_id] || {};
+      const pobNormal = num(r.pob_normal);
+      return {
+        assetId: r.site_id,
+        siteId: r.site_id,
+        siteName: s.site_name || r.site_id,
+        level: lvl,
+        gates,
+        productionStatus: POSTURE_PROD[lvl] || 'producing',
+        pobCurrent: num(r.pob_current),
+        pobNormal: pobNormal,
+        decisionOwner: r.decision_owner || '',
+        nextGate: null,
+        nextGateDueHours: null,
+        lastDecision: null,
+      };
+    });
+  });
+}
+
+// og site_type -> webapp AssetType. power_plant has no current enum member; it is
+// passed through and the true site_type is always in metadata (UI enum extended in §4.3).
+const SITE_TYPE_TO_ASSET = {
+  offshore_platform: 'offshore_platform', well: 'well', pipeline: 'pipeline',
+  refinery: 'refinery', port: 'port', lng: 'lng_terminal', terminal: 'storage',
+  power_plant: 'power_plant',
+};
+
+// Asset[] = dim_asset ⋈ dim_site, so each equipment leaf carries its site's
+// coordinates/operator/region. This is the unified geo feed for the map.
+export function assetsGeo() {
+  return cached('assetsGeo', 60_000, async () => {
+    const [assets, sites] = await qBatch(['EVALUATE dim_asset', 'EVALUATE dim_site']);
+    const siteById = Object.fromEntries(sites.map((s) => [s.site_id, s]));
+    return assets.map((a) => {
+      const s = siteById[a.site_id] || {};
+      return {
+        id: a.asset_id,
+        name: a.asset_display_name || a.asset_id,
+        type: SITE_TYPE_TO_ASSET[s.site_type] || s.site_type || 'storage',
+        lat: num(s.lat),
+        lon: num(s.lon),
+        operator: s.operator || '',
+        region: s.region || '',
+        businessUnit: s.business_unit || '',
+        status: 'producing',
+        criticality: s.criticality || 'standard',
+        metadata: {
+          siteId: a.site_id,
+          siteName: s.site_name || '',
+          siteType: s.site_type || '',
+          unitId: a.unit_id || '',
+          equipmentCategory: a.equipment_category || '',
+          equipmentGroup: a.equipment_group || '',
+          runningTag: a.running_tag || '',
+        },
+      };
+    });
+  });
+}

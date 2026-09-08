@@ -87,6 +87,15 @@ async function handleApi(req, res, url) {
       return json(res, 404, { error: 'unknown governance endpoint' });
     }
     if (p === '/api/realtime-pulse') return json(res, 200, await api.realtimePulse());
+    // ── Unified weather / exposure / posture / geo (Domain B, og.* model) ───
+    if (p === '/api/weather/events') return json(res, 200, await api.weatherEvents());
+    if (p.startsWith('/api/weather/event/')) {
+      const ev = await api.weatherEvent(decodeURIComponent(p.slice('/api/weather/event/'.length)));
+      return ev ? json(res, 200, ev) : json(res, 404, { error: 'weather event not found' });
+    }
+    if (p === '/api/exposure') return json(res, 200, await api.exposure());
+    if (p === '/api/posture') return json(res, 200, await api.posture());
+    if (p === '/api/assets-geo') return json(res, 200, await api.assetsGeo());
     if (p.startsWith('/api/asset/')) return json(res, 200, await api.assetDetail(decodeURIComponent(p.split('/api/asset/')[1])));
     if (p === '/api/tag-values') {
       const tags = (url.searchParams.get('tags') || '').split(',').map((s) => s.trim()).filter(Boolean);
