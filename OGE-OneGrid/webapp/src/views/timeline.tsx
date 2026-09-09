@@ -162,17 +162,19 @@ export function TimelinePage() {
                 <button
                   key={s.hour}
                   onClick={() => setHour(s.hour)}
-                  className="group flex flex-1 flex-col items-center justify-end gap-1"
+                  className="group flex h-full flex-1 flex-col justify-end gap-1"
                   title={`+${s.hour} h — ${s.exposed} exposed`}
                 >
-                  <div
-                    className="w-full rounded-t-sm transition-opacity"
-                    style={{
-                      height: `${(s.exposed / maxExposed) * 100}%`,
-                      backgroundColor: riskColorVar(s.critical > 0 ? "critical" : "elevated"),
-                      opacity: s.hour <= hour ? 1 : 0.28,
-                    }}
-                  />
+                  <div className="flex w-full flex-1 items-end">
+                    <div
+                      className="w-full rounded-t-sm transition-opacity"
+                      style={{
+                        height: `${(s.exposed / maxExposed) * 100}%`,
+                        backgroundColor: riskColorVar(s.critical > 0 ? "critical" : "elevated"),
+                        opacity: s.hour <= hour ? 1 : 0.28,
+                      }}
+                    />
+                  </div>
                   <span className="num text-[9px] text-muted-foreground">
                     {s.hour % 24 === 0 ? s.hour : ""}
                   </span>
