@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 
 import { conePolygon, destination, quadrantPolygon } from "../../lib/map/geojson";
+import { POSTFX_ENABLED } from "../../lib/postfx.js";
 import { NATION, STATES } from "../../report/three/usaGeo.js";
 import { WORLD } from "../../report/three/worldGeo.js";
 
@@ -1392,9 +1393,11 @@ function GlobeScene({ storms, hour, onEnter, accent = "#3f96ff" }) {
         maxDistance={340}
         maxPolarAngle={Math.PI / 2.05}
       />
-      <EffectComposer disableNormalPass>
-        <Bloom mipmapBlur intensity={0.55} luminanceThreshold={0.0} luminanceSmoothing={0.2} />
-      </EffectComposer>
+      {POSTFX_ENABLED && (
+        <EffectComposer disableNormalPass>
+          <Bloom mipmapBlur intensity={0.55} luminanceThreshold={0.0} luminanceSmoothing={0.2} />
+        </EffectComposer>
+      )}
     </>
   );
 }
@@ -1554,10 +1557,12 @@ function Scene({
           </button>
         </Html>
       )}
-      <EffectComposer disableNormalPass>
-        <Bloom mipmapBlur intensity={0.7} luminanceThreshold={0.42} luminanceSmoothing={0.28} />
-        <Vignette eskil={false} offset={0.22} darkness={0.5} />
-      </EffectComposer>
+      {POSTFX_ENABLED && (
+        <EffectComposer disableNormalPass>
+          <Bloom mipmapBlur intensity={0.7} luminanceThreshold={0.42} luminanceSmoothing={0.28} />
+          <Vignette eskil={false} offset={0.22} darkness={0.5} />
+        </EffectComposer>
+      )}
     </>
   );
 }

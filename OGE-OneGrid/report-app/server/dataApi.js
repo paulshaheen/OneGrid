@@ -19,6 +19,12 @@ async function cached(key, ttlMs, fn) {
 const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 const T = () => resolveTarget();
 
+// The unified Eventhouse (OneGridEH) carries real telemetry for EVERY asset/tag, so we
+// query each requested tag directly. The legacy single-site twin historian only had
+// Riverton (RV*) real and mirrored the 8 clone sites off it — that path is opt-in via
+// PI_MIRROR_CLONES=1 and is off by default for the unified model.
+const MIRROR_CLONES = process.env.PI_MIRROR_CLONES === '1';
+
 // Reject a slow probe so /api/status stays snappy even if a paused endpoint hangs.
 function withTimeout(promise, ms, label = 'probe timeout') {
   return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(label)), ms))]);
@@ -106,7 +112,14 @@ export async function submitFeedback(fb) {
   const csvCols = ['feedback_id', 'ts', 'feedback_user', 'persona', 'item_type', 'vote', 'asset_id', 'plant', 'unit', 'tag', 'item_ref', 'comment', 'context', 'source'];
   const field = (v) => { const s = String(v ?? ''); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const line = csvCols.map((c) => field(row[c])).join(',');
-  await kqMgmt(`.ingest inline into table MLFeedback with (format="csv") <|\n${line}`);
+  // Fail-soft: the unified Eventhouse (OneGridEH) may not carry an MLFeedback table.
+  // Swallow ingest errors so a thumbs up/down never 500s the request.
+  try {
+    await kqMgmt(`.ingest inline into table MLFeedback with (format="csv") <|\n${line}`);
+  } catch (e) {
+    console.warn('[feedback] ingest skipped:', String((e && e.message) || e).slice(0, 160));
+    return { ok: true, feedback_id: row.feedback_id, persisted: false };
+  }
   return { ok: true, feedback_id: row.feedback_id };
 }
 
@@ -230,19 +243,23 @@ export async function assetDetail(assetId) {
   return cached('assetDetail:' + id, 45_000, () => assetDetailUncached(id));
 }
 async function assetDetailUncached(id) {
-  const [asset, rc, wl, an, ps, pl] = await qBatch([
+  const [asset, rc, wl, an, ps, pl, dt] = await qBatch([
     `EVALUATE FILTER(dim_asset, dim_asset[asset_id] = "${id}")`,
     `EVALUATE FILTER(root_cause, root_cause[asset_id] = "${id}")`,
     `EVALUATE TOPN(60, FILTER(watchlist, watchlist[asset_id] = "${id}"), watchlist[risk_contribution], DESC)`,
     `EVALUATE TOPN(60, FILTER(anomaly_advisories, anomaly_advisories[asset_id] = "${id}"), anomaly_advisories[peak_abs_z], DESC)`,
     `EVALUATE FILTER(predictions_shortterm, predictions_shortterm[asset_id] = "${id}")`,
     `EVALUATE FILTER(predictions_longterm, predictions_longterm[asset_id] = "${id}")`,
+    `EVALUATE FILTER(dim_tag, dim_tag[asset_id] = "${id}")`,
   ]);
-  // The asset's real PI tags come from watchlist (tag_name + descriptor + units) + anomalies.
+  // The asset's PI tags: flagged sources first (watchlist/root-cause/anomaly set the role),
+  // then EVERY tag the asset actually has from dim_tag — so all parts (front/gen bearing,
+  // rotor/speed, …) show a reading even when they aren't currently flagged.
   const tagMap = new Map();
   for (const r of wl) if (r.tag_name && !tagMap.has(r.tag_name)) tagMap.set(r.tag_name, { tag: r.tag_name, desc: r.descriptor || r.tag_name, units: r.engineering_units || '', role: 'watch' });
   for (const r of rc) if (r.tag && !tagMap.has(r.tag)) tagMap.set(r.tag, { tag: r.tag, desc: r.descriptor || r.tag, units: '', role: 'root cause' });
   for (const r of an) if (r.Tag && !tagMap.has(r.Tag)) tagMap.set(r.Tag, { tag: r.Tag, desc: r.Tag, units: '', role: 'anomaly' });
+  for (const r of dt) if (r.tag && !tagMap.has(r.tag)) tagMap.set(r.tag, { tag: r.tag, desc: r.descriptor || r.tag, units: r.engineering_units || '', role: r.role || 'sensor' });
   const tags = [...tagMap.values()];
   // Clone sites have no ML data of their own — mirror the Riverton counterpart's tag
   // schema (prefix-swapped) so their 3D model still shows live sensor readings.
@@ -392,7 +409,7 @@ export function outages() {
     const rows = await kq(`PCIOutages
       | extend isActive = (outage_status == "Active") or (isnull(end_date) and begin_date <= now())
       | project outage_id, plant, unit_name, event_type, outage_status, priority, mw, reason, begin_date, end_date, isActive
-      | order by isActive desc, mw desc`);
+      | order by isActive desc, mw desc`).catch(() => []); // fail-soft: OneGridEH may lack PCIOutages
     const map = rows.map((r) => ({
       outage_id: r.outage_id, plant: r.plant, unit: r.unit_name, type: r.event_type, status: r.outage_status,
       priority: r.priority, derate_mw: num(r.mw), reason: r.reason, begin: r.begin_date, end: r.end_date,
@@ -596,11 +613,11 @@ function sourceTagOf(tag) {
 
 async function tagValuesReal(tags, sinceMinutes) {
   const list = tags.slice(0, 400).map((t) => `"${String(t).replace(/"/g, '')}"`).join(',');
-  const timeFilter = sinceMinutes ? `| where Ts > ago(${sinceMinutes}m)` : '';
-  const query = `PiEvents ${timeFilter} | where Tag in (${list}) | summarize arg_max(Ts, Value, ValueType, Plant) by Tag | project Tag, Ts, val=todouble(Value), ValueType, Plant`;
+  const timeFilter = sinceMinutes ? `| where Timestamp > ago(${sinceMinutes}m)` : '';
+  const query = `PiEvents ${timeFilter} | where Tag in (${list}) | summarize arg_max(Timestamp, Value, AssetId) by Tag | project Tag, Ts=Timestamp, val=todouble(Value), AssetId`;
   const run = async () => {
     const rows = await kq(query);
-    return rows.map((r) => ({ tag: r.Tag, ts: r.Ts, value: num(r.val), valueType: r.ValueType, plant: r.Plant }));
+    return rows.map((r) => ({ tag: r.Tag, ts: r.Ts, value: num(r.val), valueType: null, plant: r.AssetId }));
   };
   if (sinceMinutes) return run();
   return cached('tagValues:' + list.length + ':' + hashStr(list), 20_000, run);
@@ -609,6 +626,7 @@ async function tagValuesReal(tags, sinceMinutes) {
 export async function tagValues(tags, sinceMinutes) {
   if (!tags || !tags.length) return [];
   if (!T().kustoUri) return []; // no Eventhouse configured (e.g. unified model has no live historian) — degrade
+  if (!MIRROR_CLONES) return tagValuesReal(tags, sinceMinutes); // unified: every tag is real
   const real = [], mirror = new Map(); // cloneTag -> {src, prefix}
   for (const t of tags) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
   const results = [];
@@ -632,15 +650,16 @@ function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 3
 // Returns { tag: { value, mean, sd, min, max, valueType } }.
 async function tagStatsReal(tags) {
   const list = tags.slice(0, 400).map((t) => `"${String(t).replace(/"/g, '')}"`).join(',');
-  const query = `PiEvents | where Ts > ago(6h) | where Tag in (${list}) | extend v=todouble(Value)
-    | summarize (lastTs, lastVal)=arg_max(Ts, v), avg=avg(v), sd=stdev(v), mn=min(v), mx=max(v), vt=any(ValueType) by Tag
-    | project Tag, lastVal, avg, sd, mn, mx, vt`;
+  const query = `let anchor = toscalar(PiEvents | summarize max(Timestamp));
+    PiEvents | where Timestamp > anchor - 6h | where Tag in (${list}) | extend v=todouble(Value)
+    | summarize (lastTs, lastVal)=arg_max(Timestamp, v), avg=avg(v), sd=stdev(v), mn=min(v), mx=max(v) by Tag
+    | project Tag, lastVal, avg, sd, mn, mx`;
   const rows = await kq(query).catch(() => []);
   const out = {};
   for (const r of rows) {
     const v = num(r.lastVal);
     if (v === null) continue;
-    out[r.Tag] = { value: v, mean: num(r.avg) ?? v, sd: num(r.sd) ?? 0, min: num(r.mn) ?? v, max: num(r.mx) ?? v, valueType: r.vt };
+    out[r.Tag] = { value: v, mean: num(r.avg) ?? v, sd: num(r.sd) ?? 0, min: num(r.mn) ?? v, max: num(r.mx) ?? v, valueType: null };
   }
   return out;
 }
@@ -648,6 +667,7 @@ async function tagStatsReal(tags) {
 export async function tagStats(tags) {
   if (!tags || !tags.length) return {};
   if (!T().kustoUri) return {}; // no Eventhouse configured — degrade to no live stats
+  if (!MIRROR_CLONES) return tagStatsReal(tags); // unified: every tag is real
   const real = [], mirror = new Map();
   for (const t of tags) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
   const out = {};
@@ -670,8 +690,8 @@ export async function tagStats(tags) {
 export function realtimePulse() {
   return cached('rtpulse', 5_000, async () => {
     if (!T().kustoUri) return { lastTs: null, live: false, totalTags: 0, plants: 0, events5m: 0, liveTags: 0, eventsPerMin: 0 };
-    const rows = await kq('PiEvents | summarize lastTs=max(Ts), totalTags=dcount(Tag), plants=dcount(Plant)');
-    const recent = await kq('PiEvents | where Ts > ago(5m) | summarize c=count(), tags=dcount(Tag)');
+    const rows = await kq('PiEvents | summarize lastTs=max(Timestamp), totalTags=dcount(Tag), plants=dcount(tostring(split(AssetId, "_")[0]))');
+    const recent = await kq('PiEvents | where Timestamp > ago(5m) | summarize c=count(), tags=dcount(Tag)');
     const r = rows[0] || {}, rc = recent[0] || {};
     const lastTs = r.lastTs ? new Date(r.lastTs).getTime() : null;
     const live = lastTs !== null && Date.now() - lastTs < 5 * 60_000;
@@ -686,7 +706,8 @@ export function realtimePulse() {
 export async function tagTrend(tag, hours = 24, bin = 15) {
   if (!T().kustoUri) return []; // no Eventhouse configured — no trend series
   const t = String(tag).replace(/"/g, '');
-  const query = `PiEvents | where Ts > ago(${hours}h) | where Tag == "${t}" | summarize v=avg(todouble(Value)) by bin(Ts, ${bin}m) | order by Ts asc | project Ts, v`;
+  const query = `let anchor = toscalar(PiEvents | summarize max(Timestamp));
+    PiEvents | where Timestamp > anchor - ${hours}h | where Tag == "${t}" | summarize v=avg(todouble(Value)) by bin(Timestamp, ${bin}m) | order by Timestamp asc | project Ts=Timestamp, v`;
   const rows = await kq(query);
   return rows.map((r) => ({ ts: r.Ts, v: num(r.v) }));
 }
@@ -901,5 +922,34 @@ export function assetsGeo() {
         },
       };
     });
+  });
+}
+
+// Site[] = dim_site as facility-grained Asset[] (one row per site, not per equipment).
+// This is the WEATHER map/exposure grain: the same 15 named facilities the Digital Twin
+// shows (Riverton, Fairview, Thunder Horse…) at their real US coordinates — so weather and
+// twin mirror one estate. Exposure/posture roll up to the site; the twin drills site→unit→
+// equipment separately via /api/facility-model.
+export function sitesGeo() {
+  return cached('sitesGeo', 60_000, async () => {
+    const sites = await q('EVALUATE dim_site');
+    return sites.map((s) => ({
+      id: s.site_id,
+      name: s.site_name || s.site_id,
+      type: SITE_TYPE_TO_ASSET[s.site_type] || s.site_type || 'storage',
+      lat: num(s.lat),
+      lon: num(s.lon),
+      operator: s.operator || '',
+      region: s.region || '',
+      businessUnit: s.business_unit || '',
+      status: 'producing',
+      criticality: s.criticality || 'standard',
+      metadata: {
+        siteId: s.site_id,
+        siteName: s.site_name || '',
+        siteType: s.site_type || '',
+        region: s.region || '',
+      },
+    }));
   });
 }

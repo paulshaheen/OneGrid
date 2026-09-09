@@ -15,6 +15,7 @@ import {
   Network,
   PanelLeftClose,
   PanelLeftOpen,
+  PauseCircle,
   ServerCog,
   Settings,
   ShieldAlert,
@@ -24,12 +25,42 @@ import {
   UserCog,
   Wind,
   Wrench,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { CopilotDock } from "@/components/ops/CopilotDock";
+import { useCapacityStatus } from "@/report/lib/api.js";
+
+// Amber strip shown app-wide when the Fabric capacity backing this deployment is paused
+// (auto-paused outside operating hours). The backend flags it on /api/status; live data
+// resumes automatically when the capacity restarts. Dismissible for the session.
+function CapacityBanner({ message }: { message?: string }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div
+      role="status"
+      className="flex items-start gap-2.5 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[12.5px] text-amber-200"
+    >
+      <PauseCircle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+      <p className="flex-1 leading-snug">
+        <span className="font-semibold">Live data paused.</span>{" "}
+        {message ||
+          "The Fabric capacity backing this deployment is paused. Live readings resume automatically during operating hours."}
+      </p>
+      <button
+        onClick={() => setDismissed(true)}
+        className="shrink-0 rounded p-0.5 text-amber-300/80 transition-colors hover:bg-amber-500/20 hover:text-amber-100"
+        aria-label="Dismiss"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
 
 // ---- Unified OneGrid IA. App A areas (Digital Twin, Ontology, Governance) are
 // `soon` placeholders until they're ported from the report-app in P1/P3. ----
@@ -154,6 +185,7 @@ export function AppShell({
   const { dark, set: setDark } = useTheme();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
+  const cap = useCapacityStatus();
   const [profileOpen, setProfileOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -417,6 +449,8 @@ export function AppShell({
             </div>
           </div>
         </header>
+
+        {cap.capacityPaused && <CapacityBanner message={cap.message} />}
 
         <main className={cn("min-w-0 flex-1", fullHeight && "xl:min-h-0 xl:overflow-hidden")}>
           {children}

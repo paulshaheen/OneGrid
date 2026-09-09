@@ -8,7 +8,7 @@ import { AssetDetailPanel } from "@/components/ops/AssetDetailPanel";
 import { OpsMap } from "@/components/ops/OpsMap";
 import { useOpsBase } from "@/components/ops/ops-nav";
 import { useOpsSnapshot } from "@/lib/hooks/use-ops-data";
-import { ASSET_TYPE_LABEL, RISK_LABEL } from "@/lib/format";
+import { RISK_LABEL } from "@/lib/format";
 import type { Asset, AssetRisk, RiskLevel } from "@/lib/domain/types";
 import { MODES } from "@/report/lib/themes.js";
 
@@ -146,12 +146,15 @@ export function AssetExplorerPage() {
   }, []);
 
   const tree = useMemo<Node[]>(() => {
-    // infrastructure grouped by type
-    const byType: Record<string, Asset[]> = {};
-    for (const a of assets) (byType[a.type] ||= []).push(a);
-    const infraGroups: Node[] = Object.entries(byType)
+    // Weather "infrastructure" = FACILITIES (dim_site), grouped by region → facility, so it
+    // mirrors the Digital Twin's estate (same named sites, real US locations).
+    const regionLabel = (r: string) =>
+      (r || "other").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const byRegion: Record<string, Asset[]> = {};
+    for (const a of assets) (byRegion[a.region || "other"] ||= []).push(a);
+    const infraGroups: Node[] = Object.entries(byRegion)
       .sort((a, b) => b[1].length - a[1].length)
-      .map(([type, list]) => {
+      .map(([region, list]) => {
         const leaves: Node[] = list
           .map((a) => {
             const risk = riskMap.get(a.id);
@@ -170,9 +173,9 @@ export function AssetExplorerPage() {
           .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
         const r = rollup(leaves);
         return {
-          id: `infra:${type}`,
+          id: `infra:${region}`,
           kind: "group" as const,
-          label: ASSET_TYPE_LABEL[type as Asset["type"]],
+          label: regionLabel(region),
           domain: "infrastructure" as const,
           children: leaves,
           ...r,

@@ -105,8 +105,48 @@ export function useApi(path, { pollMs = 0, deps = [] } = {}) {
   return { data, error, loading };
 }
 
-export function useCapacityStatus() {
-  return { ok: true, capacityPaused: false };
+export function useCapacityStatus({ pollMs = 45000 } = {}) {
+  const [status, setStatus] = useState({ ok: true, capacityPaused: false, message: undefined });
+  useEffect(() => {
+    // Preview override: /any-page?cap=paused forces the banner so it can be demoed without
+    // actually pausing the Fabric capacity.
+    try {
+      if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cap") === "paused") {
+        setStatus({
+          ok: false,
+          capacityPaused: true,
+          message:
+            "Live data is available during operating hours, 8 AM–9 PM EST daily. The capacity is currently paused; readings resume automatically when it restarts.",
+        });
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    // Only meaningful against the live report backend; the sample provider never pauses.
+    if (!backendEnabled()) {
+      setStatus({ ok: true, capacityPaused: false, message: undefined });
+      return;
+    }
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/status", { headers: { Accept: "application/json" } });
+        const d = await res.json().catch(() => ({}));
+        if (alive) setStatus({ ok: !!d.ok, capacityPaused: !!d.capacityPaused, message: d.message });
+      } catch {
+        // A network failure isn't a paused capacity — don't cry wolf with the paused banner.
+        if (alive) setStatus({ ok: false, capacityPaused: false, message: undefined });
+      }
+    };
+    load();
+    const t = setInterval(load, pollMs);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [pollMs]);
+  return status;
 }
 
 // Realtime: subscribe to a set of tags, receive live values + fleet pulse from the

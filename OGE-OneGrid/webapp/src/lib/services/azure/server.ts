@@ -739,12 +739,13 @@ function parseGeoJsonAssets(text: string): Asset[] {
  */
 export const listUploadedAssets = createServerFn({ method: "GET" }).handler(
   async (): Promise<Asset[]> => {
-    // Unified model: when the report-app /api data plane is wired, assets come
-    // from the conformed dim_asset ⋈ dim_site (every equipment leaf inherits its
-    // site's coordinates), instead of an operator-uploaded CSV/GeoJSON.
+    // Unified model: when the report-app /api data plane is wired, weather assets are the
+    // FACILITIES (dim_site) — the same named sites the Digital Twin shows (Riverton,
+    // Fairview, Thunder Horse…) at their real coordinates — not the per-equipment leaves.
+    // Exposure/posture roll up to the site; the twin drills site→unit→equipment separately.
     if (process.env["REPORT_API_ENABLED"] === "1") {
       try {
-        const res = await fetch(`${reportApiBase()}/api/assets-geo`, { headers: { Accept: "application/json" } });
+        const res = await fetch(`${reportApiBase()}/api/sites-geo`, { headers: { Accept: "application/json" } });
         if (!res.ok) return [];
         const payload = (await res.json()) as unknown;
         return Array.isArray(payload) ? payload.filter(isAssetLike) : [];

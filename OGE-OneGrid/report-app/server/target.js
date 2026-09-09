@@ -21,7 +21,7 @@ export function resolveTarget() {
     workspaceId: process.env.PBI_WORKSPACE || '',
     datasetId: process.env.PBI_DATASET || '',
     kustoUri: process.env.KUSTO_CLUSTER || '',
-    kqlDatabase: process.env.KUSTO_DATABASE || 'pi-realtime-db',
+    kqlDatabase: process.env.KUSTO_DATABASE || '',
   };
 
   // From the repo's last-deploy-state.json (written at the end of a deploy).
@@ -47,6 +47,10 @@ export function resolveTarget() {
     t.kustoUri ||= local.kustoUri || '';
     t.kqlDatabase ||= local.kqlDatabase || t.kqlDatabase;
   } catch {}
+
+  // Final fallback for the KQL database name (applied last so env > config.json >
+  // target.local.json all take precedence over this legacy default).
+  t.kqlDatabase ||= 'pi-realtime-db';
 
   return t;
 }

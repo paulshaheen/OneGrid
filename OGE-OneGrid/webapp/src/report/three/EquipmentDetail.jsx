@@ -6,6 +6,7 @@ import { EffectComposer, Bloom, N8AO } from '@react-three/postprocessing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { EquipmentGeometry, anchorsFor, equipmentType, viewFor } from './Equipment.jsx';
 import { statusOf, fmt } from '../lib/format.js';
+import { POSTFX_ENABLED } from '../../lib/postfx.js';
 import { getJson } from '../lib/api.js';
 
 class SafeB extends Component { constructor(p){super(p);this.state={f:false};} static getDerivedStateFromError(){return {f:true};} componentDidCatch(){} render(){return this.state.f?null:this.props.children;} }
@@ -94,15 +95,24 @@ function matchAnchor(anchors, text) {
 function buildAnchors(type, tags = [], anomalies = [], rootCause = []) {
   const anchors = anchorsFor(type);
   const pool = [...tags]; const used = new Set();
-  const pickTag = (hint) => {
+  // Find the first unused pool tag whose descriptor/name matches any of the hint words.
+  const hintMatch = (hint) => {
     const words = (hint || '').split('|').filter(Boolean);
-    let idx = -1;
-    for (let i = 0; i < pool.length; i++) { if (used.has(i)) continue; const hay = `${pool[i].desc || ''} ${pool[i].tag || ''}`.toLowerCase(); if (words.some((w) => hay.includes(w))) { idx = i; break; } }
-    if (idx < 0) for (let i = 0; i < pool.length; i++) if (!used.has(i)) { idx = i; break; }
-    if (idx >= 0) { used.add(idx); return pool[idx]; }
-    return null;
+    for (let i = 0; i < pool.length; i++) {
+      if (used.has(i)) continue;
+      const hay = `${pool[i].desc || ''} ${pool[i].tag || ''}`.toLowerCase();
+      if (words.some((w) => hay.includes(w))) return i;
+    }
+    return -1;
   };
-  const en = anchors.map((a) => ({ ...a, tag: pickTag(a.hint), level: 'ok', root: null, anoms: [] }));
+  const firstFree = () => { for (let i = 0; i < pool.length; i++) if (!used.has(i)) return i; return -1; };
+  // Two-pass assignment so meaningful sensors (bearing, speed, …) claim their matching
+  // tag before structural anchors (casings) grab it by fallback. Otherwise, when there
+  // are fewer tags than anchors, the earlier-listed structural anchors starve the named
+  // reading anchors (Front Bearing / Gen Bearing / Rotor) and they render with no value.
+  const en = anchors.map((a) => ({ ...a, tag: null, level: 'ok', root: null, anoms: [] }));
+  for (const e of en) { const idx = hintMatch(e.hint); if (idx >= 0) { used.add(idx); e.tag = pool[idx]; } } // pass 1: hint matches
+  for (const e of en) { if (e.tag) continue; const idx = firstFree(); if (idx >= 0) { used.add(idx); e.tag = pool[idx]; } } // pass 2: leftovers
   const byId = Object.fromEntries(en.map((a) => [a.id, a]));
   for (const rc of rootCause) {
     const a = matchAnchor(en, `${rc.descriptor || ''} ${rc.tag || ''} ${rc.failure_mechanism || ''} ${rc.contributing_tag_names || ''}`) || en[0];
@@ -242,10 +252,12 @@ export function EquipmentDetail({ asset, theme, snapshot = {}, anomalies = [], r
         <ContactShadows position={[0, 0.02, 0]} opacity={0.7} scale={30} blur={2.6} far={16} color={'#020509'} />
         <OrbitControls target={view.target} enablePan={false} minDistance={view.minD} maxDistance={view.maxD}
           maxPolarAngle={Math.PI / 2.05} enableDamping dampingFactor={0.08} />
-        <EffectComposer disableNormalPass>
-          <N8AO halfRes aoRadius={1.6} intensity={2.4} distanceFalloff={1.0} color="#05070c" />
-          <Bloom mipmapBlur intensity={0.5} luminanceThreshold={0.66} />
-        </EffectComposer>
+        {POSTFX_ENABLED && (
+          <EffectComposer disableNormalPass>
+            <N8AO halfRes aoRadius={1.6} intensity={2.4} distanceFalloff={1.0} color="#05070c" />
+            <Bloom mipmapBlur intensity={0.5} luminanceThreshold={0.66} />
+          </EffectComposer>
+        )}
       </Canvas>
 
       <div className="absolute top-3 left-3 flex items-center gap-3 px-3 py-1.5 rounded-lg text-[11px] font-medium"

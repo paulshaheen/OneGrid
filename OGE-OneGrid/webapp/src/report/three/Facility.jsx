@@ -5,6 +5,7 @@ import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { statusOf } from '../lib/format.js';
+import { POSTFX_ENABLED } from '../../lib/postfx.js';
 import { EquipmentGeometry, equipmentType } from './Equipment.jsx';
 import { NATION, STATES } from './usaGeo.js';
 import { WORLD } from './worldGeo.js';
@@ -531,6 +532,18 @@ function SceneMap({ plants, theme, hovered, onHover, onEnter }) {
   // North America == the original US facilities map; other continents show a bare outline.
   const showUS = !pc || pc.name === 'North America';
 
+  // Memoize the post FX so the parent's ~1/s re-render (live-pulse simulator) doesn't
+  // recreate the EffectComposer each tick — rebuilding its render targets caused a
+  // one-frame unprocessed (blue) flash of the whole scene.
+  const effects = useMemo(() => (
+    <EffectComposer disableNormalPass multisampling={0}>
+      {/* multisampling MUST be 0: the composer's MSAA-resolve-then-mipmap step flashes the
+          whole scene on the Adreno/ANGLE (Snapdragon) driver. threshold > 0 so the dark-blue
+          background isn't bloomed. */}
+      <Bloom mipmapBlur intensity={0.5} luminanceThreshold={0.2} luminanceSmoothing={0.15} />
+    </EffectComposer>
+  ), []);
+
   return (
     <>
       <color attach="background" args={['#02040a']} />
@@ -567,9 +580,7 @@ function SceneMap({ plants, theme, hovered, onHover, onEnter }) {
       )}
 
       <CameraRig mode="sites" />
-      <EffectComposer disableNormalPass>
-        <Bloom mipmapBlur intensity={0.5} luminanceThreshold={0.0} luminanceSmoothing={0.2} />
-      </EffectComposer>
+      {POSTFX_ENABLED ? effects : null}
     </>
   );
 }
@@ -742,6 +753,14 @@ function SceneInterior({ plant, theme, selected, onSelect, values }) {
   const moonTex = useMemo(() => makeMoonTexture(), []);
   const [hovered, setHovered] = useState(null);
   const focus = useMemo(() => rows.find((r) => r.id === selected)?.pos || null, [selected, rows]);
+  // Memoize post FX so the parent's ~1/s live-pulse re-render doesn't rebuild the
+  // EffectComposer each tick (which flashed the scene for one frame).
+  const effects = useMemo(() => (
+    <EffectComposer disableNormalPass>
+      <Bloom mipmapBlur intensity={0.95} luminanceThreshold={0.5} luminanceSmoothing={0.28} />
+      <Vignette eskil={false} offset={0.25} darkness={0.4} />
+    </EffectComposer>
+  ), []);
   return (
     <>
       <color attach="background" args={['#0a1120']} />
@@ -788,14 +807,15 @@ function SceneInterior({ plant, theme, selected, onSelect, values }) {
 
       <ContactShadows position={[0, 0.05, 0]} opacity={0.5} scale={220} blur={2.4} far={36} />
       <CameraRig mode="interior" focus={focus} />
-      <EffectComposer disableNormalPass>
-        <Bloom mipmapBlur intensity={0.95} luminanceThreshold={0.5} luminanceSmoothing={0.28} />
-        <Vignette eskil={false} offset={0.25} darkness={0.4} />
-      </EffectComposer>
+      {POSTFX_ENABLED ? effects : null}
     </>
   );
 }
 
+// Post-processing (bloom EffectComposer) is DISABLED by default via POSTFX_ENABLED
+// (see src/lib/postfx.js): on Snapdragon/Adreno (ANGLE→D3D) GPUs the composer's offscreen
+// HDR render target periodically hiccups and flashes the whole scene in bursts. The
+// holographic glow now comes from emissive/additive materials instead. ?fx=1 re-enables it.
 export function Facility({ model, theme, selected, onSelect, activePlant, onEnterPlant, values }) {
   const [hovered, setHovered] = useState(null);
   const plant = useMemo(() => (model?.plants || []).find((p) => p.name === activePlant) || null, [model, activePlant]);

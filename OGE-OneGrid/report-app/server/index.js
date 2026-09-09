@@ -96,6 +96,7 @@ async function handleApi(req, res, url) {
     if (p === '/api/exposure') return json(res, 200, await api.exposure());
     if (p === '/api/posture') return json(res, 200, await api.posture());
     if (p === '/api/assets-geo') return json(res, 200, await api.assetsGeo());
+    if (p === '/api/sites-geo') return json(res, 200, await api.sitesGeo());
     if (p.startsWith('/api/asset/')) return json(res, 200, await api.assetDetail(decodeURIComponent(p.split('/api/asset/')[1])));
     if (p === '/api/tag-values') {
       const tags = (url.searchParams.get('tags') || '').split(',').map((s) => s.trim()).filter(Boolean);
