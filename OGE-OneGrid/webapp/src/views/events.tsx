@@ -1,19 +1,49 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
 import { MapModeSwitch } from "@/components/ops/MapModeSwitch";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { useOpsBase } from "@/components/ops/ops-nav";
-import { useOpsSnapshot } from "@/lib/hooks/use-ops-data";
+import { useOpsSnapshot, eventsQuery } from "@/lib/hooks/use-ops-data";
+import { scoreAsset } from "@/lib/services/risk-engine";
 import { coords, relativeTime } from "@/lib/format";
+import type { WeatherEvent } from "@/lib/domain/types";
+
+/** Pill dot colour by storm severity. */
+function stormDot(e: WeatherEvent): string {
+  if (e.currentCategory >= 3) return "#ff5470";
+  if (e.currentCategory >= 1) return "#ff8c42";
+  return "#38bdf8";
+}
 
 export function EventsPage() {
   const base = useOpsBase();
-  const { assets, risks, riskMap, event } = useOpsSnapshot(base, 120);
+  const { assets } = useOpsSnapshot(base, 120);
+  const events = useQuery(eventsQuery(base)).data ?? [];
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [timelineOpen, setTimelineOpen] = useState(false);
+
+  // Storms ordered by significance (category, then wind) so the pills read
+  // strongest-first and the default selection is the most consequential system.
+  const ordered = useMemo(
+    () =>
+      [...events].sort(
+        (a, b) => b.currentCategory - a.currentCategory || b.currentWindMph - a.currentWindMph,
+      ),
+    [events],
+  );
+  const event = ordered.find((e) => e.id === selectedEventId) ?? ordered[0];
+
+  // Exposure is scored against the SELECTED storm (this is a per-storm briefing).
+  const risks = useMemo(
+    () => (event ? assets.map((a) => scoreAsset(a, event, 120)) : []),
+    [assets, event],
+  );
+  const riskMap = useMemo(() => new Map(risks.map((r) => [r.assetId, r])), [risks]);
 
   if (!event) {
     return (
@@ -57,6 +87,35 @@ export function EventsPage() {
       />
       <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-4">
+          {ordered.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="label-xs mr-1">Active systems</span>
+              {ordered.map((e) => {
+                const active = e.id === event.id;
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => setSelectedEventId(e.id)}
+                    aria-pressed={active}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      active
+                        ? "border-primary bg-primary/10 font-semibold text-foreground"
+                        : "text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <span
+                      className="size-2 rounded-full"
+                      style={{ backgroundColor: stormDot(e) }}
+                    />
+                    {e.name}
+                    <span className="text-[10px] text-muted-foreground">
+                      {e.currentCategory > 0 ? `Cat ${e.currentCategory}` : `${e.currentWindMph} mph`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="panel">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
               <div>
@@ -100,8 +159,8 @@ export function EventsPage() {
                 assets={assets}
                 risks={riskMap}
                 event={event}
+                events={events}
                 initialFocusEventId={event.id}
-                autoPlay
                 layers={{ assets: true, track: true, wind: true }}
                 selectedId={selected}
                 onSelect={setSelected}

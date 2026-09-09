@@ -1630,19 +1630,11 @@ export default function WeatherHoloScene({
   // once systems become available — but only once, so later user navigation
   // (entering a storm, returning to the globe) is preserved.
   const seeded = useRef(false);
+  // One-time opening view when there's no explicit focus event: globe drill-in,
+  // or (skipGlobe) straight to the terrain framed on the primary system.
   useEffect(() => {
-    if (seeded.current) return;
-    if (initialFocusEventId) {
-      const fs = storms.find((s) => s.id === initialFocusEventId);
-      if (!fs) return;
-      const p = interpolate(fs, 0);
-      setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
-      setLevel("map");
-      seeded.current = true;
-    } else if (skipGlobe && storms.length) {
-      // Live map: open directly on the terrain (so facility pins are visible)
-      // framed on the primary system (where exposed assets cluster), but keep
-      // the globe reachable via the button.
+    if (seeded.current || initialFocusEventId) return;
+    if (skipGlobe && storms.length) {
       const focus = (event && storms.find((s) => s.id === event.id)) || storms[0];
       const p = interpolate(focus, 0);
       setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
@@ -1652,7 +1644,20 @@ export default function WeatherHoloScene({
       setLevel("globe");
       seeded.current = true;
     }
-  }, [storms, initialFocusEventId, skipGlobe]);
+  }, [storms, initialFocusEventId, skipGlobe, event]);
+  // Reactive focus: fly the camera to the focused storm whenever the selection
+  // changes (e.g. the Weather Events pills). Frames on its current position and
+  // only re-frames when the focused id actually changes (not on a data refetch).
+  const framedFocus = useRef(null);
+  useEffect(() => {
+    if (!initialFocusEventId || framedFocus.current === initialFocusEventId) return;
+    const fs = storms.find((s) => s.id === initialFocusEventId);
+    if (!fs) return;
+    const p = interpolate(fs, 0);
+    setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
+    setLevel("map");
+    framedFocus.current = initialFocusEventId;
+  }, [initialFocusEventId, storms]);
   const allowGlobe = (skipGlobe || !initialFocusEventId) && storms.length > 0;
   return (
     <Canvas

@@ -16,7 +16,16 @@ const STOPS = [24, 48, 72, 120];
 export function TimelinePage() {
   const base = useOpsBase();
   const assets = useQuery(assetsQuery(base)).data ?? [];
-  const event = useQuery(eventsQuery(base)).data?.[0];
+  const events = useQuery(eventsQuery(base)).data ?? [];
+  // Frame + label off the most significant system, but score exposure across ALL
+  // of them so every storm on the map contributes to the exposure curve.
+  const event = useMemo(
+    () =>
+      [...events].sort(
+        (a, b) => b.currentCategory - a.currentCategory || b.currentWindMph - a.currentWindMph,
+      )[0],
+    [events],
+  );
   const [hour, setHour] = useState(48);
   const [playing, setPlaying] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -33,19 +42,33 @@ export function TimelinePage() {
     };
   }, [playing]);
 
+  // Highest-risk storm per asset (an asset is exposed if ANY active system threatens it).
   const risks = useMemo(() => {
-    if (!event) return [];
-    return assets.map((a) => scoreAsset(a, event, Math.max(6, hour)));
-  }, [assets, event, hour]);
+    if (!events.length) return [];
+    return assets.map((a) => {
+      let best = scoreAsset(a, events[0]!, Math.max(6, hour));
+      for (let i = 1; i < events.length; i++) {
+        const r = scoreAsset(a, events[i]!, Math.max(6, hour));
+        if (r.score > best.score) best = r;
+      }
+      return best;
+    });
+  }, [assets, events, hour]);
 
   const riskMap = useMemo(() => new Map(risks.map((r) => [r.assetId, r])), [risks]);
   const series = useMemo(() => {
-    if (!event) return [];
+    if (!events.length) return [];
+    const scoreAcross = (a: (typeof assets)[number], h: number) => {
+      let best = scoreAsset(a, events[0]!, Math.max(6, h));
+      for (let i = 1; i < events.length; i++) {
+        const r = scoreAsset(a, events[i]!, Math.max(6, h));
+        if (r.score > best.score) best = r;
+      }
+      return best;
+    };
     return Array.from({ length: 21 }, (_, i) => {
       const h = i * 6;
-      const scored = assets
-        .filter((a) => a.type !== "well")
-        .map((a) => scoreAsset(a, event, Math.max(6, h)));
+      const scored = assets.filter((a) => a.type !== "well").map((a) => scoreAcross(a, h));
       return {
         hour: h,
         exposed: scored.filter((r) => r.score >= 42 && (r.hoursToImpact ?? 999) <= h).length,
@@ -53,7 +76,7 @@ export function TimelinePage() {
           .length,
       };
     });
-  }, [assets, event]);
+  }, [assets, events]);
 
   const maxExposed = Math.max(1, ...series.map((s) => s.exposed));
   const topNow = [...risks]
@@ -107,6 +130,7 @@ export function TimelinePage() {
                 assets={assets}
                 risks={riskMap}
                 event={event}
+                events={events}
                 initialFocusEventId={event?.id}
                 hour={hour}
                 layers={{ assets: true, track: true, wind: true }}
