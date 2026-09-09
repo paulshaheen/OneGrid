@@ -9,10 +9,34 @@ import { US_STATES } from "./us-geo";
 // ── projection: lon/lat -> scene x/z (equirectangular, aspect-corrected) ───
 const CX = -95.5;
 const CY = 39.5;
-const S = 0.42;
-const ASPECT = 0.78; // cos(~39°) — compress longitude so the US isn't stretched
+const S = 0.46;
+const ASPECT = 0.78;
 function project(lon: number, lat: number): [number, number] {
   return [(lon - CX) * S * ASPECT, -(lat - CY) * S];
+}
+
+const RINGS_XZ: Array<Array<[number, number]>> = US_STATES.map((r) => r.map(([lo, la]) => project(lo, la)));
+function pointInRing(x: number, z: number, ring: Array<[number, number]>): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, zi] = ring[i];
+    const [xj, zj] = ring[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function insideUS(x: number, z: number): boolean {
+  for (const r of RINGS_XZ) if (pointInRing(x, z, r)) return true;
+  return false;
+}
+function mulberry32(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 export type MapSite = {
@@ -26,34 +50,31 @@ export type MapSite = {
   voltageKv?: number;
   tempF?: number;
 };
+type Node = { x: number; z: number; real?: MapSite; tower?: boolean };
 
 const LEVEL_COLOR: Record<string, string> = {
   critical: "#ff4d6d",
   high: "#ff8c42",
   elevated: "#f5b942",
   monitor: "#38bdf8",
-  normal: "#3ce6b0",
+  normal: "#39e6c0",
 };
-const colorFor = (lvl: string) => LEVEL_COLOR[lvl] ?? "#3ce6b0";
+const colorFor = (lvl: string) => LEVEL_COLOR[lvl] ?? "#39e6c0";
 
-// Soft radial sprite for glowing points (cities, storm cloud).
-function softSprite(inner: string, outer = "rgba(0,0,0,0)"): THREE.Texture {
+function softSprite(inner: string, mid = 0.4): THREE.Texture {
   const c = document.createElement("canvas");
   c.width = c.height = 64;
   const g = c.getContext("2d")!;
   const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
   grd.addColorStop(0, inner);
-  grd.addColorStop(0.4, inner);
-  grd.addColorStop(1, outer);
+  grd.addColorStop(mid, inner);
+  grd.addColorStop(1, "rgba(0,0,0,0)");
   g.fillStyle = grd;
   g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c);
   t.needsUpdate = true;
   return t;
 }
-
-// Disable bloom on Adreno/Snapdragon (known compositor flicker); glow still reads
-// via additive/emissive materials.
 function bloomSafe(): boolean {
   try {
     const cv = document.createElement("canvas");
@@ -66,140 +87,153 @@ function bloomSafe(): boolean {
   }
 }
 
-// ── state outlines (single merged additive line object) ────────────────────
+// soft radial glow disc (adds depth / "hovering platform" feel without bloom)
+function GlowDisc({ x = 0, z = 0, w, h, color, opacity, y = -0.02 }: { x?: number; z?: number; w: number; h: number; color: string; opacity: number; y?: number }) {
+  const tex = useMemo(() => softSprite(color, 0.05), [color]);
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x, y, z]}>
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={tex} transparent opacity={opacity} depthWrite={false} blending={THREE.AdditiveBlending} />
+    </mesh>
+  );
+}
+
+// ── filled US landmass (dark, reads as 3D terrain against space) ────────────
+function Landmass() {
+  const obj = useMemo(() => {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#0c2036"),
+      emissive: new THREE.Color("#0a1a30"),
+      emissiveIntensity: 0.6,
+      metalness: 0.15,
+      roughness: 0.92,
+      transparent: true,
+      opacity: 0.97,
+    });
+    const rim = new THREE.MeshBasicMaterial({ color: new THREE.Color("#123a63"), transparent: true, opacity: 0.3 });
+    for (const ring of RINGS_XZ) {
+      const shape = new THREE.Shape(ring.map(([x, z]) => new THREE.Vector2(x, -z)));
+      const geo = new THREE.ShapeGeometry(shape);
+      geo.rotateX(-Math.PI / 2);
+      group.add(new THREE.Mesh(geo, mat));
+      const g2 = new THREE.ShapeGeometry(shape);
+      g2.rotateX(-Math.PI / 2);
+      const m2 = new THREE.Mesh(g2, rim);
+      m2.position.y = -0.05;
+      m2.scale.set(1.015, 1, 1.015);
+      group.add(m2);
+    }
+    return group;
+  }, []);
+  return <primitive object={obj} />;
+}
+
 function StateLines() {
   const obj = useMemo(() => {
     const pts: number[] = [];
-    for (const ring of US_STATES) {
+    for (const ring of RINGS_XZ) {
       for (let i = 0; i < ring.length - 1; i++) {
-        const [ax, az] = project(ring[i][0], ring[i][1]);
-        const [bx, bz] = project(ring[i + 1][0], ring[i + 1][1]);
-        pts.push(ax, 0.02, az, bx, 0.02, bz);
+        pts.push(ring[i][0], 0.05, ring[i][1], ring[i + 1][0], 0.05, ring[i + 1][1]);
       }
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    const mat = new THREE.LineBasicMaterial({
-      color: new THREE.Color("#1f6feb"),
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
+    const mat = new THREE.LineBasicMaterial({ color: new THREE.Color("#2f86df"), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
     return new THREE.LineSegments(geo, mat);
   }, []);
   return <primitive object={obj} />;
 }
 
-// ── digital ground grid ────────────────────────────────────────────────────
 function GroundGrid() {
   const grid = useMemo(() => {
-    const g = new THREE.GridHelper(60, 80, new THREE.Color("#12335c"), new THREE.Color("#0c1b33"));
+    const g = new THREE.GridHelper(70, 96, new THREE.Color("#173a63"), new THREE.Color("#0b1a30"));
     const m = g.material as THREE.Material | THREE.Material[];
     (Array.isArray(m) ? m : [m]).forEach((mm) => {
       mm.transparent = true;
-      (mm as THREE.Material & { opacity: number }).opacity = 0.35;
+      (mm as THREE.Material & { opacity: number }).opacity = 0.26;
       mm.depthWrite = false;
     });
-    g.position.y = -0.01;
+    g.position.y = -0.08;
     return g;
   }, []);
   return (
     <group>
       <primitive object={grid} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]}>
-        <planeGeometry args={[80, 80]} />
-        <meshStandardMaterial color="#050912" metalness={0.2} roughness={0.9} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]}>
+        <planeGeometry args={[90, 90]} />
+        <meshStandardMaterial color="#04070f" metalness={0.1} roughness={1} />
       </mesh>
     </group>
   );
 }
 
-// ── city lights ─────────────────────────────────────────────────────────────
-function CityLights() {
+function CityLights({ nodes }: { nodes: Node[] }) {
   const obj = useMemo(() => {
-    const n = 200;
-    const pos = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      const lon = -122 + Math.random() * 55;
-      const lat = 26 + Math.random() * 22;
-      const [x, z] = project(lon, lat);
-      pos[i * 3] = x;
-      pos[i * 3 + 1] = 0.03 + Math.random() * 0.02;
-      pos[i * 3 + 2] = z;
+    const rng = mulberry32(7);
+    const arr: number[] = [];
+    for (const n of nodes) {
+      const c = 2 + Math.floor(rng() * 4);
+      for (let k = 0; k < c; k++) arr.push(n.x + (rng() - 0.5) * 0.8, 0.05 + rng() * 0.02, n.z + (rng() - 0.5) * 0.8);
+    }
+    let placed = 0;
+    while (placed < 260) {
+      const x = (rng() - 0.5) * 20;
+      const z = -3.6 + rng() * 11;
+      if (insideUS(x, z)) {
+        arr.push(x, 0.05 + rng() * 0.02, z);
+        placed++;
+      }
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 0.16,
-      map: softSprite("rgba(120,190,255,0.9)"),
-      transparent: true,
-      opacity: 0.5,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.14, map: softSprite("rgba(150,205,255,0.95)"), transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending });
     return new THREE.Points(geo, mat);
-  }, []);
+  }, [nodes]);
   return <primitive object={obj} />;
 }
 
-// ── network edges (nearest-neighbour graph) with travelling pulses ─────────
-function NetworkEdges({ sites }: { sites: MapSite[] }) {
-  const { lines, edges } = useMemo(() => {
-    const nodes = sites.map((s) => {
-      const [x, z] = project(s.lon, s.lat);
-      return new THREE.Vector3(x, 0.06, z);
-    });
+function NetworkEdges({ nodes }: { nodes: Node[] }) {
+  const { lines, glow, edges } = useMemo(() => {
+    const v = nodes.map((n) => new THREE.Vector3(n.x, 0.09, n.z));
     const seen = new Set<string>();
     const eArr: Array<[THREE.Vector3, THREE.Vector3]> = [];
-    for (let i = 0; i < nodes.length; i++) {
-      const d = nodes
-        .map((n, j) => ({ j, dist: nodes[i].distanceTo(n) }))
+    for (let i = 0; i < v.length; i++) {
+      const d = v
+        .map((n, j) => ({ j, dist: v[i].distanceTo(n) }))
         .filter((o) => o.j !== i)
         .sort((a, b) => a.dist - b.dist)
         .slice(0, 3);
       for (const { j } of d) {
+        if (v[i].distanceTo(v[j]) > 6) continue;
         const key = i < j ? `${i}-${j}` : `${j}-${i}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        eArr.push([nodes[i], nodes[j]]);
+        eArr.push([v[i], v[j]]);
       }
     }
-    const pts: number[] = [];
-    for (const [a, b] of eArr) pts.push(a.x, a.y, a.z, b.x, b.y, b.z);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    const mat = new THREE.LineBasicMaterial({
-      color: new THREE.Color("#39e6ff"),
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    return { lines: new THREE.LineSegments(geo, mat), edges: eArr };
-  }, [sites]);
+    const mk = (color: string, op: number, y: number) => {
+      const geo = new THREE.BufferGeometry();
+      const p = eArr.flatMap(([a, b]) => [a.x, y, a.z, b.x, y, b.z]);
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
+      return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: new THREE.Color(color), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
+    };
+    return { lines: mk("#4fe8ff", 0.75, 0.09), glow: mk("#1c8ad6", 0.32, 0.085), edges: eArr };
+  }, [nodes]);
 
-  // travelling pulses
-  const pulseRef = useRef<THREE.Points>(null);
-  const pulseData = useMemo(() => {
-    const count = Math.min(40, edges.length);
-    const pick = Array.from({ length: count }, () => Math.floor(Math.random() * edges.length));
-    const speed = pick.map(() => 0.15 + Math.random() * 0.35);
-    const t = pick.map(() => Math.random());
-    return { pick, speed, t, count };
-  }, [edges]);
+  const pulseData = useMemo(
+    () => ({
+      count: Math.min(70, edges.length),
+      pick: Array.from({ length: Math.min(70, edges.length) }, () => Math.floor(Math.random() * edges.length)),
+      speed: Array.from({ length: Math.min(70, edges.length) }, () => 0.18 + Math.random() * 0.4),
+      t: Array.from({ length: Math.min(70, edges.length) }, () => Math.random()),
+    }),
+    [edges],
+  );
   const pulseObj = useMemo(() => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(pulseData.count * 3), 3));
-    const mat = new THREE.PointsMaterial({
-      size: 0.3,
-      map: softSprite("rgba(180,250,255,1)"),
-      transparent: true,
-      opacity: 0.95,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    return new THREE.Points(geo, mat);
+    return new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.26, map: softSprite("rgba(200,250,255,1)"), transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending }));
   }, [pulseData.count]);
   useFrame((_, dt) => {
     const arr = pulseObj.geometry.getAttribute("position") as THREE.BufferAttribute;
@@ -210,95 +244,94 @@ function NetworkEdges({ sites }: { sites: MapSite[] }) {
         pulseData.pick[i] = Math.floor(Math.random() * edges.length);
       }
       const [a, b] = edges[pulseData.pick[i]] ?? [new THREE.Vector3(), new THREE.Vector3()];
-      arr.setXYZ(i, a.x + (b.x - a.x) * pulseData.t[i], 0.08, a.z + (b.z - a.z) * pulseData.t[i]);
+      arr.setXYZ(i, a.x + (b.x - a.x) * pulseData.t[i], 0.11, a.z + (b.z - a.z) * pulseData.t[i]);
     }
     arr.needsUpdate = true;
   });
-
   return (
     <group>
+      <primitive object={glow} />
       <primitive object={lines} />
-      <primitive ref={pulseRef} object={pulseObj} />
+      <primitive object={pulseObj} />
     </group>
   );
 }
 
-// ── procedural substation model ─────────────────────────────────────────────
-function Substation({ color }: { color: string }) {
+function Tower({ color, big }: { color: string; big?: boolean }) {
+  const s = big ? 1.5 : 1;
   return (
-    <group scale={1.05}>
-      <mesh position={[0, 0.02, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.04, 0.5]} />
-        <meshStandardMaterial color="#0e1626" metalness={0.6} roughness={0.45} />
+    <group scale={s}>
+      <mesh position={[0, 0.02, 0]}>
+        <cylinderGeometry args={[0.34, 0.4, 0.05, 6]} />
+        <meshStandardMaterial color="#0d1a2e" metalness={0.6} roughness={0.5} />
       </mesh>
-      <mesh position={[0, 0.12, 0.08]}>
-        <boxGeometry args={[0.2, 0.16, 0.16]} />
-        <meshStandardMaterial color="#182741" metalness={0.7} roughness={0.35} emissive={color} emissiveIntensity={0.3} />
-      </mesh>
-      {[-0.16, 0.16].map((x, i) => (
-        <mesh key={i} position={[x, 0.17, -0.08]}>
-          <cylinderGeometry args={[0.012, 0.03, 0.34, 6]} />
-          <meshStandardMaterial color="#2b3d5e" metalness={0.85} roughness={0.3} />
+      {[
+        [-0.14, -0.14],
+        [0.14, -0.14],
+        [-0.14, 0.14],
+        [0.14, 0.14],
+      ].map(([x, z], i) => (
+        <mesh key={i} position={[x * 0.6, 0.34, z * 0.6]}>
+          <cylinderGeometry args={[0.01, 0.02, 0.66, 5]} />
+          <meshStandardMaterial color="#3a527d" metalness={0.85} roughness={0.3} />
         </mesh>
       ))}
-      <mesh position={[0, 0.32, -0.08]}>
-        <boxGeometry args={[0.44, 0.018, 0.018]} />
-        <meshStandardMaterial color="#3a4f78" metalness={0.85} roughness={0.3} />
+      {[0.24, 0.44, 0.62].map((y, i) => (
+        <mesh key={`x${i}`} position={[0, y, 0]}>
+          <boxGeometry args={[0.34 - i * 0.06, 0.012, 0.012]} />
+          <meshStandardMaterial color="#3f5c8c" metalness={0.85} roughness={0.3} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.66, 0]}>
+        <boxGeometry args={[0.5, 0.02, 0.02]} />
+        <meshStandardMaterial color="#4a6aa0" metalness={0.9} roughness={0.25} />
       </mesh>
-      <mesh position={[0, 0.36, -0.08]}>
-        <sphereGeometry args={[0.03, 12, 12]} />
+      <mesh position={[0, 0.56, 0]}>
+        <boxGeometry args={[0.36, 0.02, 0.02]} />
+        <meshStandardMaterial color="#4a6aa0" metalness={0.9} roughness={0.25} />
+      </mesh>
+      <mesh position={[0.22, 0.1, 0.2]}>
+        <boxGeometry args={[0.16, 0.16, 0.16]} />
+        <meshStandardMaterial color="#16263f" metalness={0.7} roughness={0.4} emissive={color} emissiveIntensity={0.45} />
+      </mesh>
+      <mesh position={[0, 0.72, 0]}>
+        <sphereGeometry args={[0.035, 12, 12]} />
         <meshBasicMaterial color={color} />
       </mesh>
     </group>
   );
 }
 
-// ── one site: model + glow beacon + pulse ring + click popup ───────────────
-function SiteNode({
-  site,
-  selected,
-  onSelect,
-}: {
-  site: MapSite;
-  selected: boolean;
-  onSelect: (id: string | null) => void;
-}) {
+function SiteNode({ site, selected, onSelect }: { site: MapSite; selected: boolean; onSelect: (id: string | null) => void }) {
   const [x, z] = project(site.lon, site.lat);
   const color = colorFor(site.level);
   const ring = useRef<THREE.Mesh>(null);
   const beam = useRef<THREE.Mesh>(null);
   const [hover, setHover] = useState(false);
-
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     if (ring.current) {
-      const s = 1 + ((t * 0.6 + x) % 1) * 1.6;
-      ring.current.scale.set(s, s, s);
-      const mat = ring.current.material as THREE.Material & { opacity: number };
-      mat.opacity = Math.max(0, 0.5 - ((t * 0.6 + x) % 1) * 0.5);
+      const f = (t * 0.55 + x) % 1;
+      const sc = 1 + f * 1.35;
+      ring.current.scale.set(sc, sc, sc);
+      (ring.current.material as THREE.Material & { opacity: number }).opacity = Math.max(0, 0.42 - f * 0.42);
     }
-    if (beam.current) {
-      const mat = beam.current.material as THREE.Material & { opacity: number };
-      mat.opacity = 0.25 + Math.sin(t * 2 + x) * 0.12;
-    }
+    if (beam.current) (beam.current.material as THREE.Material & { opacity: number }).opacity = 0.14 + Math.sin(t * 2 + x) * 0.07;
   });
-
   return (
     <group position={[x, 0, z]}>
-      <Substation color={color} />
-      {/* pulse ring on the ground */}
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
-        <ringGeometry args={[0.22, 0.28, 40]} />
-        <meshBasicMaterial color={color} transparent opacity={0.4} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
+      <Tower color={color} big />
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
+        <ringGeometry args={[0.34, 0.42, 48]} />
+        <meshBasicMaterial color={color} transparent opacity={0.5} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
-      {/* vertical beam */}
-      <mesh ref={beam} position={[0, 0.7, 0]}>
-        <cylinderGeometry args={[0.02, 0.02, 1.4, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={0.3} blending={THREE.AdditiveBlending} depthWrite={false} />
+      <mesh ref={beam} position={[0, 0.75, 0]}>
+        <cylinderGeometry args={[0.015, 0.015, 1.5, 8]} />
+        <meshBasicMaterial color={color} transparent opacity={0.18} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
-      {/* click target */}
       <mesh
-        position={[0, 0.2, 0]}
+        position={[0, 0.5, 0]}
+        visible={false}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHover(true);
@@ -312,42 +345,29 @@ function SiteNode({
           e.stopPropagation();
           onSelect(selected ? null : site.id);
         }}
-        visible={false}
       >
-        <boxGeometry args={[0.6, 0.9, 0.6]} />
+        <boxGeometry args={[0.9, 1.4, 0.9]} />
       </mesh>
       {(selected || hover) && (
-        <mesh position={[0, 0.36, 0]}>
-          <sphereGeometry args={[0.06, 16, 16]} />
+        <mesh position={[0, 0.78, 0]}>
+          <sphereGeometry args={[0.07, 16, 16]} />
           <meshBasicMaterial color="#ffffff" />
         </mesh>
       )}
       {selected && (
-        <Html position={[0, 0.55, 0]} center distanceFactor={10} zIndexRange={[40, 0]} style={{ pointerEvents: "none" }}>
-          <div
-            style={{
-              width: 190,
-              background: "linear-gradient(180deg, rgba(12,20,38,0.97), rgba(9,14,28,0.97))",
-              border: "1px solid rgba(90,150,220,0.35)",
-              borderRadius: 10,
-              padding: "10px 12px",
-              color: "#e6eef8",
-              fontFamily: "system-ui, sans-serif",
-              boxShadow: "0 12px 40px rgba(0,0,0,0.6)",
-              backdropFilter: "blur(6px)",
-            }}
-          >
+        <Html position={[0, 1.0, 0]} center distanceFactor={11} zIndexRange={[40, 0]} style={{ pointerEvents: "none" }}>
+          <div style={{ width: 196, background: "linear-gradient(180deg, rgba(11,19,36,0.98), rgba(8,13,26,0.98))", border: "1px solid rgba(90,150,220,0.4)", borderRadius: 10, padding: "10px 12px", color: "#e6eef8", fontFamily: "system-ui, sans-serif", boxShadow: "0 14px 44px rgba(0,0,0,0.65)" }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>{site.name}</div>
             <div style={{ fontSize: 10.5, color: "#8aa0c0", marginBottom: 8 }}>{site.id}</div>
             {[
-              ["Status", site.status ?? (site.level === "normal" ? "Operational" : "Watch"), site.level === "normal" ? "#3ce6b0" : color],
+              ["Status", site.status ?? "Operational", site.level === "normal" ? "#39e6c0" : color],
               ["Load", site.loadPct != null ? `${site.loadPct}%` : "—", "#dbe6f5"],
               ["Voltage", site.voltageKv != null ? `${site.voltageKv} kV` : "—", "#dbe6f5"],
               ["Temp", site.tempF != null ? `${site.tempF}°F` : "—", "#dbe6f5"],
-            ].map(([k, v, c]) => (
+            ].map(([k, val, c]) => (
               <div key={k as string} style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, padding: "1.5px 0" }}>
                 <span style={{ color: "#8aa0c0" }}>{k}</span>
-                <span style={{ color: c as string, fontWeight: 600 }}>{v}</span>
+                <span style={{ color: c as string, fontWeight: 600 }}>{val}</span>
               </div>
             ))}
             <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 600, color: "#4c9dff" }}>View Asset →</div>
@@ -358,88 +378,125 @@ function SiteNode({
   );
 }
 
-// ── storm front (NW) with drifting cloud, glowing edge, lightning ──────────
+function GridNode({ x, z, tower }: { x: number; z: number; tower?: boolean }) {
+  return (
+    <group position={[x, 0, z]}>
+      {tower ? (
+        <group scale={0.7}>
+          <Tower color="#7fd8ff" />
+        </group>
+      ) : (
+        <mesh position={[0, 0.07, 0]}>
+          <sphereGeometry args={[0.055, 10, 10]} />
+          <meshBasicMaterial color="#8fe6ff" />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
 function Storm({ label }: { label?: string }) {
   const group = useRef<THREE.Group>(null);
   const light = useRef<THREE.PointLight>(null);
   const bolt = useRef<THREE.LineSegments>(null);
-  const nextFlash = useRef(1.5);
+  const nextFlash = useRef(1);
 
-  const cloud = useMemo(() => {
-    const n = 520;
-    const pos = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      // blob centred over the Pacific NW / upper-left, elongated toward the SE
-      const a = Math.random() * Math.PI * 2;
-      const r = Math.pow(Math.random(), 0.6) * 5.5;
-      const lon = -119 + Math.cos(a) * r * 1.1 + r * 0.4;
-      const lat = 46 + Math.sin(a) * r * 0.6;
-      const [x, z] = project(lon, lat);
-      pos[i * 3] = x;
-      pos[i * 3 + 1] = 0.4 + Math.random() * 1.6;
-      pos[i * 3 + 2] = z;
+  const clouds = useMemo(() => {
+    const rng = mulberry32(21);
+    const specs: Array<[number, string, number, number]> = [
+      [1500, "rgba(9,14,26,0.86)", 4.1, 0.24],
+      [520, "rgba(26,40,68,0.55)", 2.6, 0.72],
+      [120, "rgba(84,114,166,0.45)", 1.6, 1.15],
+    ];
+    const g = new THREE.Group();
+    for (const [n, col, size, yb] of specs) {
+      const pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const a = rng() * Math.PI * 2;
+        const r = Math.pow(rng(), 0.55) * 6.5;
+        const lon = -116 + Math.cos(a) * r * 1.15 + r * 0.35;
+        const lat = 45 + Math.sin(a) * r * 0.62;
+        const [x, zz] = project(lon, lat);
+        pos[i * 3] = x;
+        pos[i * 3 + 1] = yb + rng() * 1.3;
+        pos[i * 3 + 2] = zz;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.add(new THREE.Points(geo, new THREE.PointsMaterial({ size, map: softSprite(col, 0.45), transparent: true, opacity: 0.62, depthWrite: false, blending: THREE.NormalBlending })));
     }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 2.4,
-      map: softSprite("rgba(60,80,120,0.55)"),
-      transparent: true,
-      opacity: 0.5,
-      depthWrite: false,
-      blending: THREE.NormalBlending,
-    });
-    return new THREE.Points(geo, mat);
+    return g;
   }, []);
 
   const edge = useMemo(() => {
-    // glowing leading edge sweeping NW -> SE
-    const pts: number[] = [];
-    for (let i = 0; i <= 60; i++) {
-      const t = i / 60;
-      const lon = -122 + t * 26;
-      const lat = 50 - t * 22 + Math.sin(t * 8) * 0.6;
+    const linePts: number[] = [];
+    const glowPts: number[] = [];
+    let prev: [number, number] | null = null;
+    // short arc hugging the SE boundary of the cloud, not a beam across the map
+    for (let i = 0; i <= 48; i++) {
+      const t = i / 48;
+      const lon = -119 + t * 12;
+      const lat = 49.5 - t * 9.5 + Math.sin(t * 6) * 0.5;
       const [x, z] = project(lon, lat);
-      if (i > 0) {
-        const pt = t - 1 / 60;
-        const [px, pz] = project(-122 + pt * 26, 50 - pt * 22 + Math.sin(pt * 8) * 0.6);
-        pts.push(px, 0.12, pz, x, 0.12, z);
-      }
+      glowPts.push(x, 0.16, z);
+      if (prev) linePts.push(prev[0], 0.16, prev[1], x, 0.16, z);
+      prev = [x, z];
+    }
+    const lgeo = new THREE.BufferGeometry();
+    lgeo.setAttribute("position", new THREE.Float32BufferAttribute(linePts, 3));
+    const line = new THREE.LineSegments(lgeo, new THREE.LineBasicMaterial({ color: new THREE.Color("#9ed6ff"), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const ggeo = new THREE.BufferGeometry();
+    ggeo.setAttribute("position", new THREE.Float32BufferAttribute(glowPts, 3));
+    const glow = new THREE.Points(ggeo, new THREE.PointsMaterial({ size: 0.85, map: softSprite("rgba(110,180,240,0.8)", 0.2), transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const g = new THREE.Group();
+    g.add(glow);
+    g.add(line);
+    return g;
+  }, []);
+
+  const rain = useMemo(() => {
+    const rng = mulberry32(5);
+    const seg: number[] = [];
+    for (let i = 0; i < 300; i++) {
+      const a = rng() * Math.PI * 2;
+      const r = Math.pow(rng(), 0.6) * 5.5;
+      const lon = -116 + Math.cos(a) * r + r * 0.3;
+      const lat = 45 + Math.sin(a) * r * 0.6;
+      const [x, z] = project(lon, lat);
+      const y = 0.2 + rng() * 0.8;
+      seg.push(x, y, z, x + 0.05, Math.max(0.03, y - 0.35), z);
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
-    const mat = new THREE.LineBasicMaterial({ color: new THREE.Color("#6cc6ff"), transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-    return new THREE.LineSegments(geo, mat);
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(seg, 3));
+    return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: new THREE.Color("#6f8fc0"), transparent: true, opacity: 0.26, depthWrite: false }));
   }, []);
 
   const boltGeo = useMemo(() => new THREE.BufferGeometry(), []);
   useFrame((state, dt) => {
-    if (group.current) group.current.position.x = Math.sin(state.clock.elapsedTime * 0.08) * 0.3;
+    if (group.current) group.current.position.x = Math.sin(state.clock.elapsedTime * 0.07) * 0.35;
     nextFlash.current -= dt;
-    const l = light.current;
-    if (l) l.intensity = Math.max(0, l.intensity - dt * 12);
+    if (light.current) light.current.intensity = Math.max(0, light.current.intensity - dt * 14);
     if (bolt.current) {
       const bm = bolt.current.material as THREE.Material & { opacity: number };
-      bm.opacity = Math.max(0, bm.opacity - dt * 6);
+      bm.opacity = Math.max(0, bm.opacity - dt * 5);
     }
     if (nextFlash.current <= 0) {
-      nextFlash.current = 1.2 + Math.random() * 2.6;
-      const lon = -120 + Math.random() * 10;
-      const lat = 44 + Math.random() * 6;
+      nextFlash.current = 0.9 + Math.random() * 2.2;
+      const lon = -119 + Math.random() * 11;
+      const lat = 42 + Math.random() * 7;
       const [x, z] = project(lon, lat);
-      if (l) {
-        l.position.set(x, 1.4, z);
-        l.intensity = 6;
+      if (light.current) {
+        light.current.position.set(x, 1.6, z);
+        light.current.intensity = 9;
       }
-      // a quick jagged bolt
       const seg: number[] = [];
-      let y = 2.2;
+      let y = 2.6;
       let bx = x;
       let bz = z;
       while (y > 0.1) {
-        const nx = bx + (Math.random() - 0.5) * 0.5;
-        const nz = bz + (Math.random() - 0.5) * 0.5;
-        const ny = y - (0.25 + Math.random() * 0.3);
+        const nx = bx + (Math.random() - 0.5) * 0.55;
+        const nz = bz + (Math.random() - 0.5) * 0.55;
+        const ny = y - (0.28 + Math.random() * 0.32);
         seg.push(bx, y, bz, nx, ny, nz);
         bx = nx;
         bz = nz;
@@ -450,75 +507,123 @@ function Storm({ label }: { label?: string }) {
     }
   });
 
+  const [lx, lz] = project(-113, 47);
   return (
     <group ref={group}>
-      <primitive object={cloud} />
+      <primitive object={clouds} />
+      <primitive object={rain} />
       <primitive object={edge} />
       <lineSegments ref={bolt} geometry={boltGeo}>
-        <lineBasicMaterial color="#bfe6ff" transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
+        <lineBasicMaterial color="#d6f0ff" transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
       </lineSegments>
-      <pointLight ref={light} color="#9ecbff" intensity={0} distance={14} decay={2} />
+      <pointLight ref={light} color="#a9d4ff" intensity={0} distance={16} decay={2} />
       {label && (
-        <Html position={project(-116, 47).length ? [project(-116, 47)[0], 2.4, project(-116, 47)[1]] : [0, 2.4, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-          <div style={{ whiteSpace: "nowrap", fontSize: 11, fontWeight: 600, color: "#bcd8ff", textShadow: "0 0 8px rgba(0,0,0,0.9)", fontFamily: "system-ui" }}>
-            ⛈ {label}
-          </div>
+        <Html position={[lx, 2.7, lz]} center distanceFactor={13} style={{ pointerEvents: "none" }}>
+          <div style={{ whiteSpace: "nowrap", fontSize: 11, fontWeight: 700, color: "#cfe6ff", textShadow: "0 0 10px rgba(0,0,0,1)", fontFamily: "system-ui" }}>⛈ {label}</div>
         </Html>
       )}
     </group>
   );
 }
 
-// ── camera rig ──────────────────────────────────────────────────────────────
+function NodeHalos({ nodes }: { nodes: Node[] }) {
+  const cyan = useMemo(() => {
+    const pos: number[] = [];
+    for (const n of nodes) if (!n.real) pos.push(n.x, 0.12, n.z);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    return new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.6, map: softSprite("rgba(120,230,255,0.85)", 0.2), transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+  }, [nodes]);
+  const site = useMemo(() => {
+    // colored halos for the real facilities so they read against the grid
+    const g = new THREE.Group();
+    for (const n of nodes) {
+      if (!n.real) continue;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute([n.x, 0.14, n.z], 3));
+      g.add(new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.9, map: softSprite("rgba(255,255,255,0.95)", 0.12), color: new THREE.Color(colorFor(n.real.level)), transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending })));
+    }
+    return g;
+  }, [nodes]);
+  return (
+    <group>
+      <primitive object={cyan} />
+      <primitive object={site} />
+    </group>
+  );
+}
+
 function Rig() {
   const { camera } = useThree();
   useEffect(() => {
-    camera.position.set(0.5, 12.5, 15);
-    camera.lookAt(0, 0, 1.5);
+    camera.position.set(0.4, 10, 13.6);
+    camera.lookAt(0, 0, 1);
   }, [camera]);
-  return (
-    <OrbitControls
-      enablePan={false}
-      enableDamping
-      dampingFactor={0.08}
-      minDistance={9}
-      maxDistance={26}
-      minPolarAngle={0.15}
-      maxPolarAngle={Math.PI / 2.35}
-      target={[0, 0, 1.5]}
-    />
-  );
+  return <OrbitControls enablePan={false} enableDamping dampingFactor={0.08} minDistance={7} maxDistance={28} minPolarAngle={0.12} maxPolarAngle={Math.PI / 2.3} target={[0, 0, 1]} />;
 }
 
 function Scene({ sites, storm, selectedId, onSelect }: CommandMapProps) {
   const canBloom = useMemo(bloomSafe, []);
+  const nodes = useMemo<Node[]>(() => {
+    const real: Node[] = sites
+      .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lon))
+      .map((s) => {
+        const [x, z] = project(s.lon, s.lat);
+        return { x, z, real: s, tower: true };
+      });
+    const rng = mulberry32(1337);
+    const proc: Node[] = [];
+    let tries = 0;
+    while (proc.length < 62 && tries < 6000) {
+      tries++;
+      const x = (rng() - 0.5) * 20;
+      const z = -3.6 + rng() * 11;
+      if (!insideUS(x, z)) continue;
+      if ([...real, ...proc].some((n) => (n.x - x) ** 2 + (n.z - z) ** 2 < 0.55)) continue;
+      proc.push({ x, z, tower: rng() < 0.35 });
+    }
+    return [...real, ...proc];
+  }, [sites]);
+
   return (
     <>
-      <color attach="background" args={["#050912"]} />
-      <fog attach="fog" args={["#050912", 20, 46]} />
-      <ambientLight intensity={0.35} />
-      <directionalLight position={[6, 12, 8]} intensity={0.5} color="#8fbfff" />
-      <hemisphereLight args={["#22406e", "#050912", 0.4]} />
+      <color attach="background" args={["#04070f"]} />
+      <fog attach="fog" args={["#04070f", 22, 50]} />
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[6, 13, 8]} intensity={0.55} color="#9cc4ff" />
+      <hemisphereLight args={["#24466e", "#04070f", 0.45]} />
 
       <GroundGrid />
+      <GlowDisc w={28} h={17} color="rgba(46,120,190,0.55)" opacity={0.15} />
+      <Landmass />
       <StateLines />
-      <CityLights />
-      <NetworkEdges sites={sites} />
-      {sites.map((s) => (
-        <SiteNode key={s.id} site={s} selected={selectedId === s.id} onSelect={onSelect} />
-      ))}
+      <CityLights nodes={nodes} />
+      <NetworkEdges nodes={nodes} />
+      <NodeHalos nodes={nodes} />
+
+      {nodes.map((n, i) =>
+        n.real ? (
+          <SiteNode key={n.real.id} site={n.real} selected={selectedId === n.real.id} onSelect={onSelect} />
+        ) : (
+          <GridNode key={`p${i}`} x={n.x} z={n.z} tower={n.tower} />
+        ),
+      )}
+
+      {(() => {
+        const [sx, sz] = project(-116, 45);
+        return <GlowDisc x={sx} z={sz} w={12} h={8.5} color="rgba(95,155,235,0.8)" opacity={0.24} y={0.06} />;
+      })()}
       <Storm label={storm?.name} />
 
-      {/* click empty space to deselect */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} onClick={() => onSelect(null)}>
-        <planeGeometry args={[80, 80]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} onClick={() => onSelect(null)}>
+        <planeGeometry args={[90, 90]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 
       <Rig />
       {canBloom && (
         <EffectComposer>
-          <Bloom intensity={0.9} luminanceThreshold={0.25} luminanceSmoothing={0.85} mipmapBlur radius={0.7} />
+          <Bloom intensity={1.15} luminanceThreshold={0.2} luminanceSmoothing={0.85} mipmapBlur />
         </EffectComposer>
       )}
     </>
@@ -532,21 +637,12 @@ export type CommandMapProps = {
   onSelect: (id: string | null) => void;
 };
 
-// SSR-safe wrapper — three.js needs a DOM.
 export function CommandMap(props: CommandMapProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  if (!mounted) {
-    return <div className="grid h-full w-full place-items-center bg-[#050912] text-[11px] text-slate-500">Initializing grid map…</div>;
-  }
+  if (!mounted) return <div className="grid h-full w-full place-items-center bg-[#04070f] text-[11px] text-slate-500">Initializing grid map…</div>;
   return (
-    <Canvas
-      shadows={false}
-      dpr={[1, 2]}
-      gl={{ antialias: true, powerPreference: "high-performance", alpha: false }}
-      camera={{ fov: 38, near: 0.1, far: 100 }}
-      style={{ width: "100%", height: "100%", background: "#050912" }}
-    >
+    <Canvas shadows={false} dpr={[1, 2]} gl={{ antialias: true, powerPreference: "high-performance", alpha: false }} camera={{ fov: 40, near: 0.1, far: 100 }} style={{ width: "100%", height: "100%", background: "#04070f" }}>
       <Scene {...props} />
     </Canvas>
   );
