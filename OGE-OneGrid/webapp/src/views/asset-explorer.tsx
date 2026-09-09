@@ -155,96 +155,78 @@ export function AssetExplorerPage() {
   }, []);
 
   const tree = useMemo<Node[]>(() => {
-    // Weather "infrastructure" = FACILITIES (dim_site), grouped by region → facility, so it
-    // mirrors the Digital Twin's estate (same named sites, real US locations).
-    const regionLabel = (r: string) =>
-      (r || "other").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    const byRegion: Record<string, Asset[]> = {};
-    for (const a of assets) (byRegion[a.region || "other"] ||= []).push(a);
-    const infraGroups: Node[] = Object.entries(byRegion)
-      .sort((a, b) => b[1].length - a[1].length)
-      .map(([region, list]) => {
-        const leaves: Node[] = list
-          .map((a) => {
-            const risk = riskMap.get(a.id);
-            const sev = (risk?.level ?? "normal") as Sev;
-            return {
-              id: `i:${a.id}`,
-              kind: "asset" as const,
-              label: a.name,
-              domain: "infrastructure" as const,
-              sev,
-              count: 1,
-              issues: isIssue(sev) ? 1 : 0,
-              infra: { asset: a, risk },
-            };
-          })
-          .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
-        const r = rollup(leaves);
-        return {
-          id: `infra:${region}`,
-          kind: "group" as const,
-          label: regionLabel(region),
-          domain: "infrastructure" as const,
-          children: leaves,
-          ...r,
-        };
-      });
-    const infraRoot: Node = {
-      id: "infra",
-      kind: "domain",
-      label: "Energy Infrastructure",
-      domain: "infrastructure",
-      children: infraGroups,
-      ...rollup(infraGroups),
-    };
+    const siteByName = new Map(assets.map((a) => [a.name, a]));
 
-    // equipment grouped by plant → unit
-    const equipPlants: Node[] = (facility?.plants ?? []).map((p) => {
-      const units: Node[] = p.unitList.map((u) => {
-        const leaves: Node[] = u.assets
-          .map((a) => {
-            const sev = a.status as Sev;
-            return {
-              id: `e:${a.asset_id}`,
-              kind: "asset" as const,
-              label: a.name,
-              domain: "equipment" as const,
-              sev,
-              count: 1,
-              issues: isIssue(sev) ? 1 : 0,
-              equip: a,
-            };
-          })
-          .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
+    // Both tabs share the SAME facility hierarchy: Site/Plant → Unit → Asset. Only the
+    // lens differs — Predictive Maintenance colours by equipment condition; Weather by the
+    // site's storm exposure (inherited by everything at that site). Weather site/unit/asset
+    // nodes keep the id `i:<siteId>` so the exposure map's selection resolves back to them.
+    const build = (domain: Domain, rootId: string, rootLabel: string): Node => {
+      const plants: Node[] = (facility?.plants ?? []).map((p) => {
+        const site = siteByName.get(p.name) ?? null;
+        const siteRisk = site ? riskMap.get(site.id) : undefined;
+        const pid =
+          domain === "equipment" ? `equip:${p.name}` : site ? `i:${site.id}` : `i:${p.name}`;
+        const siteInfra =
+          domain === "infrastructure" && site
+            ? siteRisk
+              ? { asset: site, risk: siteRisk }
+              : { asset: site }
+            : undefined;
+        const units: Node[] = p.unitList.map((u) => {
+          const leaves: Node[] = u.assets
+            .map((a) => {
+              const sev: Sev =
+                domain === "equipment"
+                  ? (a.status as Sev)
+                  : ((siteRisk?.level ?? "normal") as Sev);
+              const common = {
+                kind: "asset" as const,
+                label: a.name,
+                domain,
+                sev,
+                count: 1,
+                issues: isIssue(sev) ? 1 : 0,
+              };
+              return domain === "equipment"
+                ? { id: `e:${a.asset_id}`, ...common, equip: a }
+                : { id: `${pid}:${a.asset_id}`, ...common, ...(siteInfra ? { infra: siteInfra } : {}) };
+            })
+            .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
+          return {
+            id: `${pid}:${u.name}`,
+            kind: "unit" as const,
+            label: u.name,
+            domain,
+            children: leaves,
+            ...(siteInfra ? { infra: siteInfra } : {}),
+            ...rollup(leaves),
+          };
+        });
         return {
-          id: `equip:${p.name}:${u.name}`,
-          kind: "unit" as const,
-          label: u.name,
-          domain: "equipment" as const,
-          children: leaves,
-          ...rollup(leaves),
+          id: pid,
+          kind: "plant" as const,
+          label: p.name,
+          domain,
+          children: units,
+          ...(siteInfra ? { infra: siteInfra } : {}),
+          ...rollup(units),
         };
       });
       return {
-        id: `equip:${p.name}`,
-        kind: "plant" as const,
-        label: p.name,
-        domain: "equipment" as const,
-        children: units,
-        ...rollup(units),
+        id: rootId,
+        kind: "domain",
+        label: rootLabel,
+        domain,
+        children: plants,
+        ...rollup(plants),
       };
-    });
-    const equipRoot: Node = {
-      id: "equip",
-      kind: "domain",
-      label: "Rotating & Fired Equipment",
-      domain: "equipment",
-      children: equipPlants,
-      ...rollup(equipPlants),
     };
 
-    return [infraRoot, equipRoot];
+    return [
+      build("infrastructure", "infra", "Energy Infrastructure"),
+      build("equipment", "equip", "Rotating & Fired Equipment"),
+    ];
   }, [assets, riskMap, facility]);
 
   // search auto-expands matching branches
@@ -276,7 +258,9 @@ export function AssetExplorerPage() {
     .filter((l) => l.issues > 0)
     .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
   const highlightInfraIds =
-    sel?.domain === "infrastructure" ? selLeaves.map((l) => l.infra!.asset.id) : [];
+    sel?.domain === "infrastructure"
+      ? (selLeaves.map((l) => l.infra?.asset.id).filter(Boolean) as string[])
+      : [];
 
   const renderNode = (n: Node, depth: number): ReactNode => {
     if (matchIds && !matchIds.has(n.id)) return null;
@@ -335,7 +319,7 @@ export function AssetExplorerPage() {
   };
 
   const selInfraAsset =
-    sel?.kind === "asset" && sel.domain === "infrastructure" ? sel.infra!.asset : null;
+    sel?.domain === "infrastructure" ? (sel.infra?.asset ?? null) : null;
   const selEquipMeta =
     sel?.kind === "asset" && sel.domain === "equipment" ? equipMeta[sel.equip!.asset_id] : null;
 
