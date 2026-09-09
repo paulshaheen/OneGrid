@@ -104,8 +104,10 @@ export function EventsPage() {
       if (timer.current) clearInterval(timer.current);
     };
   }, [playing]);
+  // Entering the forecast timeline auto-plays the forward animation so the storm
+  // visibly advances along the forecast; returning to the storm view pauses it.
   useEffect(() => {
-    if (mode !== "timeline") setPlaying(false);
+    setPlaying(mode === "timeline");
   }, [mode]);
 
   const affected = useMemo(
@@ -335,6 +337,46 @@ export function EventsPage() {
                         </span>
                       </button>
                     ))}
+                  </div>
+                  {/* per-hour forecast detail for the selected storm */}
+                  <div className="pt-1">
+                    <div className="label-xs mb-1">{event.name} — forecast detail</div>
+                    <div className="max-h-[320px] overflow-y-auto rounded-sm border">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-panel">
+                          <tr className="text-left text-[11px] text-muted-foreground">
+                            <th className="px-3 py-2 font-medium">Hour</th>
+                            <th className="px-3 py-2 font-medium">Position</th>
+                            <th className="px-3 py-2 font-medium">Category</th>
+                            <th className="px-3 py-2 font-medium">Sustained wind</th>
+                            <th className="px-3 py-2 font-medium">Pressure</th>
+                            <th className="px-3 py-2 font-medium">Cone radius</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {event.forecast.map((p) => (
+                            <tr
+                              key={p.hour}
+                              onClick={() => setHour(p.hour)}
+                              className={`cursor-pointer border-t hover:bg-accent/50 ${
+                                Math.abs(p.hour - hour) <= 3 ? "bg-primary/10" : ""
+                              }`}
+                            >
+                              <td className="num px-3 py-1.5">+{p.hour} h</td>
+                              <td className="num px-3 py-1.5 text-muted-foreground">
+                                {coords(p.lat, p.lon)}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {p.category > 0 ? `Category ${p.category}` : "Tropical storm"}
+                              </td>
+                              <td className="num px-3 py-1.5">{p.windMph} mph</td>
+                              <td className="num px-3 py-1.5">{p.pressureMb} mb</td>
+                              <td className="num px-3 py-1.5">{p.coneRadiusMi} mi</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}
