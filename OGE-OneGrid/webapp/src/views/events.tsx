@@ -307,41 +307,34 @@ export function EventsPage() {
                       ))}
                     </div>
                   </div>
-                  {/* estate exposure over the horizon */}
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="label-xs">Exposure over the forecast horizon</span>
-                    <span className="text-[10px] text-muted-foreground">click a bar to jump</span>
+                  {/* estate exposure over the horizon — compact strip */}
+                  <div className="flex items-center justify-between">
+                    <span className="label-xs">Exposure over horizon · peak {maxExposed}</span>
+                    <span className="text-[10px] text-muted-foreground">click to jump</span>
                   </div>
-                  <div className="flex h-40 items-end gap-1">
+                  <div className="flex h-14 items-end gap-1">
                     {series.map((s) => (
                       <button
                         key={s.hour}
                         onClick={() => setHour(s.hour)}
-                        className="group flex h-full flex-1 flex-col justify-end gap-0.5"
+                        className="flex h-full flex-1 items-end"
                         title={`+${s.hour} h — ${s.exposed} exposed`}
                       >
-                        <div className="flex w-full flex-1 items-end">
-                          <div
-                            className="w-full rounded-t-sm transition-opacity"
-                            style={{
-                              height: `${(s.exposed / maxExposed) * 100}%`,
-                              backgroundColor: riskColorVar(
-                                s.critical > 0 ? "critical" : "elevated",
-                              ),
-                              opacity: s.hour <= hour ? 1 : 0.3,
-                            }}
-                          />
-                        </div>
-                        <span className="num text-[9px] leading-none text-muted-foreground">
-                          {s.hour % 24 === 0 ? s.hour : ""}
-                        </span>
+                        <div
+                          className="w-full rounded-t-sm transition-opacity"
+                          style={{
+                            height: `${(s.exposed / maxExposed) * 100}%`,
+                            backgroundColor: riskColorVar(s.critical > 0 ? "critical" : "elevated"),
+                            opacity: s.hour <= hour ? 1 : 0.3,
+                          }}
+                        />
                       </button>
                     ))}
                   </div>
                   {/* per-hour forecast detail for the selected storm */}
                   <div className="pt-1">
                     <div className="label-xs mb-1">{event.name} — forecast detail</div>
-                    <div className="max-h-[320px] overflow-y-auto rounded-sm border">
+                    <div className="overflow-x-auto rounded-sm border">
                       <table className="w-full text-xs">
                         <thead className="sticky top-0 bg-panel">
                           <tr className="text-left text-[11px] text-muted-foreground">
