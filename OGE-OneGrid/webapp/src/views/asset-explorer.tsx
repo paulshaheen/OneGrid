@@ -115,18 +115,25 @@ export function AssetExplorerPage() {
   const [AssetModal, setAssetModal] = useState<ComponentType<Record<string, unknown>> | null>(null);
   const [modalAsset, setModalAsset] = useState<FacAsset | null>(null);
 
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(["infra", "equip"]));
-  const [selected, setSelected] = useState<string | null>("infra");
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"weather" | "pdm">("weather");
   const activeDomain: Domain = tab === "weather" ? "infrastructure" : "equipment";
 
-  useEffect(() => {
-    const rootId = tab === "weather" ? "infra" : "equip";
-    setSelected(rootId);
-    setExpanded(new Set([rootId]));
-    setQ("");
-  }, [tab]);
+  // Selection + expansion are remembered PER TAB, so switching weather <-> PdM and
+  // back preserves where you were in each hierarchy instead of resetting to root.
+  const [expByTab, setExpByTab] = useState<Record<"weather" | "pdm", Set<string>>>({
+    weather: new Set(["infra"]),
+    pdm: new Set(["equip"]),
+  });
+  const [selByTab, setSelByTab] = useState<Record<"weather" | "pdm", string | null>>({
+    weather: "infra",
+    pdm: "equip",
+  });
+  const expanded = expByTab[tab];
+  const selected = selByTab[tab];
+  const setSelected = (id: string | null) => setSelByTab((s) => ({ ...s, [tab]: id }));
+  const setExpanded = (u: Set<string> | ((p: Set<string>) => Set<string>)) =>
+    setExpByTab((s) => ({ ...s, [tab]: typeof u === "function" ? u(s[tab]) : u }));
 
   useEffect(() => {
     let ok = true;

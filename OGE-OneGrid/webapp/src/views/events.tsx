@@ -21,13 +21,11 @@ function stormDot(e: WeatherEvent): string {
 }
 
 /**
- * Forecast Timeline — the merged weather page. It combines the per-storm briefing
- * (pills, storm info, affected assets) with the forward-moving forecast timeline
- * (playhead scrubber + estate exposure over the horizon). Layout top→bottom:
- * pills → storm info (collapsible) → map → forecast timeline (collapsible). The
- * storm info and the forecast timeline accordion against each other: expanding one
- * collapses the other. In "storm" mode the map shows current positions; in
- * "timeline" mode it animates forward along the scrubbed hour. The page scrolls.
+ * Forecast Timeline — the merged weather page. On land the map auto-plays the
+ * forecast forward (the storms advance along their tracks); a play/scrub control
+ * lives on the map. Below it, two collapsible panels: storm info (open by
+ * default) and the forecast timeline detail (exposure strip + per-hour grid,
+ * collapsed by default — expand when you want it). The page scrolls.
  */
 export function EventsPage() {
   const base = useOpsBase();
@@ -35,9 +33,10 @@ export function EventsPage() {
   const events = useQuery(eventsQuery(base)).data ?? [];
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [mode, setMode] = useState<"storm" | "timeline">("storm");
-  const [hour, setHour] = useState(48);
-  const [playing, setPlaying] = useState(false);
+  const [stormOpen, setStormOpen] = useState(true);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [hour, setHour] = useState(0);
+  const [playing, setPlaying] = useState(true); // auto-play forward on page land
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Storms ordered by significance (category, then wind) so the pills read
@@ -51,14 +50,8 @@ export function EventsPage() {
   );
   const event = ordered.find((e) => e.id === selectedEventId) ?? ordered[0];
 
-  // Storm mode — exposure vs the SELECTED storm (current positions).
-  const stormRisks = useMemo(
-    () => (event ? assets.map((a) => scoreAsset(a, event, 120)) : []),
-    [assets, event],
-  );
-
-  // Timeline mode — highest exposure across ALL systems (an asset is exposed if ANY
-  // storm threatens it), so every storm on the map contributes to the curve.
+  // Highest exposure across ALL systems (an asset is exposed if ANY storm threatens
+  // it) at a given hour — the map plays all storms forward together.
   const scoreAcross = useMemo(
     () => (a: Asset, h: number) => {
       let best = scoreAsset(a, events[0]!, Math.max(6, h));
@@ -74,9 +67,16 @@ export function EventsPage() {
     () => (events.length ? assets.map((a) => scoreAcross(a, hour)) : []),
     [assets, events, hour, scoreAcross],
   );
+  const riskMap = useMemo(() => new Map(timelineRisks.map((r) => [r.assetId, r])), [timelineRisks]);
 
-  const activeRisks = mode === "timeline" ? timelineRisks : stormRisks;
-  const riskMap = useMemo(() => new Map(activeRisks.map((r) => [r.assetId, r])), [activeRisks]);
+  // Affected count for the SELECTED storm (header stat).
+  const affectedCount = useMemo(
+    () =>
+      event
+        ? assets.filter((a) => scoreAsset(a, event, 120).score >= 42).length
+        : 0,
+    [assets, event],
+  );
 
   const series = useMemo(() => {
     if (!events.length) return [];
@@ -93,7 +93,7 @@ export function EventsPage() {
   }, [assets, events, scoreAcross]);
   const maxExposed = Math.max(1, ...series.map((s) => s.exposed));
 
-  // Playhead only runs in timeline mode.
+  // Playhead: auto-advances while `playing`. Loops the 120 h horizon.
   useEffect(() => {
     if (!playing) {
       if (timer.current) clearInterval(timer.current);
@@ -104,16 +104,7 @@ export function EventsPage() {
       if (timer.current) clearInterval(timer.current);
     };
   }, [playing]);
-  // Entering the forecast timeline auto-plays the forward animation so the storm
-  // visibly advances along the forecast; returning to the storm view pauses it.
-  useEffect(() => {
-    setPlaying(mode === "timeline");
-  }, [mode]);
 
-  const affected = useMemo(
-    () => [...stormRisks].filter((r) => r.score >= 42).sort((a, b) => b.score - a.score),
-    [stormRisks],
-  );
   const exposedNow = useMemo(
     () =>
       [...timelineRisks]
@@ -148,8 +139,6 @@ export function EventsPage() {
     );
   }
 
-  const sideList = mode === "timeline" ? exposedNow : affected;
-
   return (
     <AppShell>
       <div className="space-y-4 p-4">
@@ -181,11 +170,11 @@ export function EventsPage() {
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
-            {/* storm info (collapsible) */}
+            {/* storm info (collapsible, open by default) */}
             <div className="panel">
               <button
-                onClick={() => setMode("storm")}
-                aria-expanded={mode === "storm"}
+                onClick={() => setStormOpen((o) => !o)}
+                aria-expanded={stormOpen}
                 className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-accent/40"
               >
                 <span className="flex flex-wrap items-center gap-2">
@@ -197,14 +186,14 @@ export function EventsPage() {
                     {event.currentCategory > 0
                       ? `Category ${event.currentCategory}`
                       : "Tropical storm"}{" "}
-                    · {event.currentWindMph} mph · {affected.length} affected
+                    · {event.currentWindMph} mph · {affectedCount} affected
                   </span>
                 </span>
                 <ChevronDown
-                  className={`size-4 shrink-0 transition-transform ${mode === "storm" ? "rotate-180" : ""}`}
+                  className={`size-4 shrink-0 transition-transform ${stormOpen ? "rotate-180" : ""}`}
                 />
               </button>
-              {mode === "storm" && (
+              {stormOpen && (
                 <div className="grid grid-cols-2 border-t sm:grid-cols-4">
                   {(
                     [
@@ -227,9 +216,9 @@ export function EventsPage() {
               )}
             </div>
 
-            {/* map — under the storm info */}
+            {/* map — auto-playing the forecast forward, with an inline play/scrub */}
             <div className="panel overflow-hidden">
-              <div className="relative h-[58vh] min-h-[420px]">
+              <div className="relative h-[46vh] min-h-[340px]">
                 <MapModeSwitch
                   className="h-full w-full"
                   assets={assets}
@@ -237,77 +226,71 @@ export function EventsPage() {
                   event={event}
                   events={events}
                   initialFocusEventId={event.id}
-                  hour={mode === "timeline" ? hour : 0}
-                  layers={{ assets: true, track: mode === "timeline", wind: true }}
+                  hour={hour}
+                  layers={{ assets: true, track: true, wind: true }}
                   selectedId={selected}
                   onSelect={setSelected}
                 />
-                <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-md border bg-popover/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
-                  {mode === "timeline" ? (
-                    <span className="font-medium">Forecast +{hour} h</span>
-                  ) : (
-                    <>
-                      <span className="relative flex size-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-                        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-                      </span>
-                      <span className="font-medium">Current position</span>
-                    </>
-                  )}
+                <div className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-md border bg-popover/90 px-3 py-1.5 shadow-lg backdrop-blur">
+                  <button
+                    onClick={() => setPlaying((p) => !p)}
+                    className="inline-flex items-center gap-1.5 text-xs hover:text-primary"
+                    aria-label={playing ? "Pause forecast" : "Play forecast"}
+                  >
+                    {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+                  </button>
+                  <input
+                    type="range"
+                    min={0}
+                    max={120}
+                    step={3}
+                    value={hour}
+                    onChange={(e) => {
+                      setPlaying(false);
+                      setHour(Number(e.target.value));
+                    }}
+                    className="h-1 w-36 accent-[var(--color-primary)] sm:w-52"
+                    aria-label="Forecast hour"
+                  />
+                  <span className="num w-14 text-right text-xs font-semibold">+{hour} h</span>
                 </div>
               </div>
             </div>
 
-            {/* forecast timeline (collapsible) */}
+            {/* forecast timeline detail (collapsible, closed by default) */}
             <div className="panel">
               <button
-                onClick={() => setMode("timeline")}
-                aria-expanded={mode === "timeline"}
+                onClick={() => setTimelineOpen((o) => !o)}
+                aria-expanded={timelineOpen}
                 className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-accent/40"
               >
-                <span className="label-xs">Forecast timeline</span>
+                <span className="label-xs">Forecast timeline detail</span>
                 <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  {mode === "timeline" ? `peak ${maxExposed} exposed` : "scrub the 120 h horizon"}
+                  peak {maxExposed} exposed · {event.forecast.length} steps
                   <ChevronDown
-                    className={`size-4 transition-transform ${mode === "timeline" ? "rotate-180" : ""}`}
+                    className={`size-4 transition-transform ${timelineOpen ? "rotate-180" : ""}`}
                   />
                 </span>
               </button>
-              {mode === "timeline" && (
+              {timelineOpen && (
                 <div className="space-y-2 border-t p-3">
-                  {/* playhead scrubber */}
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      onClick={() => setPlaying((p) => !p)}
-                      className="inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-xs hover:bg-accent"
-                    >
-                      {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-                      {playing ? "Pause" : "Play"}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={120}
-                      step={3}
-                      value={hour}
-                      onChange={(e) => setHour(Number(e.target.value))}
-                      className="h-1 min-w-[180px] flex-1 accent-[var(--color-primary)]"
-                      aria-label="Forecast hour"
-                    />
-                    <span className="num w-16 text-right text-sm font-semibold">+{hour} h</span>
-                    <div className="flex gap-1">
-                      {STOPS.map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => setHour(s)}
-                          className={`rounded-sm border px-2 py-1 text-[11px] ${hour === s ? "bg-accent" : "hover:bg-accent/60"}`}
-                        >
-                          {s}h
-                        </button>
-                      ))}
-                    </div>
+                  {/* jump stops */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="label-xs">Jump to</span>
+                    {STOPS.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          setPlaying(false);
+                          setHour(s);
+                        }}
+                        className={`rounded-sm border px-2 py-1 text-[11px] ${hour === s ? "bg-accent" : "hover:bg-accent/60"}`}
+                      >
+                        {s}h
+                      </button>
+                    ))}
                   </div>
-                  {/* estate exposure over the horizon — compact strip */}
+                  {/* compact exposure strip */}
                   <div className="flex items-center justify-between">
                     <span className="label-xs">Exposure over horizon · peak {maxExposed}</span>
                     <span className="text-[10px] text-muted-foreground">click to jump</span>
@@ -316,7 +299,10 @@ export function EventsPage() {
                     {series.map((s) => (
                       <button
                         key={s.hour}
-                        onClick={() => setHour(s.hour)}
+                        onClick={() => {
+                          setPlaying(false);
+                          setHour(s.hour);
+                        }}
                         className="flex h-full flex-1 items-end"
                         title={`+${s.hour} h — ${s.exposed} exposed`}
                       >
@@ -350,7 +336,10 @@ export function EventsPage() {
                           {event.forecast.map((p) => (
                             <tr
                               key={p.hour}
-                              onClick={() => setHour(p.hour)}
+                              onClick={() => {
+                                setPlaying(false);
+                                setHour(p.hour);
+                              }}
                               className={`cursor-pointer border-t hover:bg-accent/50 ${
                                 Math.abs(p.hour - hour) <= 3 ? "bg-primary/10" : ""
                               }`}
@@ -376,22 +365,16 @@ export function EventsPage() {
             </div>
           </div>
 
-          {/* right list: affected (storm) / exposed (timeline) */}
+          {/* right list: assets exposed at the current playhead hour */}
           <div className="panel h-fit">
-            <div className="border-b px-4 py-2.5 label-xs">
-              {mode === "timeline"
-                ? `Exposed at +${hour} h`
-                : `Affected assets (${affected.length})`}
-            </div>
+            <div className="border-b px-4 py-2.5 label-xs">Exposed at +{hour} h</div>
             <ul className="max-h-[640px] divide-y overflow-y-auto">
-              {sideList.length === 0 && (
+              {exposedNow.length === 0 && (
                 <li className="px-4 py-4 text-xs text-muted-foreground">
-                  {mode === "timeline"
-                    ? "No assets reach impact onset before this hour."
-                    : "No assets at elevated risk from this system."}
+                  No assets reach impact onset before this hour.
                 </li>
               )}
-              {sideList.map((r) => (
+              {exposedNow.map((r) => (
                 <li key={r.assetId}>
                   <button
                     onClick={() => setSelected(r.assetId)}
@@ -400,10 +383,7 @@ export function EventsPage() {
                     <span>
                       <span className="text-xs font-medium">{nameOf(r.assetId)}</span>
                       <span className="block text-[11px] text-muted-foreground">
-                        {r.distanceMi} mi · {r.forecastWindMph} mph ·{" "}
-                        {mode === "timeline"
-                          ? `onset ${r.hoursToImpact} h`
-                          : `impact in ${r.hoursToImpact} h`}
+                        {r.distanceMi} mi · {r.forecastWindMph} mph · onset {r.hoursToImpact} h
                       </span>
                     </span>
                     <RiskBadge level={r.level} score={r.score} />
