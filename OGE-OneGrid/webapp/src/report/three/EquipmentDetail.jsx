@@ -8,6 +8,7 @@ import { EquipmentGeometry, anchorsFor, equipmentType, viewFor } from './Equipme
 import { statusOf, fmt } from '../lib/format.js';
 import { POSTFX_ENABLED } from '../../lib/postfx.js';
 import { getJson } from '../lib/api.js';
+import { ManualResolveModal } from '../components/Manuals.jsx';
 
 class SafeB extends Component { constructor(p){super(p);this.state={f:false};} static getDerivedStateFromError(){return {f:true};} componentDidCatch(){} render(){return this.state.f?null:this.props.children;} }
 
@@ -217,6 +218,12 @@ function Model({ asset, theme, anchors, active, onPick, snapshot }) {
 
 export function EquipmentDetail({ asset, theme, snapshot = {}, anomalies = [], rootCause = [], loading = false }) {
   const [active, setActive] = useState(null);
+  // Foundry IQ manuals: grounded "how to fix" guidance for the selected issue.
+  const [manualsOn, setManualsOn] = useState(false);
+  const [manualWO, setManualWO] = useState(null);
+  useEffect(() => {
+    getJson('/api/manuals/health').then((h) => setManualsOn(!!h?.enabled)).catch(() => {});
+  }, []);
   const type = equipmentType(asset);
   const rawAnchors = useMemo(() => buildAnchors(type, asset?.tags || [], anomalies, rootCause), [type, asset, anomalies, rootCause]);
   // While intelligence is still loading, show neutral (grey) markers instead of
@@ -327,6 +334,25 @@ export function EquipmentDetail({ asset, theme, snapshot = {}, anomalies = [], r
                 </div>
               ) : <div className={`text-xs ${theme.sub}`}>No active root-cause finding for this area — monitoring.</div>}
 
+              {manualsOn && (sel.root || sel.anoms.length > 0) && (
+                <button
+                  onClick={() => setManualWO({
+                    wr_id: '',
+                    problem_descr: sel.root
+                      ? [sel.root.failure_mechanism, sel.root.root_cause, sel.root.recommended_action].filter(Boolean).join(' — ')
+                      : (sel.anoms[0]?.advisory_message || sel.tag?.desc || asset?.name || ''),
+                    descriptor: sel.tag?.desc || sel.label,
+                    parent_descr: asset?.name || asset?.plant || '',
+                    wr_type: asset?.equipment_category || asset?.equipment_group || type || '',
+                  })}
+                  className="w-full text-xs font-semibold px-3 py-2 rounded-lg inline-flex items-center justify-center gap-1.5"
+                  style={{ background: theme.accent, color: theme.mode === 'light' ? '#fff' : '#06121f' }}
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 5a2 2 0 0 1 2-2h6v16H6a2 2 0 0 0-2 2zM20 5a2 2 0 0 0-2-2h-6v16h6a2 2 0 0 1 2 2z" strokeLinejoin="round" /></svg>
+                  How to fix — open equipment manual
+                </button>
+              )}
+
               {sel.tag && (
                 <div className={`p-3 rounded-lg ${theme.panelSolid}`}>
                   <TagTrend tag={sel.tag.tag} units={sel.tag.units} live={snapshot[sel.tag.tag]?.value}
@@ -337,6 +363,7 @@ export function EquipmentDetail({ asset, theme, snapshot = {}, anomalies = [], r
           </motion.div>
         )}
       </AnimatePresence>
+      {manualWO && <ManualResolveModal theme={theme} wo={manualWO} onClose={() => setManualWO(null)} />}
     </div>
   );
 }

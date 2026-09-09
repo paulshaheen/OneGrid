@@ -21,8 +21,12 @@ const CFG = {
   apiVersion: '2024-07-01',
 };
 
+// Azure AI Search + Foundry embeddings power the full hybrid RAG. When they aren't
+// configured we fall back to an OFFLINE keyword search over the bundled corpus so the
+// "how to fix" manual grounding still works locally (real manual passages, no vectors).
+const AZURE_RAG = !!(CFG.searchEndpoint && CFG.searchKey && CFG.aoaiEndpoint);
 export function manualsEnabled() {
-  return !!(CFG.searchEndpoint && CFG.searchKey && CFG.aoaiEndpoint);
+  return AZURE_RAG || CORPUS.length > 0;
 }
 
 // Bundled corpus (source of truth for full-manual viewing + category lookup).
@@ -65,7 +69,7 @@ async function embedQuery(text) {
 
 // Hybrid (vector + semantic) search over the manuals index, optionally scoped to a category.
 export async function searchManuals(query, { category = null, top = 5 } = {}) {
-  if (!manualsEnabled()) throw new Error('Manuals knowledge base is not configured.');
+  if (!AZURE_RAG) return offlineSearch(query, { category, top });
   const vector = await embedQuery(query);
   const body = {
     search: query,
@@ -93,6 +97,63 @@ export function getManual(id) { return CORPUS.find((m) => m.id === id) || null; 
 export function manualsForCategory(category) {
   return CORPUS.filter((m) => m.equipment_category === category)
     .map((m) => ({ id: m.id, title: m.title, manufacturer: m.manufacturer, model: m.model, category: m.equipment_category }));
+}
+
+// Split a manual's markdown into (section heading, body) chunks on its ## / ### headings.
+function splitSections(md) {
+  const out = [];
+  let cur = { section: 'Overview', body: '' };
+  for (const line of String(md || '').split('\n')) {
+    const h = line.match(/^#{1,3}\s+(.*\S)\s*$/);
+    if (h) {
+      if (cur.body.trim()) out.push(cur);
+      cur = { section: h[1].replace(/^\d+[.)]\s*/, '').trim(), body: '' };
+    } else {
+      cur.body += line + '\n';
+    }
+  }
+  if (cur.body.trim()) out.push(cur);
+  return out;
+}
+
+// Offline grounding: keyword-score the bundled manuals' sections against the problem text,
+// boosting a manual whose fault_symptoms/related_tags match and troubleshooting sections.
+// Returns the same shape as the Azure search path so callers are identical.
+function offlineSearch(query, { category = null, top = 5 } = {}) {
+  const terms = [...new Set((String(query || '').toLowerCase().match(/[a-z0-9]{3,}/g) || []))];
+  const pool = CORPUS.filter((m) => !category || m.equipment_category === category);
+  const scored = [];
+  for (const m of pool) {
+    const symptomHay = `${(m.fault_symptoms || []).join(' ')} ${(m.related_tags || []).join(' ')}`.toLowerCase();
+    const mBoost = terms.reduce((s, t) => s + (symptomHay.includes(t) ? 1 : 0), 0);
+    for (const sec of splitSections(m.body_markdown)) {
+      const hay = `${sec.section} ${sec.body}`.toLowerCase();
+      let score = mBoost;
+      for (const t of terms) if (hay.includes(t)) score += 1;
+      if (/troubleshoot|fault|diagnos|resolution|corrective|repair|procedure|remed/i.test(sec.section)) score += 2;
+      if (score > 0) {
+        scored.push({
+          manual_id: m.id, title: m.title, manufacturer: m.manufacturer, model: m.model,
+          category: m.equipment_category, section: sec.section,
+          snippet: sec.body.trim().replace(/\n{3,}/g, '\n\n').slice(0, 700), score,
+        });
+      }
+    }
+  }
+  scored.sort((a, b) => b.score - a.score);
+  // Sparse query with no keyword hits: surface each category manual's troubleshooting section.
+  if (!scored.length) {
+    for (const m of pool.slice(0, 3)) {
+      const ts = splitSections(m.body_markdown).find((s) => /troubleshoot|fault|resolution|corrective/i.test(s.section));
+      if (ts) {
+        scored.push({
+          manual_id: m.id, title: m.title, manufacturer: m.manufacturer, model: m.model,
+          category: m.equipment_category, section: ts.section, snippet: ts.body.trim().slice(0, 700), score: 1,
+        });
+      }
+    }
+  }
+  return scored.slice(0, top);
 }
 
 // Resolve the most relevant manual guidance for a work order on a given asset.
