@@ -4,6 +4,7 @@ OGE-OneGrid/data/*
 !OGE-OneGrid/data/MODEL.md
 !OGE-OneGrid/data/HANDOFF.md
 !OGE-OneGrid/data/HANDOFF-UNIFIED.md
+!OGE-OneGrid/data/HANDOFF-BACKEND-DEPLOY.md
 !OGE-OneGrid/data/notebooks/
 !OGE-OneGrid/data/notebooks/**
 !OGE-OneGrid/data/reference/
