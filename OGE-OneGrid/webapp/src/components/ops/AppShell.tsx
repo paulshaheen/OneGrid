@@ -301,12 +301,6 @@ export function AppShell({
     if (activeGroupId) setOpenId(activeGroupId);
   }, [activeGroupId]);
 
-  useEffect(() => {
-    const open = () => setCopilotOpen(true);
-    window.addEventListener("onegrid-ask", open);
-    return () => window.removeEventListener("onegrid-ask", open);
-  }, []);
-
   return (
     <div
       className={cn(

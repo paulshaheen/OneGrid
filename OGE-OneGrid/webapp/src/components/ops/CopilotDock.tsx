@@ -123,7 +123,24 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
     setMessages((m) => [...m, { who: "me", text: t }]);
     setBusy(true);
     let ai: Msg;
-    if (TWIN_RE.test(t) && twinRef.current) {
+    if (/manual|how\s+(?:do|to)\b.*(?:fix|resolv)|resolve work order/i.test(t)) {
+      // Ground "how to fix" questions in the Foundry-IQ equipment manuals.
+      try {
+        const r = await fetch(`/api/manuals/search?q=${encodeURIComponent(t)}&top=1`).then((res) =>
+          res.json(),
+        );
+        const p = r?.results?.[0];
+        ai = p
+          ? {
+              who: "ai",
+              text: `From ${p.title} — ${p.section}:\n\n${p.snippet}`,
+              citations: [`${p.manual_id} · ${p.section}`],
+            }
+          : { who: "ai", text: "I couldn't find a matching passage in the equipment manuals." };
+      } catch {
+        ai = { who: "ai", text: "The equipment manuals aren't available right now." };
+      }
+    } else if (TWIN_RE.test(t) && twinRef.current) {
       ai = twinAnswer(t, twinRef.current);
     } else {
       const a = await getServices(base).copilot.ask(t);
@@ -134,6 +151,29 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
   };
   const reset = () => setMessages([{ who: "ai", text: INTRO }]);
   const lastIsAi = messages[messages.length - 1]?.who === "ai";
+
+  // Bridge external "ask" events to the dock: open it and (if a message is supplied)
+  // send it. Handles the ops `onegrid-ask` (plain open) and the report/manuals
+  // `pm-chat-ask` / `pm-chat-open` events (e.g. the manual "Ask AI to solve" button),
+  // which previously went unhandled here so the modal just closed.
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      setOpen(true);
+      const msg = (e as CustomEvent).detail?.message;
+      if (typeof msg === "string" && msg.trim()) setTimeout(() => sendRef.current(msg), 60);
+    };
+    const onOpen = () => setOpen(true);
+    window.addEventListener("onegrid-ask", onAsk);
+    window.addEventListener("pm-chat-ask", onAsk);
+    window.addEventListener("pm-chat-open", onOpen);
+    return () => {
+      window.removeEventListener("onegrid-ask", onAsk);
+      window.removeEventListener("pm-chat-ask", onAsk);
+      window.removeEventListener("pm-chat-open", onOpen);
+    };
+  }, [setOpen]);
 
   if (!open) {
     return (
