@@ -96,7 +96,19 @@ async function foundryAuthHeaders() {
 // ── Azure AI Foundry: unified chat/completions (OpenAI-compatible) ────────
 async function foundryChat(body) {
     if (!AI.endpoint) throw new Error('AZURE_AI_ENDPOINT not configured');
-    const url = `${AI.endpoint}/models/chat/completions?api-version=${AI.apiVersion}`;
+    // Azure OpenAI resources (*.openai.azure.com) serve the deployment-scoped API
+    // (/openai/deployments/{deployment}/chat/completions), NOT the AI-Services unified
+    // /models route. Detect the endpoint kind and route accordingly so the same agent
+    // works against both an Azure OpenAI resource and an AI Services (Foundry) endpoint.
+    const isAzureOpenAI = /\.openai\.azure\.com/i.test(AI.endpoint);
+    let url;
+    if (isAzureOpenAI) {
+        const deployment = (body.model && String(body.model).trim()) || AI.defaultModel;
+        const apiVer = process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview';
+        url = `${AI.endpoint}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${apiVer}`;
+    } else {
+        url = `${AI.endpoint}/models/chat/completions?api-version=${AI.apiVersion}`;
+    }
     // Retry on 429 (rate limit) with backoff, honouring Retry-After, so brief spikes over
     // the deployment's TPM don't surface as a hard error to the user.
     for (let attempt = 0; ; attempt++) {
