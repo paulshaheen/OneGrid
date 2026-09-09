@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { TimelinePage } from "@/views/timeline";
+import { EventsPage } from "@/views/events";
 
 export const Route = createFileRoute("/_authenticated/app/timeline")({
   head: () => ({
@@ -22,5 +22,5 @@ export const Route = createFileRoute("/_authenticated/app/timeline")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: TimelinePage,
+  component: EventsPage,
 });
