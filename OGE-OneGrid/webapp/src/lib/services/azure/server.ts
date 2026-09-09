@@ -122,6 +122,49 @@ export const listStacLayers = createServerFn({ method: "GET" }).handler(
  * endpoint is not configured it returns an honest "not configured" answer rather
  * than a canned demo response.
  */
+// Compact, model-friendly summary of the console's live data (active weather events +
+// asset exposure) so the assistant answers from real tenant data in a single call —
+// no slow, rate-limit-prone multi-tool agent loop.
+function buildOpsContext(events: unknown, exposure: unknown): string {
+  const evs = Array.isArray(events) ? (events as Array<Record<string, unknown>>) : [];
+  const exp = Array.isArray(exposure) ? (exposure as Array<Record<string, unknown>>) : [];
+  const active = evs.filter((e) => e["status"] === "active");
+  const evLines = (active.length ? active : evs)
+    .slice(0, 8)
+    .map(
+      (e) =>
+        `- ${e["name"]} — ${e["hazardKind"] ?? e["kind"]}, cat ${e["currentCategory"] ?? "?"}, ${e["currentWindMph"] ?? "?"} mph sustained${e["gustMph"] ? ` / ${e["gustMph"]} gust` : ""}, region ${e["region"] ?? "?"}, status ${e["status"]}`,
+    );
+  const byLevel: Record<string, number> = {};
+  for (const e of exp) {
+    const lvl = String(e["level"] ?? "unknown");
+    byLevel[lvl] = (byLevel[lvl] ?? 0) + 1;
+  }
+  const expLines = exp
+    .filter((e) => e["level"] && e["level"] !== "normal" && e["level"] !== "monitor")
+    .sort((a, b) => Number(b["score"] ?? 0) - Number(a["score"] ?? 0))
+    .slice(0, 12)
+    .map(
+      (e) =>
+        `- ${e["assetId"]} (${e["level"]}, score ${e["score"]}, ${e["forecastWindMph"] ?? "?"} mph, ${e["hoursToImpact"] ?? "?"}h to impact${e["insideCone"] ? ", INSIDE cone" : ""}, event ${e["eventId"]})`,
+    );
+  const today = new Date().toLocaleDateString("en-CA");
+  return [
+    `DATA CONTEXT — live tenant data (as of ${today}):`,
+    "",
+    `ACTIVE WEATHER EVENTS (${active.length} active of ${evs.length} total):`,
+    ...(evLines.length ? evLines : ["- none"]),
+    "",
+    `ASSET EXPOSURE (${exp.length} assets scored) — counts by level: ${
+      Object.entries(byLevel)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ") || "none"
+    }`,
+    "Most exposed assets:",
+    ...(expLines.length ? expLines : ["- none above monitor"]),
+  ].join("\n");
+}
+
 export const askFoundryCopilot = createServerFn({ method: "POST" })
   .validator((data: { question: string }) => data)
   .handler(async ({ data }): Promise<CopilotAnswer> => {
@@ -144,6 +187,32 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
       };
     }
 
+    // Ground the assistant in the tenant's live ops data with a single fetch (fast, and
+    // avoids a slow, rate-limit-prone multi-tool agent loop).
+    let dataContext = "";
+    let highlightAssetIds: string[] = [];
+    try {
+      const apiBase = reportApiBase();
+      const [events, exposure] = await Promise.all([
+        fetch(`${apiBase}/api/weather/events`, { headers: { Accept: "application/json" } })
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => []),
+        fetch(`${apiBase}/api/exposure`, { headers: { Accept: "application/json" } })
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => []),
+      ]);
+      dataContext = buildOpsContext(events, exposure);
+      const exp = Array.isArray(exposure) ? (exposure as Array<Record<string, unknown>>) : [];
+      highlightAssetIds = exp
+        .filter((e) => e["level"] && e["level"] !== "normal" && e["level"] !== "monitor")
+        .sort((a, b) => Number(b["score"] ?? 0) - Number(a["score"] ?? 0))
+        .slice(0, 12)
+        .map((e) => String(e["assetId"] ?? ""))
+        .filter(Boolean);
+    } catch {
+      /* grounding is best-effort */
+    }
+
     try {
       const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2025-01-01-preview`;
       const res = await fetch(url, {
@@ -154,8 +223,9 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
             {
               role: "system",
               content:
-                "You are an operations assistant for weather and asset risk in energy infrastructure. Answer concisely and only from the tenant's data.",
+                "You are OneGrid's operations assistant for weather and asset risk in energy infrastructure. Answer concisely and specifically using ONLY the DATA CONTEXT provided below. The tenant's live data is already included — NEVER ask the user to supply data that is present in the context. If a specific detail is missing, state what additional query would be needed.",
             },
+            ...(dataContext ? [{ role: "system" as const, content: dataContext }] : []),
             { role: "user", content: data.question },
           ],
           // gpt-5 family are reasoning models: they only accept the default temperature
@@ -175,7 +245,7 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
         choices?: Array<{ message?: { content?: string } }>;
       };
       const text = body.choices?.[0]?.message?.content?.trim();
-      return { text: text || "No answer was returned.", citations: [], highlightAssetIds: [] };
+      return { text: text || "No answer was returned.", citations: [], highlightAssetIds };
     } catch {
       return {
         text: "The assistant is currently unavailable.",
