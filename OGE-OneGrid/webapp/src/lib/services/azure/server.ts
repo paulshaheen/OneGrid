@@ -145,7 +145,7 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
     }
 
     try {
-      const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2024-06-01`;
+      const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2025-01-01-preview`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -158,7 +158,10 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
             },
             { role: "user", content: data.question },
           ],
-          temperature: 0.2,
+          // gpt-5 family are reasoning models: they only accept the default temperature
+          // and use `max_completion_tokens` (not `max_tokens`). Sending a custom
+          // `temperature` returns 400 "temperature does not support <x>".
+          max_completion_tokens: 2048,
         }),
       });
       if (!res.ok) {
