@@ -121,21 +121,11 @@ export function AssetExplorerPage() {
   const [tab, setTab] = useState<"weather" | "pdm">("weather");
   const activeDomain: Domain = tab === "weather" ? "infrastructure" : "equipment";
 
-  // Selection + expansion are remembered PER TAB, so switching weather <-> PdM and
-  // back preserves where you were in each hierarchy instead of resetting to root.
-  const [expByTab, setExpByTab] = useState<Record<"weather" | "pdm", Set<string>>>({
-    weather: new Set(["infra"]),
-    pdm: new Set(["equip"]),
-  });
-  const [selByTab, setSelByTab] = useState<Record<"weather" | "pdm", string | null>>({
-    weather: "infra",
-    pdm: "equip",
-  });
-  const expanded = expByTab[tab];
-  const selected = selByTab[tab];
-  const setSelected = (id: string | null) => setSelByTab((s) => ({ ...s, [tab]: id }));
-  const setExpanded = (u: Set<string> | ((p: Set<string>) => Set<string>)) =>
-    setExpByTab((s) => ({ ...s, [tab]: typeof u === "function" ? u(s[tab]) : u }));
+  // Both tabs share the SAME node ids (root / p:<plant> / u:<plant>:<unit> / a:<assetId>),
+  // so a single expansion + selection state carries your navigation across the
+  // Weather <-> Predictive Maintenance toggle instead of resetting.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(["root"]));
+  const [selected, setSelected] = useState<string | null>("root");
 
   useEffect(() => {
     let ok = true;
@@ -157,16 +147,15 @@ export function AssetExplorerPage() {
   const tree = useMemo<Node[]>(() => {
     const siteByName = new Map(assets.map((a) => [a.name, a]));
 
-    // Both tabs share the SAME facility hierarchy: Site/Plant → Unit → Asset. Only the
-    // lens differs — Predictive Maintenance colours by equipment condition; Weather by the
-    // site's storm exposure (inherited by everything at that site). Weather site/unit/asset
-    // nodes keep the id `i:<siteId>` so the exposure map's selection resolves back to them.
-    const build = (domain: Domain, rootId: string, rootLabel: string): Node => {
+    // Both tabs share the SAME facility hierarchy AND the SAME node ids
+    // (root / p:<plant> / u:<plant>:<unit> / a:<assetId>), so navigation carries across
+    // the tab toggle. Only the lens differs — Predictive Maintenance colours by equipment
+    // condition; Weather by the site's storm exposure (inherited by everything at the site).
+    const build = (domain: Domain, rootLabel: string): Node => {
       const plants: Node[] = (facility?.plants ?? []).map((p) => {
         const site = siteByName.get(p.name) ?? null;
         const siteRisk = site ? riskMap.get(site.id) : undefined;
-        const pid =
-          domain === "equipment" ? `equip:${p.name}` : site ? `i:${site.id}` : `i:${p.name}`;
+        const pid = `p:${p.name}`;
         const siteInfra =
           domain === "infrastructure" && site
             ? siteRisk
@@ -181,6 +170,7 @@ export function AssetExplorerPage() {
                   ? (a.status as Sev)
                   : ((siteRisk?.level ?? "normal") as Sev);
               const common = {
+                id: `a:${a.asset_id}`,
                 kind: "asset" as const,
                 label: a.name,
                 domain,
@@ -189,12 +179,12 @@ export function AssetExplorerPage() {
                 issues: isIssue(sev) ? 1 : 0,
               };
               return domain === "equipment"
-                ? { id: `e:${a.asset_id}`, ...common, equip: a }
-                : { id: `${pid}:${a.asset_id}`, ...common, ...(siteInfra ? { infra: siteInfra } : {}) };
+                ? { ...common, equip: a }
+                : { ...common, ...(siteInfra ? { infra: siteInfra } : {}) };
             })
             .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
           return {
-            id: `${pid}:${u.name}`,
+            id: `u:${p.name}:${u.name}`,
             kind: "unit" as const,
             label: u.name,
             domain,
@@ -214,7 +204,7 @@ export function AssetExplorerPage() {
         };
       });
       return {
-        id: rootId,
+        id: "root",
         kind: "domain",
         label: rootLabel,
         domain,
@@ -224,12 +214,14 @@ export function AssetExplorerPage() {
     };
 
     return [
-      build("infrastructure", "infra", "Energy Infrastructure"),
-      build("equipment", "equip", "Rotating & Fired Equipment"),
+      build("infrastructure", "Energy Infrastructure"),
+      build("equipment", "Rotating & Fired Equipment"),
     ];
   }, [assets, riskMap, facility]);
 
-  // search auto-expands matching branches
+  const activeTree = activeDomain === "infrastructure" ? tree[0] : tree[1];
+
+  // search auto-expands matching branches (in the active tab's tree)
   const matchIds = useMemo(() => {
     if (!q.trim()) return null;
     const s = q.toLowerCase();
@@ -240,9 +232,9 @@ export function AssetExplorerPage() {
       if (selfMatch || childMatch) keep.add(n.id);
       return selfMatch || childMatch;
     };
-    tree.forEach(walk);
+    if (activeTree) walk(activeTree);
     return keep;
-  }, [q, tree]);
+  }, [q, activeTree]);
 
   const toggle = (id: string) =>
     setExpanded((s) => {
@@ -252,7 +244,7 @@ export function AssetExplorerPage() {
       return n;
     });
 
-  const sel = selected ? findNode(tree, selected) : null;
+  const sel = selected && activeTree ? findNode([activeTree], selected) : null;
   const selLeaves = sel ? leavesUnder(sel) : [];
   const problemLeaves = selLeaves
     .filter((l) => l.issues > 0)
@@ -261,6 +253,14 @@ export function AssetExplorerPage() {
     sel?.domain === "infrastructure"
       ? (selLeaves.map((l) => l.infra?.asset.id).filter(Boolean) as string[])
       : [];
+
+  // The exposure map returns a SITE asset id; map it to the shared plant node id so
+  // selection lands on the same tree node regardless of the active tab.
+  const selectSite = (siteId?: string) => {
+    if (!siteId) return;
+    const nm = assets.find((a) => a.id === siteId)?.name;
+    if (nm) setSelected(`p:${nm}`);
+  };
 
   const renderNode = (n: Node, depth: number): ReactNode => {
     if (matchIds && !matchIds.has(n.id)) return null;
@@ -378,7 +378,7 @@ export function AssetExplorerPage() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
               {(() => {
-                const root = activeDomain === "infrastructure" ? tree[0] : tree[1];
+                const root = activeTree;
                 return root ? renderNode(root, 0) : null;
               })()}
             </div>
@@ -445,7 +445,7 @@ export function AssetExplorerPage() {
                     layers={{ assets: true, track: true, wind: true }}
                     highlightIds={[selInfraAsset.id]}
                     selectedId={selInfraAsset.id}
-                    onSelect={(id) => id && setSelected(`i:${id}`)}
+                    onSelect={(id) => selectSite(id)}
                   />
                 </div>
                 <div className="panel max-h-[480px] overflow-hidden">
@@ -455,7 +455,7 @@ export function AssetExplorerPage() {
                     event={event}
                     allAssets={assets}
                     onClose={() => setSelected(null)}
-                    onSelect={(id) => setSelected(`i:${id}`)}
+                    onSelect={(id) => selectSite(id)}
                   />
                 </div>
               </div>
@@ -497,7 +497,7 @@ export function AssetExplorerPage() {
                         event={event}
                         layers={{ assets: true, track: true, wind: true }}
                         highlightIds={highlightInfraIds}
-                        onSelect={(id) => id && setSelected(`i:${id}`)}
+                        onSelect={(id) => selectSite(id)}
                       />
                     </div>
                   )}
