@@ -4,6 +4,7 @@ import { useRouter } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight, Cog, Cpu, Layers, Search, Waves } from "lucide-react";
 
 import { AppShell } from "@/components/ops/AppShell";
+import { PageLoading } from "@/components/ops/PageLoading";
 import { AssetDetailPanel } from "@/components/ops/AssetDetailPanel";
 import { OpsMap } from "@/components/ops/OpsMap";
 import { useOpsBase } from "@/components/ops/ops-nav";
@@ -106,7 +107,8 @@ function findNode(nodes: Node[], id: string): Node | null {
 export function AssetExplorerPage() {
   const router = useRouter();
   const base = useOpsBase();
-  const { assets, riskMap, event } = useOpsSnapshot(base, 120);
+  const snap = useOpsSnapshot(base, 120);
+  const { assets, riskMap, event } = snap;
 
   const [facility, setFacility] = useState<{
     plants: { name: string; unitList: { name: string; assets: FacAsset[] }[] }[];
@@ -336,6 +338,14 @@ export function AssetExplorerPage() {
     sel?.kind === "asset" && sel.domain === "infrastructure" ? sel.infra!.asset : null;
   const selEquipMeta =
     sel?.kind === "asset" && sel.domain === "equipment" ? equipMeta[sel.equip!.asset_id] : null;
+
+  if (snap.isLoading && assets.length === 0) {
+    return (
+      <AppShell fullHeight>
+        <PageLoading label="Loading asset hierarchy…" />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell fullHeight>

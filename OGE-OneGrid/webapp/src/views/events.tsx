@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { AppShell } from "@/components/ops/AppShell";
 import { MapModeSwitch } from "@/components/ops/MapModeSwitch";
+import { PageLoading } from "@/components/ops/PageLoading";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { assetsQuery, eventsQuery } from "@/lib/hooks/use-ops-data";
@@ -29,8 +30,10 @@ function stormDot(e: WeatherEvent): string {
  */
 export function EventsPage() {
   const base = useOpsBase();
-  const assets = useQuery(assetsQuery(base)).data ?? [];
-  const events = useQuery(eventsQuery(base)).data ?? [];
+  const assetsQ = useQuery(assetsQuery(base));
+  const eventsQ = useQuery(eventsQuery(base));
+  const assets = assetsQ.data ?? [];
+  const events = eventsQ.data ?? [];
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [stormOpen, setStormOpen] = useState(true);
@@ -114,6 +117,14 @@ export function EventsPage() {
     [timelineRisks, hour],
   );
   const nameOf = (id: string) => assets.find((a) => a.id === id)?.name ?? id;
+
+  if ((assetsQ.isLoading && !assets.length) || (eventsQ.isLoading && !events.length)) {
+    return (
+      <AppShell>
+        <PageLoading label="Loading forecast & exposure…" />
+      </AppShell>
+    );
+  }
 
   if (!event) {
     return (

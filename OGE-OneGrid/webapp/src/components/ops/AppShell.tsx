@@ -1,5 +1,5 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bell,
   Boxes,
@@ -31,7 +31,91 @@ import {
 import { cn } from "@/lib/utils";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { CopilotDock } from "@/components/ops/CopilotDock";
+import { useAlertFeed } from "@/lib/hooks/use-ops-data";
+import { relativeTime } from "@/lib/format";
 import { useCapacityStatus } from "@/report/lib/api.js";
+
+// Header bell: a quick slide-down of the current notifications with a link to the
+// full Alerts page — instead of navigating away on every click.
+function NotificationBell() {
+  const base = useOpsBase();
+  const { alerts, openCount } = useAlertFeed(base);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const top = alerts.slice(0, 6);
+  const tone = (sev: string) =>
+    sev === "critical"
+      ? "bg-risk-critical"
+      : sev === "warning"
+        ? "bg-risk-high"
+        : sev === "advisory"
+          ? "bg-risk-elevated"
+          : "bg-muted-foreground";
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Notifications"
+        aria-expanded={open}
+        className={cn(
+          "relative rounded-sm border p-1.5 transition-colors",
+          open
+            ? "border-primary/50 bg-primary/20 text-foreground"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        )}
+      >
+        <Bell className="size-4" />
+        {openCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+            {openCount}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 z-50 mt-2 w-[22rem] overflow-hidden rounded-md border bg-popover shadow-xl">
+          <div className="flex items-center justify-between border-b px-3 py-2">
+            <span className="text-xs font-semibold">Notifications</span>
+            <span className="text-[10px] text-muted-foreground">{openCount} open</span>
+          </div>
+          <ul className="max-h-[60vh] divide-y overflow-y-auto">
+            {top.length === 0 && (
+              <li className="px-3 py-5 text-center text-xs text-muted-foreground">
+                No open notifications.
+              </li>
+            )}
+            {top.map((a) => (
+              <li key={a.id} className="flex gap-2 px-3 py-2.5">
+                <span className={cn("mt-1 size-2 shrink-0 rounded-full", tone(a.severity))} />
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium">{a.title}</div>
+                  <div className="line-clamp-2 text-[11px] text-muted-foreground">{a.detail}</div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground/80">
+                    {relativeTime(a.createdAtIso)}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <OpsLink
+            to="/alerts"
+            onClick={() => setOpen(false)}
+            className="block border-t px-3 py-2 text-center text-xs font-medium text-primary hover:bg-accent"
+          >
+            View all notifications →
+          </OpsLink>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Amber strip shown app-wide when the Fabric capacity backing this deployment is paused
 // (auto-paused outside operating hours). The backend flags it on /api/status; live data
@@ -133,7 +217,6 @@ const MOBILE_ROUTES = [
   { to: "/deployment", label: "Deployment" },
   { to: "/alerts", label: "Alerts" },
 ];
-const TOTAL_ALERTS = 5;
 
 function useTheme() {
   const [dark, setDark] = useState(true);
@@ -223,8 +306,6 @@ export function AppShell({
     window.addEventListener("onegrid-ask", open);
     return () => window.removeEventListener("onegrid-ask", open);
   }, []);
-
-  const onAlerts = isActive("/alerts");
 
   return (
     <div
@@ -348,30 +429,8 @@ export function AppShell({
               Fabric live · GoM tenant
             </span>
 
-            {/* Alerts: open the inbox; if already there, go back to the previous page */}
-            <OpsLink
-              to="/alerts"
-              onClick={(e) => {
-                if (onAlerts) {
-                  e.preventDefault();
-                  router.history.back();
-                }
-              }}
-              className={cn(
-                "relative rounded-sm border p-1.5 transition-colors",
-                onAlerts
-                  ? "border-primary/50 bg-primary/20 text-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-              aria-label="Alerts"
-            >
-              <Bell className="size-4" />
-              {TOTAL_ALERTS > 0 && (
-                <span className="absolute -right-1.5 -top-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-                  {TOTAL_ALERTS}
-                </span>
-              )}
-            </OpsLink>
+            {/* Alerts: quick dropdown of current notifications + link to the full page */}
+            <NotificationBell />
 
             {/* Profile */}
             <div className="relative">

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Check, Circle, Loader2, Minus, RotateCcw } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
+import { PageLoading } from "@/components/ops/PageLoading";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { useOpsBase } from "@/components/ops/ops-nav";
 import { postureQuery, useOpsSnapshot } from "@/lib/hooks/use-ops-data";
@@ -79,7 +80,8 @@ function GateCell({
 export function PosturePage() {
   const qc = useQueryClient();
   const base = useOpsBase();
-  const { assets, riskMap, event } = useOpsSnapshot(base, 120);
+  const snap = useOpsSnapshot(base, 120);
+  const { assets, riskMap, event } = snap;
   const postures = useQuery(postureQuery(base)).data ?? [];
   const [onlyActive, setOnlyActive] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -140,6 +142,14 @@ export function PosturePage() {
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Could not reset overrides.");
     }
+  }
+
+  if (snap.isLoading && assets.length === 0) {
+    return (
+      <AppShell>
+        <PageLoading label="Loading response posture…" />
+      </AppShell>
+    );
   }
 
   return (

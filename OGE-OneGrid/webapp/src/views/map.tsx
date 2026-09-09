@@ -4,6 +4,7 @@ import { Search, Box, Map as MapIcon } from "lucide-react";
 
 import { AppShell } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
+import { PageLoading } from "@/components/ops/PageLoading";
 import { WeatherHoloMap } from "@/components/ops/WeatherHoloMap";
 import { AssetDetailPanel } from "@/components/ops/AssetDetailPanel";
 import { RiskBadge } from "@/components/ops/RiskBadge";
@@ -14,7 +15,8 @@ import type { AssetType, RiskLevel } from "@/lib/domain/types";
 
 export function MapPage() {
   const base = useOpsBase();
-  const { assets, riskMap, event } = useOpsSnapshot(base, 120);
+  const snap = useOpsSnapshot(base, 120);
+  const { assets, riskMap, event } = snap;
   const allEvents = useQuery(eventsQuery(base));
   const layerDefs = useQuery(layersQuery(base));
   const [layers, setLayers] = useState<Record<string, boolean>>({
@@ -72,6 +74,14 @@ export function MapPage() {
   const ranked = [...filtered].sort(
     (a, b) => (riskMap.get(b.id)?.score ?? 0) - (riskMap.get(a.id)?.score ?? 0),
   );
+
+  if (snap.isLoading && assets.length === 0) {
+    return (
+      <AppShell>
+        <PageLoading label="Loading map & assets…" />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

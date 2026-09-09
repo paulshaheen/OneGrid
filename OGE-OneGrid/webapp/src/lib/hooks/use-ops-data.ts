@@ -2,8 +2,9 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import type { OpsBase } from "@/components/ops/ops-nav";
-import type { Asset, AssetRisk, WeatherEvent } from "@/lib/domain/types";
+import type { Asset, AssetRisk, OpsAlert, WeatherEvent } from "@/lib/domain/types";
 import { getServices } from "@/lib/services";
+import { METRIC_LABEL, METRIC_UNIT, evaluateRules } from "@/lib/services/thresholds";
 
 // Queries are keyed by console base so the /demo (synthetic) and /app (tenant)
 // caches never collide, and each fetches from the provider set for that base.
@@ -124,4 +125,71 @@ export function useOpsSnapshot(base: OpsBase, horizonHours = 72): OpsSnapshot {
       },
     };
   }, [assets.data, assets.isLoading, risks.data, risks.isLoading, events.data, events.isLoading]);
+}
+
+// Combined alert feed = configured-threshold breaches (derived from the live view)
+// + any service alerts, with status overrides applied. Shared by the full Alerts
+// page and the header bell so the badge and the dropdown always agree.
+export function useAlertFeed(base: OpsBase): {
+  alerts: OpsAlert[];
+  openCount: number;
+  isLoading: boolean;
+} {
+  const baseAlerts = useQuery(alertsQuery(base));
+  const assetsRes = useQuery(assetsQuery(base));
+  const rulesRes = useQuery(thresholdRulesQuery(base));
+  const overridesRes = useQuery(alertStatusOverridesQuery(base));
+  const snap = useOpsSnapshot(base, 120);
+  return useMemo(() => {
+    const assets = assetsRes.data ?? [];
+    const rules = rulesRes.data ?? [];
+    const statusOverrides = overridesRes.data ?? {};
+    const risks = snap.risks;
+    const event = snap.event;
+    const nameOf = (id: string) => assets.find((a) => a.id === id)?.name ?? id;
+    const cycleIso = event?.updatedAtIso ?? new Date().toISOString();
+    const cycleId = event?.id ?? "current-cycle";
+    const perRule = new Map<string, number>();
+    const derived: OpsAlert[] = evaluateRules(rules, assets, risks)
+      .sort((a, b) => (a.hoursToImpact ?? 999) - (b.hoursToImpact ?? 999))
+      .filter((b) => {
+        const n = perRule.get(b.ruleId) ?? 0;
+        if (n >= 4) return false;
+        perRule.set(b.ruleId, n + 1);
+        return true;
+      })
+      .map((b) => {
+        const id = `${b.ruleId}-${b.assetId}`;
+        return {
+          id,
+          title: `${nameOf(b.assetId)} — ${b.ruleName}`,
+          detail: `${METRIC_LABEL[b.metric]} ${b.observed}${METRIC_UNIT[b.metric]} against a configured limit of ${b.comparator === "gte" ? "≥" : "≤"} ${b.threshold}${METRIC_UNIT[b.metric]}${b.hoursToImpact !== null ? `, onset in ${b.hoursToImpact} h` : ""}. ${b.action}`,
+          severity: b.severity,
+          assetId: b.assetId,
+          eventId: cycleId,
+          status: statusOverrides[id] ?? "open",
+          owner: b.owner,
+          createdAtIso: cycleIso,
+        } satisfies OpsAlert;
+      });
+    const alerts = [...derived, ...(baseAlerts.data ?? [])].map((a) => ({
+      ...a,
+      status: statusOverrides[a.id] ?? a.status,
+    }));
+    return {
+      alerts,
+      openCount: alerts.filter((a) => a.status === "open").length,
+      isLoading: assetsRes.isLoading || rulesRes.isLoading || snap.isLoading,
+    };
+  }, [
+    assetsRes.data,
+    assetsRes.isLoading,
+    rulesRes.data,
+    rulesRes.isLoading,
+    overridesRes.data,
+    snap.risks,
+    snap.event,
+    snap.isLoading,
+    baseAlerts.data,
+  ]);
 }
