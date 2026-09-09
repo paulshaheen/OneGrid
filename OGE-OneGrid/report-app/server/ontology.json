@@ -1,6 +1,6 @@
 {
   "generatedAt": "2026-08-14T19:40:59.069876+00:00",
-  "source": "semantic-main",
+  "source": "OneGridModel (unified)",
   "title": "OneGrid Knowledge Graph",
   "categories": {
     "dimension": {
@@ -37,6 +37,16 @@
       "label": "Narrative",
       "color": "#8ea3bd",
       "blurb": "Generated analyst summaries"
+    },
+    "weather": {
+      "label": "Weather",
+      "color": "#38bdf8",
+      "blurb": "Storms, forecast tracks & hazards"
+    },
+    "exposure": {
+      "label": "Exposure",
+      "color": "#f472b6",
+      "blurb": "Asset storm exposure & site posture"
     }
   },
   "nodes": [
@@ -822,6 +832,95 @@
       ]
     },
     {
+      "id": "dim_site",
+      "label": "Site",
+      "table": "dim_site",
+      "source": "[dim].[dim_site]",
+      "category": "dimension",
+      "role": "hub",
+      "grain": "one row per facility / plant",
+      "description": "Facility master shared by the reliability twin and weather exposure \u2014 real named plants (Riverton, Fairview, Thunder Horse\u2026) with coordinates, region, operator and criticality.",
+      "columns": [
+        {
+          "name": "site_id",
+          "type": "string",
+          "key": "pk"
+        },
+        {
+          "name": "site_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "site_type",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "lat",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "lon",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "operator",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "business_unit",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "criticality",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "dim_unit",
+      "label": "Unit",
+      "table": "dim_unit",
+      "source": "[dim].[dim_unit]",
+      "category": "dimension",
+      "role": "leaf",
+      "grain": "one row per generating unit",
+      "description": "Generating unit within a site (e.g. FV1) \u2014 the level between the site and its equipment leaves.",
+      "columns": [
+        {
+          "name": "unit_id",
+          "type": "string",
+          "key": "pk"
+        },
+        {
+          "name": "site_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "unit_name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "unit_type",
+          "type": "string",
+          "key": null
+        }
+      ]
+    },
+    {
       "id": "fact_gads_event",
       "label": "GADS Outages",
       "table": "fact_gads_event",
@@ -1226,6 +1325,115 @@
         {
           "name": "IngestedAt",
           "type": "dateTime",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "fact_asset_exposure",
+      "label": "Asset Exposure",
+      "table": "fact_asset_exposure",
+      "source": "[weather].[fact_asset_exposure]",
+      "category": "exposure",
+      "role": "leaf",
+      "grain": "one row per asset \u00d7 storm cycle",
+      "description": "Storm exposure scored per asset \u2014 risk score/level, primary threat, forecast wind, rainfall, distance to track, hours to impact and cone membership.",
+      "columns": [
+        {
+          "name": "asset_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "site_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "cycle_id",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "hazard_kind",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "score",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "level",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "primary_threat",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "forecast_wind_mph",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "rainfall_in",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "distance_mi",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "hours_to_impact",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "inside_threat_area",
+          "type": "boolean",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "fact_posture",
+      "label": "Site Posture",
+      "table": "fact_posture",
+      "source": "[weather].[fact_posture]",
+      "category": "exposure",
+      "role": "leaf",
+      "grain": "one row per site",
+      "description": "Operational storm posture per site \u2014 posture level, current vs normal personnel-on-board (POB) and the decision owner.",
+      "columns": [
+        {
+          "name": "site_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "posture_level",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "pob_current",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "pob_normal",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "decision_owner",
+          "type": "string",
           "key": null
         }
       ]
@@ -1738,6 +1946,140 @@
           "key": null
         }
       ]
+    },
+    {
+      "id": "dim_weather_event",
+      "label": "Weather Event",
+      "table": "dim_weather_event",
+      "source": "[weather].[dim_weather_event]",
+      "category": "weather",
+      "role": "hub",
+      "grain": "one row per active storm / hazard",
+      "description": "Active tropical and severe-weather systems affecting the operating region \u2014 hazard kind, category, current wind/pressure, position and movement.",
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "string",
+          "key": "pk"
+        },
+        {
+          "name": "hazard_kind",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "key": null
+        },
+        {
+          "name": "category",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "current_wind_mph",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "gust_mph",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "pressure_mb",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "lat",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "lon",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "movement_deg",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "movement_mph",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "updated_at",
+          "type": "dateTime",
+          "key": null
+        }
+      ]
+    },
+    {
+      "id": "weather_forecast",
+      "label": "Forecast Track",
+      "table": "WeatherForecast",
+      "source": "[weather].[WeatherForecast]",
+      "category": "weather",
+      "role": "leaf",
+      "grain": "one row per event \u00d7 forecast hour",
+      "description": "Per-hour forecast trajectory for each weather event \u2014 position, sustained wind, cone radius, category and pressure that drive the animated track and cone.",
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "string",
+          "key": "fk"
+        },
+        {
+          "name": "hour",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "lat",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "lon",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "wind_mph",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "cone_radius_mi",
+          "type": "double",
+          "key": null
+        },
+        {
+          "name": "category",
+          "type": "int64",
+          "key": null
+        },
+        {
+          "name": "pressure_mb",
+          "type": "double",
+          "key": null
+        }
+      ]
     }
   ],
   "edges": [
@@ -2000,13 +2342,93 @@
       "label": "dated by",
       "kind": "temporal",
       "cardinality": "many-to-one"
+    },
+    {
+      "id": "dim_asset::dim_site",
+      "from": "dim_asset",
+      "to": "dim_site",
+      "fromCol": "site_id",
+      "toCol": "site_id",
+      "label": "located at site",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "dim_asset::dim_unit",
+      "from": "dim_asset",
+      "to": "dim_unit",
+      "fromCol": "unit_id",
+      "toCol": "unit_id",
+      "label": "part of unit",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "dim_unit::dim_site",
+      "from": "dim_unit",
+      "to": "dim_site",
+      "fromCol": "site_id",
+      "toCol": "site_id",
+      "label": "in site",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "weather_forecast::dim_weather_event",
+      "from": "weather_forecast",
+      "to": "dim_weather_event",
+      "fromCol": "event_id",
+      "toCol": "event_id",
+      "label": "forecast track for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_asset_exposure::dim_asset",
+      "from": "fact_asset_exposure",
+      "to": "dim_asset",
+      "fromCol": "asset_id",
+      "toCol": "asset_id",
+      "label": "storm exposure for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_asset_exposure::dim_site",
+      "from": "fact_asset_exposure",
+      "to": "dim_site",
+      "fromCol": "site_id",
+      "toCol": "site_id",
+      "label": "exposure at site",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_asset_exposure::dim_weather_event",
+      "from": "fact_asset_exposure",
+      "to": "dim_weather_event",
+      "fromCol": "hazard_kind",
+      "toCol": "hazard_kind",
+      "label": "threat from",
+      "kind": "logical",
+      "cardinality": "many-to-one"
+    },
+    {
+      "id": "fact_posture::dim_site",
+      "from": "fact_posture",
+      "to": "dim_site",
+      "fromCol": "site_id",
+      "toCol": "site_id",
+      "label": "operational posture for",
+      "kind": "physical",
+      "cardinality": "many-to-one"
     }
   ],
   "stats": {
-    "nodes": 17,
-    "edges": 26,
-    "physical": 12,
-    "logical": 7,
+    "nodes": 23,
+    "edges": 34,
+    "physical": 18,
+    "logical": 9,
     "temporal": 7
   }
 }

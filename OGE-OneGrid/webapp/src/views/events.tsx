@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
@@ -12,6 +13,7 @@ export function EventsPage() {
   const base = useOpsBase();
   const { assets, risks, riskMap, event } = useOpsSnapshot(base, 120);
   const [selected, setSelected] = useState<string | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
 
   if (!event) {
     return (
@@ -92,7 +94,7 @@ export function EventsPage() {
                 </div>
               ))}
             </div>
-            <div className="h-[360px] border-t">
+            <div className="h-[62vh] min-h-[460px] border-t">
               <MapModeSwitch
                 className="h-full w-full"
                 assets={assets}
@@ -108,33 +110,52 @@ export function EventsPage() {
           </div>
 
           <div className="panel">
-            <div className="border-b px-4 py-2.5 label-xs">Forecast timeline</div>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-[11px] text-muted-foreground">
-                  <th className="px-4 py-2 font-medium">Hour</th>
-                  <th className="px-4 py-2 font-medium">Position</th>
-                  <th className="px-4 py-2 font-medium">Category</th>
-                  <th className="px-4 py-2 font-medium">Sustained wind</th>
-                  <th className="px-4 py-2 font-medium">Pressure</th>
-                  <th className="px-4 py-2 font-medium">Cone radius</th>
-                </tr>
-              </thead>
-              <tbody>
-                {event.forecast.map((p) => (
-                  <tr key={p.hour} className="border-t">
-                    <td className="num px-4 py-2">+{p.hour} h</td>
-                    <td className="num px-4 py-2 text-muted-foreground">{coords(p.lat, p.lon)}</td>
-                    <td className="px-4 py-2">
-                      {p.category > 0 ? `Category ${p.category}` : "Tropical storm"}
-                    </td>
-                    <td className="num px-4 py-2">{p.windMph} mph</td>
-                    <td className="num px-4 py-2">{p.pressureMb} mb</td>
-                    <td className="num px-4 py-2">{p.coneRadiusMi} mi</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <button
+              onClick={() => setTimelineOpen((o) => !o)}
+              aria-expanded={timelineOpen}
+              className="flex w-full items-center justify-between border-b px-4 py-2.5 text-left hover:bg-accent/50"
+            >
+              <span className="label-xs">Forecast timeline</span>
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                {event.forecast.length} steps · to +
+                {event.forecast[event.forecast.length - 1]?.hour ?? 0} h
+                <ChevronDown
+                  className={`size-4 transition-transform ${timelineOpen ? "rotate-180" : ""}`}
+                />
+              </span>
+            </button>
+            {timelineOpen && (
+              <div className="max-h-[360px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[11px] text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">Hour</th>
+                      <th className="px-4 py-2 font-medium">Position</th>
+                      <th className="px-4 py-2 font-medium">Category</th>
+                      <th className="px-4 py-2 font-medium">Sustained wind</th>
+                      <th className="px-4 py-2 font-medium">Pressure</th>
+                      <th className="px-4 py-2 font-medium">Cone radius</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {event.forecast.map((p) => (
+                      <tr key={p.hour} className="border-t">
+                        <td className="num px-4 py-2">+{p.hour} h</td>
+                        <td className="num px-4 py-2 text-muted-foreground">
+                          {coords(p.lat, p.lon)}
+                        </td>
+                        <td className="px-4 py-2">
+                          {p.category > 0 ? `Category ${p.category}` : "Tropical storm"}
+                        </td>
+                        <td className="num px-4 py-2">{p.windMph} mph</td>
+                        <td className="num px-4 py-2">{p.pressureMb} mb</td>
+                        <td className="num px-4 py-2">{p.coneRadiusMi} mi</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 

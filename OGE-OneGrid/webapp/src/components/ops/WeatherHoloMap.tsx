@@ -11,6 +11,8 @@ export type WeatherHoloMapProps = OpsMapProps & {
   autoPlay?: boolean;
   /** Open drilled-in and framed on this event, skipping the Level-0 globe. */
   initialFocusEventId?: string;
+  /** Live map: open on the terrain (facility pins visible), globe still reachable. */
+  skipGlobe?: boolean;
 };
 
 // The scene statically imports three.js + R3F + postprocessing, so defer its

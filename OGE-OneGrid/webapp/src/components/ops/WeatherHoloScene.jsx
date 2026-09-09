@@ -569,12 +569,13 @@ function WindSwirl({ radius, windMph, color = "#a9d8ff" }) {
   });
   return (
     <group scale={radius}>
-      <lineSegments geometry={geo} renderOrder={16}>
+      <lineSegments geometry={geo} renderOrder={18}>
         <lineBasicMaterial
           color={color}
           transparent
-          opacity={0.32}
+          opacity={0.36}
           depthWrite={false}
+          depthTest={false}
           toneMapped={false}
         />
       </lineSegments>
@@ -1582,6 +1583,7 @@ export default function WeatherHoloScene({
   onSelect,
   autoPlay = false,
   initialFocusEventId,
+  skipGlobe = false,
   layers,
 }) {
   const storms = useMemo(
@@ -1597,17 +1599,27 @@ export default function WeatherHoloScene({
   const showTrack = layers ? !!layers.track : true;
   const showWind = layers ? !!layers.wind : true;
   // When embedded (e.g. the Overview) we auto-advance our own playhead so the
-  // storm animates without an external timeline.
+  // storm animates without an external timeline. The horizon is the furthest
+  // forecast hour we actually have data for (some systems only forecast 24 h),
+  // so the playhead loops within THAT window instead of freezing past the last
+  // point of a short-horizon system.
+  const horizon = useMemo(() => {
+    const hrs = storms.map((s) => s.forecast?.[s.forecast.length - 1]?.hour ?? 0);
+    return Math.max(24, ...hrs);
+  }, [storms]);
   const [internalHour, setInternalHour] = useState(0);
   useEffect(() => {
     if (!autoPlay) return;
-    const id = setInterval(() => setInternalHour((h) => (h >= 120 ? 0 : h + 0.375)), 90);
+    const step = Math.max(0.2, horizon / 320); // ~30 s per loop regardless of horizon
+    const id = setInterval(() => setInternalHour((h) => (h >= horizon ? 0 : h + step)), 90);
     return () => clearInterval(id);
-  }, [autoPlay]);
-  const activeHour = autoPlay ? internalHour : hour;
+  }, [autoPlay, horizon]);
+  const activeHour = autoPlay ? Math.min(internalHour, horizon) : hour;
   // Open framed on a specific storm (skip the globe) when asked; else start on
   // the globe if there are systems, otherwise straight to the map.
-  const [level, setLevel] = useState(focusStorm || !storms.length ? "map" : "globe");
+  const [level, setLevel] = useState(
+    focusStorm || skipGlobe || !storms.length ? "map" : "globe",
+  );
   const [entry, setEntry] = useState(() => {
     if (!focusStorm) return null;
     const p = interpolate(focusStorm, 0);
@@ -1627,12 +1639,21 @@ export default function WeatherHoloScene({
       setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
       setLevel("map");
       seeded.current = true;
+    } else if (skipGlobe && storms.length) {
+      // Live map: open directly on the terrain (so facility pins are visible)
+      // framed on the primary system (where exposed assets cluster), but keep
+      // the globe reachable via the button.
+      const focus = (event && storms.find((s) => s.id === event.id)) || storms[0];
+      const p = interpolate(focus, 0);
+      setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
+      setLevel("map");
+      seeded.current = true;
     } else if (storms.length) {
       setLevel("globe");
       seeded.current = true;
     }
-  }, [storms, initialFocusEventId]);
-  const allowGlobe = !initialFocusEventId && storms.length > 0;
+  }, [storms, initialFocusEventId, skipGlobe]);
+  const allowGlobe = (skipGlobe || !initialFocusEventId) && storms.length > 0;
   return (
     <Canvas
       shadows={false}

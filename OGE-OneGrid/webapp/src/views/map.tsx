@@ -223,6 +223,7 @@ export function MapPage() {
               catalogLayers={layerDefs.data ?? []}
               selectedId={selected}
               hour={hour}
+              skipGlobe
               onSelect={setSelected}
             />
           ) : (

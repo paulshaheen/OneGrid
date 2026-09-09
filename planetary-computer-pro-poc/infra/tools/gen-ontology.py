@@ -27,6 +27,8 @@ CATEGORIES = {
     "ml":        {"label": "ML Scoring", "color": "#ff8c42", "blurb": "Predictive model outputs"},
     "advisory":  {"label": "Advisory",  "color": "#ff5470", "blurb": "Alerts, watch signals & diagnoses"},
     "narrative": {"label": "Narrative", "color": "#8ea3bd", "blurb": "Generated analyst summaries"},
+    "weather":   {"label": "Weather",   "color": "#38bdf8", "blurb": "Storms, forecast tracks & hazards"},
+    "exposure":  {"label": "Exposure",  "color": "#f472b6", "blurb": "Asset storm exposure & site posture"},
 }
 
 # ---- curated per-table metadata (label / category / grain / description / role) ----
@@ -104,6 +106,55 @@ EDGE_VERB = {
     ("bridge_pi_tag_to_asset", "dim_asset"): "belongs to",
     ("fact_work_requests", "dim_equipment"): "work on",
 }
+
+
+def _c(name, typ="string", key=None):
+    return {"name": name, "type": typ, "key": key}
+
+
+# ---- unified weather / exposure entities ----
+# These live in the conformed OneGridModel (dim_site/dim_unit + the weather facts)
+# but NOT in the legacy twin TMDL this script parses, so they are curated here so
+# a regen keeps the knowledge graph showing the weather side of the model. Columns
+# mirror the live model (see report-app/server/dataApi.js weather queries).
+EXTRA_NODES = [
+    dict(id="dim_site", label="Site", table="dim_site", source="[dim].[dim_site]",
+         category="dimension", role="hub", grain="one row per facility / plant",
+         desc="Facility master shared by the reliability twin and weather exposure — real named plants (Riverton, Fairview, Thunder Horse…) with coordinates, region, operator and criticality.",
+         columns=[_c("site_id", "string", "pk"), _c("site_name"), _c("site_type"), _c("region"), _c("lat", "double"), _c("lon", "double"), _c("operator"), _c("business_unit"), _c("criticality")]),
+    dict(id="dim_unit", label="Unit", table="dim_unit", source="[dim].[dim_unit]",
+         category="dimension", role="leaf", grain="one row per generating unit",
+         desc="Generating unit within a site (e.g. FV1) — the level between the site and its equipment leaves.",
+         columns=[_c("unit_id", "string", "pk"), _c("site_id", "string", "fk"), _c("unit_name"), _c("unit_type")]),
+    dict(id="dim_weather_event", label="Weather Event", table="dim_weather_event", source="[weather].[dim_weather_event]",
+         category="weather", role="hub", grain="one row per active storm / hazard",
+         desc="Active tropical and severe-weather systems affecting the operating region — hazard kind, category, current wind/pressure, position and movement.",
+         columns=[_c("event_id", "string", "pk"), _c("hazard_kind"), _c("name"), _c("region"), _c("status"), _c("category", "int64"), _c("current_wind_mph", "double"), _c("gust_mph", "double"), _c("pressure_mb", "double"), _c("lat", "double"), _c("lon", "double"), _c("movement_deg", "double"), _c("movement_mph", "double"), _c("updated_at", "dateTime")]),
+    dict(id="weather_forecast", label="Forecast Track", table="WeatherForecast", source="[weather].[WeatherForecast]",
+         category="weather", role="leaf", grain="one row per event × forecast hour",
+         desc="Per-hour forecast trajectory for each weather event — position, sustained wind, cone radius, category and pressure that drive the animated track and cone.",
+         columns=[_c("event_id", "string", "fk"), _c("hour", "int64"), _c("lat", "double"), _c("lon", "double"), _c("wind_mph", "double"), _c("cone_radius_mi", "double"), _c("category", "int64"), _c("pressure_mb", "double")]),
+    dict(id="fact_asset_exposure", label="Asset Exposure", table="fact_asset_exposure", source="[weather].[fact_asset_exposure]",
+         category="exposure", role="leaf", grain="one row per asset × storm cycle",
+         desc="Storm exposure scored per asset — risk score/level, primary threat, forecast wind, rainfall, distance to track, hours to impact and cone membership.",
+         columns=[_c("asset_id", "string", "fk"), _c("site_id", "string", "fk"), _c("cycle_id"), _c("hazard_kind"), _c("score", "double"), _c("level"), _c("primary_threat"), _c("forecast_wind_mph", "double"), _c("rainfall_in", "double"), _c("distance_mi", "double"), _c("hours_to_impact", "double"), _c("inside_threat_area", "boolean")]),
+    dict(id="fact_posture", label="Site Posture", table="fact_posture", source="[weather].[fact_posture]",
+         category="exposure", role="leaf", grain="one row per site",
+         desc="Operational storm posture per site — posture level, current vs normal personnel-on-board (POB) and the decision owner.",
+         columns=[_c("site_id", "string", "fk"), _c("posture_level"), _c("pob_current", "int64"), _c("pob_normal", "int64"), _c("decision_owner")]),
+]
+
+# (from, to, fromCol, toCol, label, kind)
+EXTRA_EDGES = [
+    ("dim_asset", "dim_site", "site_id", "site_id", "located at site", "physical"),
+    ("dim_asset", "dim_unit", "unit_id", "unit_id", "part of unit", "physical"),
+    ("dim_unit", "dim_site", "site_id", "site_id", "in site", "physical"),
+    ("weather_forecast", "dim_weather_event", "event_id", "event_id", "forecast track for", "physical"),
+    ("fact_asset_exposure", "dim_asset", "asset_id", "asset_id", "storm exposure for", "physical"),
+    ("fact_asset_exposure", "dim_site", "site_id", "site_id", "exposure at site", "logical"),
+    ("fact_asset_exposure", "dim_weather_event", "hazard_kind", "hazard_kind", "threat from", "logical"),
+    ("fact_posture", "dim_site", "site_id", "site_id", "operational posture for", "physical"),
+]
 
 
 def parse_table(path):
@@ -217,6 +268,18 @@ def main():
 
     node_ids = {n["id"] for n in nodes}
 
+    # merge curated weather / exposure entities (present in OneGridModel but not in
+    # the twin TMDL this script parses) so the graph shows the weather side too.
+    for en in EXTRA_NODES:
+        if en["id"] in node_ids:
+            continue
+        nodes.append({
+            "id": en["id"], "label": en["label"], "table": en["table"],
+            "source": en["source"], "category": en["category"], "role": en.get("role", "leaf"),
+            "grain": en["grain"], "description": en["desc"], "columns": en["columns"],
+        })
+    node_ids = {n["id"] for n in nodes}
+
     edges = []
     seen = set()
     for e in rels:
@@ -279,9 +342,22 @@ def main():
                 "label": "dated by", "kind": "temporal", "cardinality": "many-to-one",
             })
 
+    # curated weather / exposure edges (endpoints may be curated extra nodes)
+    for frm, to, fc, tc, label, kind in EXTRA_EDGES:
+        if frm not in node_ids or to not in node_ids:
+            continue
+        if (frm, to) in seen or (to, frm) in seen:
+            continue
+        seen.add((frm, to))
+        edges.append({
+            "id": f"{frm}::{to}", "from": frm, "to": to,
+            "fromCol": fc, "toCol": tc, "label": label,
+            "kind": kind, "cardinality": "many-to-one",
+        })
+
     out = {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "source": "semantic-main",
+        "source": "OneGridModel (unified)",
         "title": "OneGrid Knowledge Graph",
         "categories": CATEGORIES,
         "nodes": sorted(nodes, key=lambda n: (n["category"], n["id"])),
