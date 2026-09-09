@@ -22,11 +22,12 @@ function stormDot(e: WeatherEvent): string {
 
 /**
  * Forecast Timeline — the merged weather page. It combines the per-storm briefing
- * (pills, vitals, affected assets) with the forward-moving forecast timeline
- * (playhead scrubber + estate exposure over the horizon). The map + storm details
- * and the forecast timeline accordion against each other: expanding one compresses
- * the other. In "storm" mode the map shows current positions; in "timeline" mode it
- * animates forward along the scrubbed hour.
+ * (pills, storm info, affected assets) with the forward-moving forecast timeline
+ * (playhead scrubber + estate exposure over the horizon). Layout top→bottom:
+ * pills → storm info (collapsible) → map → forecast timeline (collapsible). The
+ * storm info and the forecast timeline accordion against each other: expanding one
+ * collapses the other. In "storm" mode the map shows current positions; in
+ * "timeline" mode it animates forward along the scrubbed hour. The page scrolls.
  */
 export function EventsPage() {
   const base = useOpsBase();
@@ -124,7 +125,7 @@ export function EventsPage() {
   if (!event) {
     return (
       <AppShell>
-        <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center p-6">
+        <div className="flex min-h-[60vh] items-center justify-center p-6">
           <div className="max-w-sm rounded-sm border bg-background/90 px-4 py-3 text-center">
             <h2 className="text-sm font-semibold">No active weather events</h2>
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
@@ -149,222 +150,233 @@ export function EventsPage() {
 
   return (
     <AppShell>
-      <div className="flex h-[calc(100vh-3.5rem)] min-h-0">
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* storm selector pills */}
-          <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-            <span className="label-xs mr-1">Active systems</span>
-            {ordered.map((e) => {
-              const active = e.id === event.id;
-              return (
-                <button
-                  key={e.id}
-                  onClick={() => setSelectedEventId(e.id)}
-                  aria-pressed={active}
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                    active
-                      ? "border-primary bg-primary/10 font-semibold text-foreground"
-                      : "text-muted-foreground hover:bg-accent"
-                  }`}
-                >
-                  <span className="size-2 rounded-full" style={{ backgroundColor: stormDot(e) }} />
-                  {e.name}
-                  <span className="text-[10px] text-muted-foreground">
-                    {e.currentCategory > 0 ? `Cat ${e.currentCategory}` : `${e.currentWindMph} mph`}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+      <div className="space-y-4 p-4">
+        {/* storm selector pills */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="label-xs mr-1">Active systems</span>
+          {ordered.map((e) => {
+            const active = e.id === event.id;
+            return (
+              <button
+                key={e.id}
+                onClick={() => setSelectedEventId(e.id)}
+                aria-pressed={active}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  active
+                    ? "border-primary bg-primary/10 font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                <span className="size-2 rounded-full" style={{ backgroundColor: stormDot(e) }} />
+                {e.name}
+                <span className="text-[10px] text-muted-foreground">
+                  {e.currentCategory > 0 ? `Cat ${e.currentCategory}` : `${e.currentWindMph} mph`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-          {/* shared map — big in storm mode, compressed in timeline mode */}
-          <div className={`relative min-h-0 ${mode === "storm" ? "flex-1" : "h-[40vh] shrink-0"}`}>
-            <MapModeSwitch
-              className="h-full w-full"
-              assets={assets}
-              risks={riskMap}
-              event={event}
-              events={events}
-              initialFocusEventId={event.id}
-              hour={mode === "timeline" ? hour : 0}
-              layers={{ assets: true, track: mode === "timeline", wind: true }}
-              selectedId={selected}
-              onSelect={setSelected}
-            />
-            <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-md border bg-popover/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
-              {mode === "timeline" ? (
-                <span className="font-medium">Forecast +{hour} h</span>
-              ) : (
-                <>
-                  <span className="relative flex size-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-                    <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-4">
+            {/* storm info (collapsible) */}
+            <div className="panel">
+              <button
+                onClick={() => setMode("storm")}
+                aria-expanded={mode === "storm"}
+                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-accent/40"
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold">{event.name}</span>
+                  <span className="rounded-sm border border-risk-critical/40 bg-risk-critical/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-risk-critical uppercase">
+                    {event.status}
                   </span>
-                  <span className="font-medium">Current position</span>
-                </>
+                  <span className="text-[11px] text-muted-foreground">
+                    {event.currentCategory > 0
+                      ? `Category ${event.currentCategory}`
+                      : "Tropical storm"}{" "}
+                    · {event.currentWindMph} mph · {affected.length} affected
+                  </span>
+                </span>
+                <ChevronDown
+                  className={`size-4 shrink-0 transition-transform ${mode === "storm" ? "rotate-180" : ""}`}
+                />
+              </button>
+              {mode === "storm" && (
+                <div className="grid grid-cols-2 border-t sm:grid-cols-4">
+                  {(
+                    [
+                      ["Current position", coords(event.lat, event.lon)],
+                      ["Sustained wind", `${event.currentWindMph} mph`],
+                      ["Gusts", `${event.gustMph} mph`],
+                      ["Minimum pressure", `${event.pressureMb} mb`],
+                      ["Movement", `${event.movementDeg}° at ${event.movementMph} mph`],
+                      ["Category", `Category ${event.currentCategory}`],
+                      ["Expected landfall", event.expectedLandfall],
+                      ["Forecast confidence", event.confidence],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="px-4 py-2.5">
+                      <div className="label-xs">{label}</div>
+                      <div className="num mt-1 text-xs capitalize">{value}</div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          </div>
 
-          {/* accordion: storm details ⇄ forecast timeline */}
-          <div className={`flex flex-col ${mode === "timeline" ? "min-h-0 flex-1" : ""}`}>
-            {/* storm details header */}
-            <button
-              onClick={() => setMode("storm")}
-              aria-expanded={mode === "storm"}
-              className="flex w-full items-center justify-between border-y px-4 py-2 text-left hover:bg-accent/50"
-            >
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold">{event.name}</span>
-                <span className="rounded-sm border border-risk-critical/40 bg-risk-critical/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-risk-critical uppercase">
-                  {event.status}
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  {event.currentCategory > 0 ? `Category ${event.currentCategory}` : "Tropical storm"}{" "}
-                  · {event.currentWindMph} mph · {affected.length} affected
-                </span>
-              </span>
-              <ChevronDown
-                className={`size-4 shrink-0 transition-transform ${mode === "storm" ? "rotate-180" : ""}`}
-              />
-            </button>
-            {mode === "storm" && (
-              <div className="grid grid-cols-2 border-b sm:grid-cols-4">
-                {(
-                  [
-                    ["Current position", coords(event.lat, event.lon)],
-                    ["Sustained wind", `${event.currentWindMph} mph`],
-                    ["Gusts", `${event.gustMph} mph`],
-                    ["Minimum pressure", `${event.pressureMb} mb`],
-                    ["Movement", `${event.movementDeg}° at ${event.movementMph} mph`],
-                    ["Category", `Category ${event.currentCategory}`],
-                    ["Expected landfall", event.expectedLandfall],
-                    ["Forecast confidence", event.confidence],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div key={label} className="px-4 py-2.5">
-                    <div className="label-xs">{label}</div>
-                    <div className="num mt-1 text-xs capitalize">{value}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* forecast timeline header */}
-            <button
-              onClick={() => setMode("timeline")}
-              aria-expanded={mode === "timeline"}
-              className="flex w-full items-center justify-between border-b px-4 py-2 text-left hover:bg-accent/50"
-            >
-              <span className="label-xs">Forecast timeline</span>
-              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                {mode === "timeline" ? `peak ${maxExposed} exposed` : "scrub the 120 h horizon"}
-                <ChevronDown
-                  className={`size-4 transition-transform ${mode === "timeline" ? "rotate-180" : ""}`}
+            {/* map — under the storm info */}
+            <div className="panel overflow-hidden">
+              <div className="relative h-[58vh] min-h-[420px]">
+                <MapModeSwitch
+                  className="h-full w-full"
+                  assets={assets}
+                  risks={riskMap}
+                  event={event}
+                  events={events}
+                  initialFocusEventId={event.id}
+                  hour={mode === "timeline" ? hour : 0}
+                  layers={{ assets: true, track: mode === "timeline", wind: true }}
+                  selectedId={selected}
+                  onSelect={setSelected}
                 />
-              </span>
-            </button>
-            {mode === "timeline" && (
-              <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-                {/* playhead scrubber */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    onClick={() => setPlaying((p) => !p)}
-                    className="inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-xs hover:bg-accent"
-                  >
-                    {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-                    {playing ? "Pause" : "Play"}
-                  </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={120}
-                    step={3}
-                    value={hour}
-                    onChange={(e) => setHour(Number(e.target.value))}
-                    className="h-1 min-w-[180px] flex-1 accent-[var(--color-primary)]"
-                    aria-label="Forecast hour"
+                <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-md border bg-popover/90 px-3 py-1.5 text-xs shadow-lg backdrop-blur">
+                  {mode === "timeline" ? (
+                    <span className="font-medium">Forecast +{hour} h</span>
+                  ) : (
+                    <>
+                      <span className="relative flex size-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                        <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                      </span>
+                      <span className="font-medium">Current position</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* forecast timeline (collapsible) */}
+            <div className="panel">
+              <button
+                onClick={() => setMode("timeline")}
+                aria-expanded={mode === "timeline"}
+                className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-accent/40"
+              >
+                <span className="label-xs">Forecast timeline</span>
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  {mode === "timeline" ? `peak ${maxExposed} exposed` : "scrub the 120 h horizon"}
+                  <ChevronDown
+                    className={`size-4 transition-transform ${mode === "timeline" ? "rotate-180" : ""}`}
                   />
-                  <span className="num w-16 text-right text-sm font-semibold">+{hour} h</span>
-                  <div className="flex gap-1">
-                    {STOPS.map((s) => (
+                </span>
+              </button>
+              {mode === "timeline" && (
+                <div className="space-y-2 border-t p-3">
+                  {/* playhead scrubber */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={() => setPlaying((p) => !p)}
+                      className="inline-flex items-center gap-1.5 rounded-sm border px-2.5 py-1.5 text-xs hover:bg-accent"
+                    >
+                      {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+                      {playing ? "Pause" : "Play"}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={120}
+                      step={3}
+                      value={hour}
+                      onChange={(e) => setHour(Number(e.target.value))}
+                      className="h-1 min-w-[180px] flex-1 accent-[var(--color-primary)]"
+                      aria-label="Forecast hour"
+                    />
+                    <span className="num w-16 text-right text-sm font-semibold">+{hour} h</span>
+                    <div className="flex gap-1">
+                      {STOPS.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setHour(s)}
+                          className={`rounded-sm border px-2 py-1 text-[11px] ${hour === s ? "bg-accent" : "hover:bg-accent/60"}`}
+                        >
+                          {s}h
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* estate exposure over the horizon */}
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="label-xs">Exposure over the forecast horizon</span>
+                    <span className="text-[10px] text-muted-foreground">click a bar to jump</span>
+                  </div>
+                  <div className="flex h-40 items-end gap-1">
+                    {series.map((s) => (
                       <button
-                        key={s}
-                        onClick={() => setHour(s)}
-                        className={`rounded-sm border px-2 py-1 text-[11px] ${hour === s ? "bg-accent" : "hover:bg-accent/60"}`}
+                        key={s.hour}
+                        onClick={() => setHour(s.hour)}
+                        className="group flex h-full flex-1 flex-col justify-end gap-0.5"
+                        title={`+${s.hour} h — ${s.exposed} exposed`}
                       >
-                        {s}h
+                        <div className="flex w-full flex-1 items-end">
+                          <div
+                            className="w-full rounded-t-sm transition-opacity"
+                            style={{
+                              height: `${(s.exposed / maxExposed) * 100}%`,
+                              backgroundColor: riskColorVar(
+                                s.critical > 0 ? "critical" : "elevated",
+                              ),
+                              opacity: s.hour <= hour ? 1 : 0.3,
+                            }}
+                          />
+                        </div>
+                        <span className="num text-[9px] leading-none text-muted-foreground">
+                          {s.hour % 24 === 0 ? s.hour : ""}
+                        </span>
                       </button>
                     ))}
                   </div>
                 </div>
-                {/* estate exposure over the horizon — fills remaining height */}
-                <div className="flex items-center justify-between">
-                  <span className="label-xs">Exposure over the forecast horizon</span>
-                  <span className="text-[10px] text-muted-foreground">click a bar to jump</span>
-                </div>
-                <div className="flex min-h-[3rem] flex-1 items-end gap-1">
-                  {series.map((s) => (
-                    <button
-                      key={s.hour}
-                      onClick={() => setHour(s.hour)}
-                      className="group flex h-full flex-1 flex-col justify-end gap-0.5"
-                      title={`+${s.hour} h — ${s.exposed} exposed`}
-                    >
-                      <div className="flex w-full flex-1 items-end">
-                        <div
-                          className="w-full rounded-t-sm transition-opacity"
-                          style={{
-                            height: `${(s.exposed / maxExposed) * 100}%`,
-                            backgroundColor: riskColorVar(s.critical > 0 ? "critical" : "elevated"),
-                            opacity: s.hour <= hour ? 1 : 0.3,
-                          }}
-                        />
-                      </div>
-                      <span className="num text-[8px] leading-none text-muted-foreground">
-                        {s.hour % 24 === 0 ? s.hour : ""}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* right sidebar: affected (storm) / exposed (timeline) */}
-        <div className="hidden w-80 shrink-0 flex-col border-l bg-panel md:flex">
-          <div className="border-b px-4 py-2.5 label-xs">
-            {mode === "timeline" ? `Exposed at +${hour} h` : `Affected assets (${affected.length})`}
-          </div>
-          <ul className="flex-1 divide-y overflow-y-auto">
-            {sideList.length === 0 && (
-              <li className="px-4 py-4 text-xs text-muted-foreground">
-                {mode === "timeline"
-                  ? "No assets reach impact onset before this hour."
-                  : "No assets at elevated risk from this system."}
-              </li>
-            )}
-            {sideList.map((r) => (
-              <li key={r.assetId}>
-                <button
-                  onClick={() => setSelected(r.assetId)}
-                  className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-accent"
-                >
-                  <span>
-                    <span className="text-xs font-medium">{nameOf(r.assetId)}</span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      {r.distanceMi} mi · {r.forecastWindMph} mph ·{" "}
-                      {mode === "timeline"
-                        ? `onset ${r.hoursToImpact} h`
-                        : `impact in ${r.hoursToImpact} h`}
+          {/* right list: affected (storm) / exposed (timeline) */}
+          <div className="panel h-fit">
+            <div className="border-b px-4 py-2.5 label-xs">
+              {mode === "timeline"
+                ? `Exposed at +${hour} h`
+                : `Affected assets (${affected.length})`}
+            </div>
+            <ul className="max-h-[640px] divide-y overflow-y-auto">
+              {sideList.length === 0 && (
+                <li className="px-4 py-4 text-xs text-muted-foreground">
+                  {mode === "timeline"
+                    ? "No assets reach impact onset before this hour."
+                    : "No assets at elevated risk from this system."}
+                </li>
+              )}
+              {sideList.map((r) => (
+                <li key={r.assetId}>
+                  <button
+                    onClick={() => setSelected(r.assetId)}
+                    className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-accent"
+                  >
+                    <span>
+                      <span className="text-xs font-medium">{nameOf(r.assetId)}</span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {r.distanceMi} mi · {r.forecastWindMph} mph ·{" "}
+                        {mode === "timeline"
+                          ? `onset ${r.hoursToImpact} h`
+                          : `impact in ${r.hoursToImpact} h`}
+                      </span>
                     </span>
-                  </span>
-                  <RiskBadge level={r.level} score={r.score} />
-                </button>
-              </li>
-            ))}
-          </ul>
+                    <RiskBadge level={r.level} score={r.score} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     </AppShell>
