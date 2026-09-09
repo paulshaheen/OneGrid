@@ -12,6 +12,7 @@ import { useOpsSnapshot } from "@/lib/hooks/use-ops-data";
 import { RISK_LABEL } from "@/lib/format";
 import type { Asset, AssetRisk, RiskLevel } from "@/lib/domain/types";
 import { MODES } from "@/report/lib/themes.js";
+import { getJson } from "@/report/lib/api.js";
 
 // Asset Explorer — a navigator for the estate. Drill the hierarchy:
 //   Energy Infrastructure → Type → Asset          (weather storm-exposure)
@@ -115,7 +116,7 @@ export function AssetExplorerPage() {
   } | null>(null);
   const [equipMeta, setEquipMeta] = useState<Record<string, EquipAsset>>({});
   const [AssetModal, setAssetModal] = useState<ComponentType<Record<string, unknown>> | null>(null);
-  const [modalAsset, setModalAsset] = useState<FacAsset | null>(null);
+  const [modalAsset, setModalAsset] = useState<(FacAsset & Partial<EquipAsset>) | null>(null);
 
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"weather" | "pdm">("weather");
@@ -129,13 +130,30 @@ export function AssetExplorerPage() {
 
   useEffect(() => {
     let ok = true;
-    import("@/report/lib/sample.js").then((m) => {
-      if (!ok) return;
-      setFacility(m.facilityModel());
-      setEquipMeta(
-        Object.fromEntries((m.fleetAssets() as EquipAsset[]).map((a) => [a.asset_id, a])),
-      );
-    });
+    // Load the facility model + equipment meta from the SAME source the tag-values come
+    // from (getJson honours backend mode): live backend when deployed, sample otherwise.
+    // Previously these came straight from sample.js, so sample-only units (e.g. Riverton
+    // RV3/RV4) had no live Eventhouse telemetry and the 3D model showed empty values.
+    getJson("/api/facility-model")
+      .then(
+        (fm) =>
+          ok &&
+          setFacility(
+            fm as {
+              plants: { name: string; unitList: { name: string; assets: FacAsset[] }[] }[];
+            },
+          ),
+      )
+      .catch(() => {});
+    getJson("/api/fleet-assets")
+      .then(
+        (fa) =>
+          ok &&
+          setEquipMeta(
+            Object.fromEntries((fa as EquipAsset[]).map((a) => [a.asset_id, a])),
+          ),
+      )
+      .catch(() => {});
     import("@/report/components/FleetGrid.jsx").then(
       (m) => ok && setAssetModal(() => m.AssetModal),
     );
@@ -165,9 +183,10 @@ export function AssetExplorerPage() {
         const units: Node[] = p.unitList.map((u) => {
           const leaves: Node[] = u.assets
             .map((a) => {
+              const meta = domain === "equipment" ? equipMeta[a.asset_id] : undefined;
               const sev: Sev =
                 domain === "equipment"
-                  ? (a.status as Sev)
+                  ? ((meta?.status ?? a.status) as Sev)
                   : ((siteRisk?.level ?? "normal") as Sev);
               const common = {
                 id: `a:${a.asset_id}`,
@@ -179,7 +198,7 @@ export function AssetExplorerPage() {
                 issues: isIssue(sev) ? 1 : 0,
               };
               return domain === "equipment"
-                ? { ...common, equip: a }
+                ? { ...common, equip: { ...a, plant: p.name, unit: u.name } }
                 : { ...common, ...(siteInfra ? { infra: siteInfra } : {}) };
             })
             .sort((a, b) => SEV_RANK[b.sev] - SEV_RANK[a.sev]);
@@ -217,7 +236,7 @@ export function AssetExplorerPage() {
       build("infrastructure", "Energy Infrastructure"),
       build("equipment", "Rotating & Fired Equipment"),
     ];
-  }, [assets, riskMap, facility]);
+  }, [assets, riskMap, facility, equipMeta]);
 
   const activeTree = activeDomain === "infrastructure" ? tree[0] : tree[1];
 
@@ -262,6 +281,12 @@ export function AssetExplorerPage() {
     if (nm) setSelected(`p:${nm}`);
   };
 
+  // Open the 3D twin modal with the equipment leaf enriched by its fleet-assets meta
+  // (condition/health/max_z/etc.) so the banner + hotspots have the full picture. The
+  // modal itself resolves live tags from /api/asset/:id using the (real) asset_id.
+  const openTwin = (fac: FacAsset) =>
+    setModalAsset({ ...fac, ...(equipMeta[fac.asset_id] ?? {}) });
+
   const renderNode = (n: Node, depth: number): ReactNode => {
     if (matchIds && !matchIds.has(n.id)) return null;
     const isOpen = expanded.has(n.id) || (matchIds ? matchIds.has(n.id) : false);
@@ -273,7 +298,7 @@ export function AssetExplorerPage() {
           onClick={() => {
             setSelected(n.id);
             if (hasChildren) toggle(n.id);
-            if (n.kind === "asset" && n.domain === "equipment") setModalAsset(n.equip!);
+            if (n.kind === "asset" && n.domain === "equipment") openTwin(n.equip!);
           }}
           className={`flex cursor-pointer items-center gap-1.5 rounded-sm py-1.5 pr-2 text-[12.5px] hover:bg-accent/50 ${isSel ? "bg-accent/70" : ""}`}
           style={{ paddingLeft: 8 + depth * 14 }}
@@ -426,7 +451,7 @@ export function AssetExplorerPage() {
                     ))}
                   </div>
                   <button
-                    onClick={() => setModalAsset(sel.equip!)}
+                    onClick={() => openTwin(sel.equip!)}
                     className="mt-4 inline-flex items-center gap-2 rounded-sm bg-primary px-3 py-2 text-[12px] font-semibold text-primary-foreground"
                   >
                     <Cpu className="size-3.5" /> Open 3D twin &amp; diagnostics
@@ -518,7 +543,7 @@ export function AssetExplorerPage() {
                             key={l.id}
                             onClick={() => {
                               setSelected(l.id);
-                              if (l.domain === "equipment") setModalAsset(l.equip!);
+                              if (l.domain === "equipment") openTwin(l.equip!);
                             }}
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/40"
                           >
