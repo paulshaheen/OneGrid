@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/ops/AppShell";
-import { WeatherHoloMap } from "@/components/ops/WeatherHoloMap";
+import { CommandMap, type MapSite } from "@/components/command/CommandMap";
 import { PageLoading } from "@/components/ops/PageLoading";
 import { useOpsBase } from "@/components/ops/ops-nav";
 import { eventsQuery, layersQuery, useOpsSnapshot } from "@/lib/hooks/use-ops-data";
@@ -38,6 +38,12 @@ const C = {
 };
 
 const num = (v: unknown): number => (typeof v === "number" ? v : Number(v) || 0);
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return h;
+}
 
 // ───────────────────────────── page ───────────────────────────────────────
 export function CommandCenterPage() {
@@ -95,6 +101,29 @@ export function CommandCenterPage() {
   const onTimePct = woOpen ? Math.round((onTime / woOpen) * 100) : 0;
 
   const catHealth = useMemo(() => healthByCategory(exp, riskMap), [exp, riskMap]);
+
+  const sites: MapSite[] = useMemo(
+    () =>
+      assets
+        .filter((a) => Number.isFinite(a.lat) && Number.isFinite(a.lon))
+        .map((a) => {
+          const r = riskMap.get(a.id);
+          const lvl = (r?.level ?? "normal") as MapSite["level"];
+          const h = Math.abs(hashStr(a.id));
+          return {
+            id: a.id,
+            name: a.name,
+            lat: a.lat,
+            lon: a.lon,
+            level: lvl,
+            status: lvl === "normal" ? "Operational" : lvl === "critical" ? "Critical" : "Watch",
+            loadPct: 58 + (h % 40),
+            voltageKv: [115, 230, 345, 500][h % 4],
+            tempF: 60 + (h % 22),
+          };
+        }),
+    [assets, riskMap],
+  );
 
   const loading = snap.isLoading && assets.length === 0;
   if (loading) {
@@ -205,17 +234,10 @@ export function CommandCenterPage() {
               </div>
               {/* the hero map */}
               <div className="relative h-[440px] w-full">
-                <WeatherHoloMap
-                  className="h-full w-full"
-                  assets={assets}
-                  risks={riskMap}
-                  event={storm}
-                  events={events}
-                  layers={layers}
-                  catalogLayers={layerDefs.data ?? []}
+                <CommandMap
+                  sites={sites}
+                  storm={storm ? { name: storm.name } : undefined}
                   selectedId={selected}
-                  hour={0}
-                  skipGlobe
                   onSelect={setSelected}
                 />
                 {/* grid-layers toggle bar */}
