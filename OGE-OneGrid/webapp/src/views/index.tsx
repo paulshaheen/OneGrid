@@ -333,7 +333,7 @@ export function OverviewPage() {
         </div>
 
         {view === "fleet" ? (
-          <div className="min-h-0 flex-1 bg-[#0a0f1a] text-[#aeb9cd]">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {Exec ? (
               <Exec
                 theme={MODES.dark}

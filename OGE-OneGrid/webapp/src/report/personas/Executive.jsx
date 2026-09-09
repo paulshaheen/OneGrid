@@ -27,14 +27,14 @@ export default function Executive({ theme, onNavigate, onOpenGovernance }) {
   const atRisk = preds?.counts?.atRisk;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden px-5 sm:px-8 lg:px-12 py-4 max-w-[1500px] mx-auto">
-      <div className="mb-3 shrink-0"><BriefingBar theme={theme} narrative={narrative} /></div>
+    <div className="flex flex-col gap-3 px-4 pt-3 pb-4 max-w-[1600px] mx-auto">
+      <div className="shrink-0"><BriefingBar theme={theme} narrative={narrative} /></div>
 
       {onOpenGovernance && (
-        <div className="mb-3 shrink-0"><GovernanceBadge theme={theme} onOpen={onOpenGovernance} /></div>
+        <div className="shrink-0"><GovernanceBadge theme={theme} onOpen={onOpenGovernance} /></div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-3 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 shrink-0">
         <div data-tour="sundial" className={`lg:col-span-4 ${theme.panel} p-4 flex flex-col items-center justify-center`}>
           <SectionTitle theme={theme} right={<span className={`text-[11px] ${theme.sub}`}>click to drill</span>}>Fleet Health</SectionTitle>
           {!assets ? <Spinner theme={theme} /> : (
@@ -61,14 +61,14 @@ export default function Executive({ theme, onNavigate, onOpenGovernance }) {
         </div>
       </div>
 
-      <div className={`${theme.panel} p-4 flex-1 min-h-0 flex flex-col`}>
+      <div className={`${theme.panel} p-4 flex flex-col`}>
         <div className="shrink-0">
           <SectionTitle theme={theme} right={<span className={`text-xs ${theme.sub}`}>critical only - click for detail</span>}>Priority Watch - where to focus</SectionTitle>
         </div>
         {!assets ? <Spinner theme={theme} /> : criticalAssets.length === 0 ? (
           <div className={`text-sm ${theme.sub} py-8 text-center`}>No critical assets - fleet is stable.</div>
         ) : (
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+          <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
             {rankAssets(criticalAssets).map((a) => {
               const s = statusOf(a.status);
               const disp = a.score ?? a.health;
