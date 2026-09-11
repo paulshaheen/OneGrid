@@ -196,6 +196,34 @@ const GLOW_TEX = (() => {
   return new THREE.CanvasTexture(c);
 })();
 
+// Narrow core and feathered halo for map sites, separate from weather particles.
+const SITE_GLOW_TEX = (() => {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  const halo = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  halo.addColorStop(0, "rgba(255,255,255,1)");
+  halo.addColorStop(0.09, "rgba(255,255,255,0.96)");
+  halo.addColorStop(0.24, "rgba(255,255,255,0.5)");
+  halo.addColorStop(0.44, "rgba(255,255,255,0.17)");
+  halo.addColorStop(0.72, "rgba(255,255,255,0.035)");
+  halo.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, 128, 128);
+  const glint = ctx.createLinearGradient(24, 0, 104, 0);
+  glint.addColorStop(0, "rgba(255,255,255,0)");
+  glint.addColorStop(0.5, "rgba(255,255,255,0.8)");
+  glint.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glint;
+  ctx.fillRect(24, 62.5, 80, 3);
+  ctx.translate(64, 64);
+  ctx.rotate(Math.PI / 2);
+  ctx.translate(-64, -64);
+  ctx.fillRect(24, 62.5, 80, 3);
+  return new THREE.CanvasTexture(canvas);
+})();
+
 // A soft, feathered puff used for the storm's grey/white cloud particles.
 const CLOUD_TEX = (() => {
   if (typeof document === "undefined") return null;
@@ -549,7 +577,7 @@ function SiteNetwork({ assets, heightAt, risks, highlightSet }) {
       const lvl = risks?.get?.(a.id)?.level;
       // At-risk sites glow in their risk colour (e.g. red near the storm);
       // normal/monitor sites stay the network cyan so they still read clearly.
-      const color = lvl && lvl !== "normal" && lvl !== "monitor" ? riskColor(lvl) : "#5fd8ff";
+      const color = lvl && lvl !== "normal" && lvl !== "monitor" ? riskColor(lvl) : token("--og-map-marker", "#5fd8ff");
       const dim = highlightSet ? !highlightSet.has(a.id) : false;
       return { id: a.id, x, z, y: Math.max(0.05, heightAt(x, z)), color, dim };
     });
@@ -603,11 +631,11 @@ function SiteNetwork({ assets, heightAt, risks, highlightSet }) {
     <group>
       {arcs.map((pts, i) => (
         <group key={`arc${i}`}>
-          <Line points={pts} color="#3fd0ff" lineWidth={3.5} transparent opacity={0.14} />
-          <Line points={pts} color="#8fe8ff" lineWidth={1.2} transparent opacity={0.6} />
+          <Line points={pts} color="#3fd0ff" lineWidth={2.4} transparent opacity={0.08} />
+          <Line points={pts} color="#8fe8ff" lineWidth={0.8} transparent opacity={0.34} />
           <mesh ref={(el) => (pulses.current[i] = el)}>
-            <sphereGeometry args={[0.16, 12, 12]} />
-            <meshBasicMaterial color="#dff6ff" toneMapped={false} />
+            <sphereGeometry args={[0.1, 12, 12]} />
+            <meshBasicMaterial color="#dff6ff" transparent opacity={0.7} toneMapped={false} />
           </mesh>
         </group>
       ))}
@@ -615,34 +643,25 @@ function SiteNetwork({ assets, heightAt, risks, highlightSet }) {
         const d = n.dim ? 0.26 : 1;
         return (
         <group key={`node${n.id}`} position={[n.x, n.y + 0.05, n.z]}>
-          {/* large soft halo — a billboard, so it reads from any angle/distance */}
-          <sprite position={[0, 0.75, 0]} scale={[6.5, 6.5, 1]}>
+          <sprite position={[0, 0.55, 0]} scale={[6, 6, 1]}>
             <spriteMaterial
-              map={GLOW_TEX}
+              map={SITE_GLOW_TEX}
               color={n.color}
               transparent
-              opacity={0.5 * d}
+              opacity={0.9 * d}
               depthWrite={false}
               blending={THREE.AdditiveBlending}
               toneMapped={false}
             />
           </sprite>
-          {/* glowing orb — a sphere looks identical from every camera angle */}
-          <mesh position={[0, 0.75, 0]}>
-            <sphereGeometry args={[0.62, 24, 24]} />
-            <meshStandardMaterial
-              color="#eaf7ff"
-              emissive={n.color}
-              emissiveIntensity={2.2 * d}
+          <mesh position={[0, 0.55, 0]}>
+            <sphereGeometry args={[0.38, 16, 16]} />
+            <meshBasicMaterial
+              color={token("--og-map-marker-core", "#eaf7ff")}
               transparent
               opacity={n.dim ? 0.5 : 1}
               toneMapped={false}
             />
-          </mesh>
-          {/* ground footprint ring */}
-          <mesh rotation-x={-Math.PI / 2} position={[0, 0.02, 0]}>
-            <ringGeometry args={[0.95, 1.3, 44]} />
-            <meshBasicMaterial color={n.color} transparent opacity={0.55 * d} toneMapped={false} />
           </mesh>
         </group>
         );
@@ -933,8 +952,8 @@ function AssetPin({ asset, level, selected, dimmed = false, hovered, onSelect, o
     }
     if (ring.current && hot) {
       const p = (st.clock.elapsedTime * 1.4) % 1;
-      ring.current.scale.setScalar(1 + p * 1.6);
-      ring.current.material.opacity = 0.7 * (1 - p);
+      ring.current.scale.setScalar(1 + p * (flat ? 0.75 : 1.6));
+      ring.current.material.opacity = (flat ? 0.4 : 0.7) * (1 - p);
     }
   });
   return (
@@ -961,7 +980,7 @@ function AssetPin({ asset, level, selected, dimmed = false, hovered, onSelect, o
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.06, 0]}>
         <ringGeometry args={[0.9, 1.15, 32]} />
-        <meshBasicMaterial color={color} transparent opacity={(hot ? 0.8 : 0.4) * dd} toneMapped={false} />
+        <meshBasicMaterial color={color} transparent opacity={(hot ? (flat ? 0.5 : 0.8) : (flat ? 0.2 : 0.4)) * dd} toneMapped={false} />
       </mesh>
       {hot && (
         <mesh ref={ring} rotation-x={-Math.PI / 2} position={[0, 0.07, 0]}>
@@ -970,7 +989,7 @@ function AssetPin({ asset, level, selected, dimmed = false, hovered, onSelect, o
         </mesh>
       )}
       <group ref={g}>
-        {/* Flat command view: the big SiteNetwork orb is the marker, so skip the
+        {/* Flat command view: the SiteNetwork light is the marker, so skip the
             tall pole + sphere here (keep the interaction hitbox + ground rings). */}
         {!flat && (
           <>

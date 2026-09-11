@@ -67,6 +67,13 @@ pulls `deploy-ui/bootstrap-online.ps1` from `main`, which downloads the zip and 
 in [**paulshaheen/OneGrid-Site**](https://github.com/paulshaheen/OneGrid-Site) — versioned and
 auto-deployed there, not part of this accelerator.
 
+**Dashboard appearance:** `webapp/src/styles.css` owns the dark `--og-*` surface,
+navigation-selection, and primary-control gradients. Shared shell/cards/buttons use
+those tokens. The expanded dark sidebar adds a static, decorative blue flare
+behind the navigation; the overview's site lights use a narrow-core halo in
+`webapp/src/components/ops/WeatherHoloScene.jsx`. Light-mode colors, risk semantics,
+layouts, and the SVG ontology are unchanged by this skin treatment.
+
 ```
 OGE-OneGrid/
 ├── deploy.ps1                 # phase-based deploy orchestrator (workspace→…→chatagent)

@@ -1,5 +1,5 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Bell,
@@ -313,6 +313,7 @@ export function AppShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const sidebarFlareId = useId();
   // When the chat opens we auto-collapse an expanded nav to reclaim width; this
   // ref remembers to re-expand it on close (only if WE collapsed it).
   const autoCollapsedRef = useRef(false);
@@ -375,16 +376,37 @@ export function AppShell({
   return (
     <div
       className={cn(
-        "flex bg-background text-foreground",
+        "og-app-skin flex bg-background text-foreground",
         fullHeight ? "min-h-screen xl:h-screen xl:overflow-hidden" : "min-h-screen",
       )}
     >
       <aside
         className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col bg-sidebar transition-[width] duration-300 ease-in-out lg:flex",
+          "og-sidebar-skin sticky top-0 hidden h-screen shrink-0 flex-col bg-sidebar transition-[width] duration-300 ease-in-out lg:flex",
           collapsed ? "w-16" : "w-60",
         )}
       >
+        {!collapsed && (
+          <svg className="og-sidebar-flare" viewBox="0 0 240 280" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient id={`${sidebarFlareId}-color`} x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stopColor="var(--og-sidebar-flare-color)" stopOpacity="0.75" />
+                <stop offset="0.35" stopColor="var(--og-sidebar-flare-color)" stopOpacity="0.6" />
+                <stop offset="0.7" stopColor="var(--og-sidebar-flare-color)" stopOpacity="0.25" />
+                <stop offset="1" stopColor="var(--og-sidebar-flare-color)" stopOpacity="0" />
+              </linearGradient>
+              <filter id={`${sidebarFlareId}-soft`} x="-30%" y="-60%" width="160%" height="220%">
+                <feGaussianBlur stdDeviation="8" />
+              </filter>
+              <path id={`${sidebarFlareId}-path`} d="M -32 70 C 20 58, 64 144, 119 158 S 181 206, 269 220" />
+            </defs>
+            <g fill="none" stroke={`url(#${sidebarFlareId}-color)`} strokeLinecap="round">
+              <use href={`#${sidebarFlareId}-path`} strokeWidth="30" opacity="0.22" filter={`url(#${sidebarFlareId}-soft)`} />
+              <use href={`#${sidebarFlareId}-path`} strokeWidth="6" opacity="0.1" />
+              <use href={`#${sidebarFlareId}-path`} strokeWidth="1.1" opacity="0.45" />
+            </g>
+          </svg>
+        )}
         {/* Brand */}
         <div
           className={cn("flex h-14 items-center gap-2.5 px-4", collapsed && "justify-center px-0")}
@@ -464,7 +486,7 @@ export function AppShell({
         className="flex min-w-0 flex-1 flex-col transition-[margin] duration-300 ease-in-out"
         style={{ marginRight: copilotOpen && isDesktop ? 400 : 0 }}
       >
-        <header className="sticky top-0 z-[70] flex h-14 items-center gap-3 border-b bg-surface/95 px-4 backdrop-blur">
+        <header className="og-header-skin sticky top-0 z-[70] flex h-14 items-center gap-3 border-b bg-surface/95 px-4 backdrop-blur">
           {/* Collapse the side menu (desktop) */}
           <button
             onClick={toggleCollapsed}
@@ -543,7 +565,7 @@ export function AppShell({
                           onClick={() => setDark(true)}
                           className={cn(
                             "px-2.5 py-1 text-[11px] font-semibold",
-                            dark ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                            dark ? "og-primary-control bg-primary text-primary-foreground" : "text-muted-foreground",
                           )}
                         >
                           Dark
@@ -619,7 +641,7 @@ function NavLeaf({
         className={cn(
           "relative flex items-center justify-center rounded-sm py-2 transition-colors",
           active
-            ? "bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
+            ? "og-nav-selected bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
             : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
         )}
       >
@@ -654,7 +676,7 @@ function NavLeaf({
         rowCls,
         pad,
         active
-          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
+          ? "og-nav-selected bg-sidebar-accent font-medium text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
           : "text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
       )}
     >
@@ -693,7 +715,7 @@ function NavGroup({
         className={cn(
           "relative flex items-center justify-center rounded-sm py-2 transition-colors",
           anyActive
-            ? "bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
+            ? "og-nav-selected bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-inset ring-primary/30"
             : "text-foreground hover:bg-sidebar-accent/60",
         )}
       >
@@ -745,7 +767,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3 border-b bg-surface px-5 py-4">
+    <div className="og-header-skin flex flex-wrap items-end justify-between gap-3 border-b bg-surface px-5 py-4">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         <p className="mt-0.5 max-w-3xl text-xs text-muted-foreground">{description}</p>

@@ -602,8 +602,8 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-6 bottom-6 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-2xl"
-        style={{ background: `linear-gradient(135deg, ${OG.accent}, #2f6fd0)` }}
+        className="og-primary-control fixed right-6 bottom-6 z-50 inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-2xl"
+        style={{ background: `var(--og-control-gradient, linear-gradient(135deg, ${OG.accent}, #2f6fd0))` }}
       >
         <Sparkles className="size-4" /> Ask the data
       </button>

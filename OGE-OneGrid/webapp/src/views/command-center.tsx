@@ -45,8 +45,8 @@ const C = {
   red: "#ff5470",
   purple: "#a855f7",
   ink: "#0a0f1e",
-  panel: "rgba(255,255,255,0.035)",
-  border: "rgba(255,255,255,0.08)",
+  panel: "var(--og-panel-background, rgba(255,255,255,0.035))",
+  border: "var(--og-panel-border, rgba(255,255,255,0.08))",
   sub: "#93a4bf",
 };
 
@@ -485,7 +485,7 @@ export function CommandCenterPage() {
 
   return (
     <AppShell fullHeight>
-      <div className="min-h-full" style={{ background: `radial-gradient(1200px 600px at 60% -10%, #101a33 0%, ${C.ink} 55%)`, color: "#e6eef8" }}>
+      <div className="og-command-skin min-h-full" style={{ background: `var(--og-skin-gradient, radial-gradient(1200px 600px at 60% -10%, #101a33 0%, ${C.ink} 55%))`, color: "#e6eef8" }}>
         <style>{`
           @keyframes ccFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
           @keyframes ccFlash { from { opacity: 0.6; } to { opacity: 0; } }
@@ -559,8 +559,9 @@ export function CommandCenterPage() {
                     <button
                       key={k}
                       onClick={() => setTab(k)}
-                      className="rounded-md px-3 py-1.5 text-[12.5px] font-medium transition"
-                      style={tab === k ? { background: C.blue, color: "#fff" } : { color: C.sub }}
+                      className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium transition ${tab === k ? "og-primary-control" : ""}`}
+                      aria-pressed={tab === k}
+                      style={tab === k ? { backgroundColor: C.blue, color: "#fff" } : { color: C.sub }}
                     >
                       {l}
                     </button>
@@ -647,7 +648,7 @@ export function CommandCenterPage() {
                 className={`relative w-full ${isFs ? "flex-1" : "min-h-[440px] flex-1"}`}
                 style={{
                   background:
-                    "radial-gradient(ellipse 80% 70% at 50% 45%, #1b273d 0%, #0f172a 45%, #080d1a 75%, #020617 100%)",
+                    "var(--og-map-gradient, radial-gradient(ellipse 80% 70% at 50% 45%, #1b273d 0%, #0f172a 45%, #080d1a 75%, #020617 100%))",
                 }}
               >
                 {mapReady ? (
@@ -716,8 +717,8 @@ export function CommandCenterPage() {
                       setSimHour(0);
                       setPlaying(true);
                     }}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white"
-                    style={{ background: C.blue }}
+                    className="og-primary-control ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white"
+                    style={{ backgroundColor: C.blue }}
                   >
                     <Sparkles className="size-3.5" /> Run Simulation
                   </button>
@@ -747,8 +748,8 @@ export function CommandCenterPage() {
                       setSimHour(0);
                       setPlaying(true);
                     }}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white"
-                    style={{ background: C.blue }}
+                    className="og-primary-control ml-auto inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] font-semibold text-white"
+                    style={{ backgroundColor: C.blue }}
                   >
                     <Cpu className="size-3.5" /> Run Failure Model
                   </button>
@@ -977,8 +978,8 @@ function DetailModal({ data, onClose }: { data: ModalData; onClose: () => void }
           {data.to && (
             <button
               onClick={view}
-              className="rounded-md px-3 py-1.5 text-[12px] font-semibold text-white"
-              style={{ background: C.blue }}
+              className="og-primary-control rounded-md px-3 py-1.5 text-[12px] font-semibold text-white"
+              style={{ backgroundColor: C.blue }}
             >
               {data.toLabel ?? "View full record →"}
             </button>
@@ -1173,7 +1174,7 @@ function Panel({
 }) {
   return (
     <div
-      className={`rounded-xl border p-3.5 ${className ?? ""}`}
+      className={`og-panel rounded-xl border p-3.5 ${className ?? ""}`}
       style={{ borderColor: C.border, background: C.panel, backdropFilter: "blur(4px)" }}
     >
       {title && (
@@ -1208,7 +1209,7 @@ function IconBtn({ children, onClick, active }: { children: React.ReactNode; onC
   return (
     <button
       onClick={onClick}
-      className={`grid size-8 place-items-center rounded-md hover:bg-white/10 ${active ? "bg-white/10 text-white" : ""}`}
+      className={`grid size-8 place-items-center rounded-md hover:bg-white/10 ${active ? "og-nav-selected bg-white/10 text-white" : ""}`}
     >
       {children}
     </button>
@@ -1389,8 +1390,8 @@ function SimTimeline({
     <div className="flex items-center gap-3">
       <button
         onClick={onTogglePlay}
-        className="grid size-8 shrink-0 place-items-center rounded-full text-white"
-        style={{ background: C.blue }}
+        className="og-primary-control grid size-8 shrink-0 place-items-center rounded-full text-white"
+        style={{ backgroundColor: C.blue }}
         aria-label={playing ? "Pause" : "Play"}
       >
         {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
