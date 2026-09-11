@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 import { dax, dax1, kql, kqlMgmt, isCapacityPausedError, getCapacityState } from './fabric.js';
 import { resolveTarget } from './target.js';
+import { completionTags, isSyntheticTag, synthValueAt, synthSeries, synthStat } from './sensorFill.js';
 
 const cache = new Map();
 async function cached(key, ttlMs, fn) {
@@ -280,6 +281,15 @@ async function assetDetailUncached(id) {
       for (const t of m2.values()) tags.push({ ...t, tag: t.tag.replace(/^[^:]+:/, pre + ':') });
     }
   }
+  // Complete the tag set so EVERY 3D-twin hotspot has a reading. The real estate only
+  // emits mechanical-health tags (vibration/speed/bearing temp), so steam-path / process
+  // hotspots (HP Casing, IP Section, LP Exhaust, furnace, seal, exciter, …) had no tag and
+  // rendered blank. completionTags() appends a synthetic sensor for any hotspot the real
+  // tags don't cover; its value/trend are served deterministically by tagValues/tagTrend.
+  const eqName = asset[0]?.asset_display_name || asset[0]?.name || String(id).split('_').slice(2).join(' ');
+  const eqCat = asset[0]?.equipment_category || asset[0]?.category || '';
+  const eqGrp = asset[0]?.equipment_group || asset[0]?.group || '';
+  try { const extra = completionTags(id, eqName, eqCat, eqGrp, tags); if (extra.length) tags.push(...extra); } catch { /* completion is best-effort */ }
   // Fold last-known sensor values into the tags in the same response so the 3D model
   // renders live readings immediately — no second round-trip / render race.
   try {
@@ -625,11 +635,16 @@ async function tagValuesReal(tags, sinceMinutes) {
 
 export async function tagValues(tags, sinceMinutes) {
   if (!tags || !tags.length) return [];
-  if (!T().kustoUri) return []; // no Eventhouse configured (e.g. unified model has no live historian) — degrade
-  if (!MIRROR_CLONES) return tagValuesReal(tags, sinceMinutes); // unified: every tag is real
+  // Synthetic completion tags (twin hotspots absent from the historian) get a
+  // deterministic reading here — they never exist in PiEvents.
+  const synth = [], live = [];
+  for (const t of tags) (isSyntheticTag(t) ? synth : live).push(t);
+  const results = synth.map((t) => ({ tag: t, ts: new Date().toISOString(), value: synthValueAt(t), valueType: null, plant: String(t).split(':')[0] }));
+  if (!live.length) return results;
+  if (!T().kustoUri) return results; // no Eventhouse configured — real tags degrade, synth still show
+  if (!MIRROR_CLONES) { results.push(...await tagValuesReal(live, sinceMinutes)); return results; }
   const real = [], mirror = new Map(); // cloneTag -> {src, prefix}
-  for (const t of tags) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
-  const results = [];
+  for (const t of live) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
   if (real.length) results.push(...await tagValuesReal(real, sinceMinutes));
   if (mirror.size) {
     const srcTags = [...new Set([...mirror.values()].map((m) => m.src))];
@@ -666,11 +681,14 @@ async function tagStatsReal(tags) {
 
 export async function tagStats(tags) {
   if (!tags || !tags.length) return {};
-  if (!T().kustoUri) return {}; // no Eventhouse configured — degrade to no live stats
-  if (!MIRROR_CLONES) return tagStatsReal(tags); // unified: every tag is real
-  const real = [], mirror = new Map();
-  for (const t of tags) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
   const out = {};
+  const live = [];
+  for (const t of tags) { if (isSyntheticTag(t)) { const s = synthStat(t); if (s) out[t] = s; } else live.push(t); }
+  if (!live.length) return out;
+  if (!T().kustoUri) return out; // no Eventhouse configured — synth still return stats
+  if (!MIRROR_CLONES) { Object.assign(out, await tagStatsReal(live)); return out; }
+  const real = [], mirror = new Map();
+  for (const t of live) { const m = sourceTagOf(t); if (m) mirror.set(t, m); else real.push(t); }
   if (real.length) Object.assign(out, await tagStatsReal(real));
   if (mirror.size) {
     const srcTags = [...new Set([...mirror.values()].map((m) => m.src))];
@@ -704,6 +722,7 @@ export function realtimePulse() {
 }
 
 export async function tagTrend(tag, hours = 24, bin = 15) {
+  if (isSyntheticTag(tag)) return synthSeries(tag, hours, bin); // completion sensor — deterministic series
   if (!T().kustoUri) return []; // no Eventhouse configured — no trend series
   const t = String(tag).replace(/"/g, '');
   const query = `let anchor = toscalar(PiEvents | summarize max(Timestamp));
