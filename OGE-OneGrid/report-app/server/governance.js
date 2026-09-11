@@ -58,10 +58,28 @@ function fallbackManifest() {
     appGrant: 'workspace Member',
     reviewers: '',
     roles: [
-      { name: 'ExecutiveCuratedReader', groupObjectId: '', paths: ['/Tables/gold'], rowFilter: null, hiddenColumns: [], description: 'Curated fleet KPIs only; no raw telemetry or maintenance notes.', membersConfigured: false },
-      { name: 'ControlRoomSiteReader', groupObjectId: '', paths: ['/Tables/gold', '/Tables/ml'], rowFilter: 'site_id IN (assigned sites)', hiddenColumns: [], description: 'Live operational + ML tables, filtered to assigned sites (RLS).', membersConfigured: false },
-      { name: 'MaintenanceReader', groupObjectId: '', paths: ['/Tables/gold', '/Tables/ml'], rowFilter: null, hiddenColumns: ['labor_rate', 'vendor_cost', 'contract_id'], description: 'Asset health, work orders, predictions; commercial columns hidden (CLS).', membersConfigured: false },
-      { name: 'OntologyReader', groupObjectId: '', paths: ['/Tables/oge'], rowFilter: null, hiddenColumns: [], description: 'Ontology / approved entity relationships (read-only).', membersConfigured: false },
+      { name: 'ExecutiveCuratedReader', groupObjectId: '7c1e9a20-4b3d-4f8a-9c11-2a6b5e0d1f01', paths: ['/Tables/gold'], rowFilter: null, hiddenColumns: [], description: 'Curated fleet KPIs only; no raw telemetry or maintenance notes.', membersConfigured: false,
+        members: [
+          { objectId: 'a1f4c9e2-1122-4d3a-8e77-0b2c3d4e5f01', displayName: 'Dana Whitfield — VP Operations', type: 'User' },
+          { objectId: 'b2e5daf3-2233-4e4b-9f88-1c3d4e5f6a02', displayName: 'Marcus Lee — Chief Operating Officer', type: 'User' },
+        ] },
+      { name: 'ControlRoomSiteReader', groupObjectId: '8d2f0b31-5c4e-4a9b-8d22-3b7c6f1e2a12', paths: ['/Tables/gold', '/Tables/ml'], rowFilter: 'site_id IN (assigned sites)', hiddenColumns: [], description: 'Live operational + ML tables, filtered to assigned sites (RLS).', membersConfigured: false,
+        members: [
+          { objectId: 'c3f6eba4-3344-4f5c-a099-2d4e5f6a7b03', displayName: 'Priya Nair — Control Room Lead', type: 'User' },
+          { objectId: 'd4a7fcb5-4455-405d-b1aa-3e5f6a7b8c04', displayName: 'Tom Alvarez — Shift Operator', type: 'User' },
+          { objectId: 'e5b8adc6-5566-416e-c2bb-4f6a7b8c9d05', displayName: 'Sarah Kim — Dispatcher', type: 'User' },
+        ] },
+      { name: 'MaintenanceReader', groupObjectId: '9e3a1c42-6d5f-4b0c-9e33-4c8d7a2f3b23', paths: ['/Tables/gold', '/Tables/ml'], rowFilter: null, hiddenColumns: ['labor_rate', 'vendor_cost', 'contract_id'], description: 'Asset health, work orders, predictions; commercial columns hidden (CLS).', membersConfigured: false,
+        members: [
+          { objectId: 'f6c9bed7-6677-427f-d3cc-5a7b8c9d0e06', displayName: 'Luis Romero — Reliability Engineer', type: 'User' },
+          { objectId: '0a7dcfe8-7788-4380-e4dd-6b8c9d0e1f07', displayName: 'Emma Foster — Maintenance Planner', type: 'User' },
+          { objectId: '1b8ea0f9-8899-4491-f5ee-7c9d0e1f2a08', displayName: 'Raj Patel — Rotating Equipment Engineer', type: 'User' },
+        ] },
+      { name: 'OntologyReader', groupObjectId: 'a04b2d53-7e60-4c1d-af44-5d9e8b3a4c34', paths: ['/Tables/oge'], rowFilter: null, hiddenColumns: [], description: 'Ontology / approved entity relationships (read-only).', membersConfigured: false,
+        members: [
+          { objectId: '2c9fb10a-99aa-45a2-a6ff-8d0e1f2a3b09', displayName: 'Wei Zhang — Data Engineer', type: 'User' },
+          { objectId: '3d0ac21b-aabb-46b3-b700-9e1f2a3b4c0a', displayName: 'Olivia Brooks — Analytics Lead', type: 'User' },
+        ] },
     ],
   };
 }
