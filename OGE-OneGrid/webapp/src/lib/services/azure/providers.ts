@@ -37,9 +37,11 @@ import {
   loadAlertStatuses,
   loadPostureOverrides,
   loadThresholdRules,
+  pollGithubDeviceLogin,
   saveAlertStatuses,
   savePostureOverrides,
   saveThresholdRules,
+  startGithubDeviceLogin,
   type AlertStatusMap,
   type PostureOverrides,
 } from "@/lib/services/azure/server";
@@ -60,8 +62,24 @@ export class AzureCopilotService implements CopilotService {
       "What changed since the previous forecast cycle?",
     ];
   }
-  ask(question: string): Promise<CopilotAnswer> {
-    return askFoundryCopilot({ data: { question } });
+  ask(
+    question: string,
+    opts?: { copilotToken?: string; model?: string; persona?: string },
+  ): Promise<CopilotAnswer> {
+    return askFoundryCopilot({
+      data: {
+        question,
+        copilotToken: opts?.copilotToken,
+        model: opts?.model,
+        persona: opts?.persona,
+      },
+    });
+  }
+  startGithubLogin() {
+    return startGithubDeviceLogin();
+  }
+  pollGithubLogin(deviceCode: string) {
+    return pollGithubDeviceLogin({ data: { deviceCode } });
   }
 }
 

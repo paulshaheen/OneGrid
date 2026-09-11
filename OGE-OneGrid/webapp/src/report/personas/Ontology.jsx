@@ -90,6 +90,47 @@ function useForceGraph(nodes, edges, W, H) {
 
 function nodeSize(n) { return n.role === 'hub' ? 30 : 22; }
 
+// ---- ambient starfield backdrop (dark mode only) ----
+function Starfield({ dark }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!dark) return;
+    const cv = ref.current; if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    let raf, w = 0, h = 0, stars = [];
+    const resize = () => {
+      const r = cv.getBoundingClientRect();
+      w = cv.width = Math.max(1, Math.round(r.width * dpr));
+      h = cv.height = Math.max(1, Math.round(r.height * dpr));
+      const count = Math.min(220, Math.round((r.width * r.height) / 7000));
+      stars = Array.from({ length: count }, () => ({
+        x: Math.random() * w, y: Math.random() * h, z: Math.random() * 0.8 + 0.2,
+        r: (Math.random() * 1.2 + 0.3) * dpr, tw: Math.random() * Math.PI * 2,
+      }));
+    };
+    resize();
+    const ro = new ResizeObserver(resize); ro.observe(cv);
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h);
+      for (const s of stars) {
+        s.x -= s.z * 0.15 * dpr; if (s.x < 0) { s.x = w; s.y = Math.random() * h; }
+        s.tw += 0.02;
+        const a = (0.35 + Math.sin(s.tw) * 0.3) * s.z;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(126,170,230,${Math.max(0, a)})`;
+        ctx.fill();
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [dark]);
+  if (!dark) return null;
+  return <canvas ref={ref} className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }} />;
+}
+
 export default function Ontology({ theme }) {
   const dark = theme.mode !== 'light';
   const [data, setData] = useState(null);
@@ -201,7 +242,30 @@ export default function Ontology({ theme }) {
         <div ref={wrapRef} className="relative flex-1 min-w-0 overflow-hidden touch-none"
           style={{ background: dark ? 'radial-gradient(120% 90% at 50% 10%, #16223400 0%, #0a121e 70%)' : 'radial-gradient(120% 90% at 50% 10%, #f8fafc 0%, #eef2f7 80%)' }}
           onWheel={onWheel} onPointerDown={(e) => onPointerDown(e)} onPointerMove={onPointerMove} onPointerUp={(e) => onPointerUp(e)}>
-          <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ cursor: dragRef.current?.pan ? 'grabbing' : 'grab' }}>
+          <style>{`
+            @keyframes ontFlow { to { stroke-dashoffset: -130; } }
+            .ont-flow { animation: ontFlow 2.6s linear infinite; }
+            @keyframes ontPulse { 0% { transform: scale(1); opacity: .7; } 70% { transform: scale(2); opacity: 0; } 100% { opacity: 0; } }
+            .ont-pulse { transform-box: fill-box; transform-origin: center; animation: ontPulse 2.4s ease-out infinite; }
+          `}</style>
+          <Starfield dark={dark} />
+          <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ cursor: dragRef.current?.pan ? 'grabbing' : 'grab', position: 'relative' }}>
+            <defs>
+              <filter id="ont-glow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="3.2" result="b" />
+                <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+              </filter>
+              {Object.entries(cats).map(([k, c]) => {
+                const gid = `ont-grad-${String(k).replace(/[^a-z0-9]/gi, '')}`;
+                return (
+                  <radialGradient key={k} id={gid} cx="50%" cy="40%" r="65%">
+                    <stop offset="0%" stopColor={c.color} stopOpacity={dark ? 0.6 : 0.42} />
+                    <stop offset="65%" stopColor={c.color} stopOpacity={dark ? 0.2 : 0.16} />
+                    <stop offset="100%" stopColor={c.color} stopOpacity="0" />
+                  </radialGradient>
+                );
+              })}
+            </defs>
             <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
               {/* edges */}
               {edges.map((e, i) => {
@@ -210,11 +274,19 @@ export default function Ontology({ theme }) {
                 const active = focusId && (e.from === focusId || e.to === focusId);
                 const dim = focusId && !active;
                 const col = active ? theme.accent : (dark ? '#7f93ac' : '#94a3b8');
-                const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+                const dx = b.x - a.x, dy = b.y - a.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const nx = -dy / len, ny = dx / len;
+                const bow = Math.min(60, len * 0.14);
+                const cxp = (a.x + b.x) / 2 + nx * bow, cyp = (a.y + b.y) / 2 + ny * bow;
+                const d = `M ${a.x} ${a.y} Q ${cxp} ${cyp} ${b.x} ${b.y}`;
+                const mx = 0.25 * a.x + 0.5 * cxp + 0.25 * b.x;
+                const my = 0.25 * a.y + 0.5 * cyp + 0.25 * b.y;
                 return (
                   <g key={i} opacity={dim ? 0.12 : 1}>
-                    <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={col} strokeWidth={active ? st.width + 0.8 : st.width} strokeDasharray={st.dash} opacity={active ? 0.9 : st.opacity} />
-                    {active && <text x={mx} y={my - 3} textAnchor="middle" fontSize="9" fill={col} style={{ pointerEvents: 'none', fontWeight: 600 }}>{e.label}</text>}
+                    <path d={d} fill="none" stroke={col} strokeWidth={active ? st.width + 0.8 : st.width} strokeDasharray={st.dash} strokeLinecap="round" opacity={active ? 0.9 : st.opacity} filter={active ? 'url(#ont-glow)' : undefined} />
+                    {active && <path className="ont-flow" d={d} fill="none" stroke={col} strokeWidth={st.width + 1.4} strokeLinecap="round" strokeDasharray="1 12" opacity={0.9} filter="url(#ont-glow)" />}
+                    {active && <text x={mx} y={my - 4} textAnchor="middle" fontSize="9" fill={col} style={{ pointerEvents: 'none', fontWeight: 600 }}>{e.label}</text>}
                   </g>
                 );
               })}
@@ -225,15 +297,20 @@ export default function Ontology({ theme }) {
                 const r = nodeSize(n);
                 const dim = isDim(n.id) || !matches(n);
                 const isSel = sel === n.id;
+                const isHub = n.role === 'hub';
+                const gradId = `ont-grad-${String(n.category).replace(/[^a-z0-9]/gi, '')}`;
                 return (
                   <g key={n.id} transform={`translate(${p.x},${p.y})`} opacity={dim ? 0.22 : 1}
                     style={{ cursor: 'pointer' }}
                     onPointerDown={(e) => { e.stopPropagation(); onPointerDown(e, n.id); }}
                     onPointerUp={(e) => { e.stopPropagation(); onPointerUp(e, n.id); }}
                     onPointerEnter={() => setHover(n.id)} onPointerLeave={() => setHover(null)}>
-                    <circle r={r + (isSel ? 6 : 0)} fill={dark ? '#0e1a29' : '#ffffff'} stroke={c} strokeWidth={isSel ? 3 : 2} />
-                    <circle r={r} fill={c} opacity={0.16} />
-                    {n.role === 'hub' && <circle r={r - 6} fill={c} opacity={0.22} />}
+                    <g filter={isSel || isHub ? 'url(#ont-glow)' : undefined}>
+                      {isSel && <circle className="ont-pulse" r={r} fill="none" stroke={c} strokeWidth="2" opacity="0.7" />}
+                      <circle r={r + (isSel ? 6 : 0)} fill={dark ? '#0e1a29' : '#ffffff'} stroke={c} strokeWidth={isSel ? 3 : 2} />
+                      <circle r={r} fill={`url(#${gradId})`} />
+                      {isHub && <circle r={r - 6} fill={c} opacity={0.22} />}
+                    </g>
                     <text textAnchor="middle" y={r + 13} fontSize="11" fontWeight="700" fill={dark ? '#dce6f2' : '#1e293b'} style={{ pointerEvents: 'none' }}>{n.label}</text>
                     <text textAnchor="middle" y="4" fontSize="9" fill={c} fontWeight="700" style={{ pointerEvents: 'none' }}>{(cats[n.category]?.label || '').slice(0, 3).toUpperCase()}</text>
                   </g>

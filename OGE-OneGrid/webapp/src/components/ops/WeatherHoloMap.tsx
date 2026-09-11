@@ -13,6 +13,10 @@ export type WeatherHoloMapProps = OpsMapProps & {
   initialFocusEventId?: string;
   /** Live map: open on the terrain (facility pins visible), globe still reachable. */
   skipGlobe?: boolean;
+  /** Command view: flatten the terrain elevation and use a dark navy palette. */
+  flat?: boolean;
+  /** Twin failure sim: number of top-risk sites currently in a failed state. */
+  failures?: number;
 };
 
 // The scene statically imports three.js + R3F + postprocessing, so defer its

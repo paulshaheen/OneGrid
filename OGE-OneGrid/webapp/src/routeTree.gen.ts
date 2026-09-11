@@ -33,6 +33,7 @@ import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedAppAlertsRouteImport } from './routes/_authenticated/app.alerts'
 import { Route as AuthenticatedAppAssetExplorerRouteImport } from './routes/_authenticated/app.asset-explorer'
 import { Route as AuthenticatedAppAssetsRouteImport } from './routes/_authenticated/app.assets'
+import { Route as AuthenticatedAppCommandRouteImport } from './routes/_authenticated/app.command'
 import { Route as AuthenticatedAppControlRoomRouteImport } from './routes/_authenticated/app.control-room'
 import { Route as AuthenticatedAppCopilotRouteImport } from './routes/_authenticated/app.copilot'
 import { Route as AuthenticatedAppDeploymentRouteImport } from './routes/_authenticated/app.deployment'
@@ -41,6 +42,7 @@ import { Route as AuthenticatedAppGovernanceRouteImport } from './routes/_authen
 import { Route as AuthenticatedAppMaintenanceRouteImport } from './routes/_authenticated/app.maintenance'
 import { Route as AuthenticatedAppMapRouteImport } from './routes/_authenticated/app.map'
 import { Route as AuthenticatedAppOntologyRouteImport } from './routes/_authenticated/app.ontology'
+import { Route as AuthenticatedAppOverviewLegacyRouteImport } from './routes/_authenticated/app.overview-legacy'
 import { Route as AuthenticatedAppPostureRouteImport } from './routes/_authenticated/app.posture'
 import { Route as AuthenticatedAppRiskRouteImport } from './routes/_authenticated/app.risk'
 import { Route as AuthenticatedAppSimulationRouteImport } from './routes/_authenticated/app.simulation'
@@ -167,6 +169,11 @@ const AuthenticatedAppAssetsRoute = AuthenticatedAppAssetsRouteImport.update({
   path: '/app/assets',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppCommandRoute = AuthenticatedAppCommandRouteImport.update({
+  id: '/app/command',
+  path: '/app/command',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAppControlRoomRoute =
   AuthenticatedAppControlRoomRouteImport.update({
     id: '/app/control-room',
@@ -210,6 +217,12 @@ const AuthenticatedAppOntologyRoute =
   AuthenticatedAppOntologyRouteImport.update({
     id: '/app/ontology',
     path: '/app/ontology',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAppOverviewLegacyRoute =
+  AuthenticatedAppOverviewLegacyRouteImport.update({
+    id: '/app/overview-legacy',
+    path: '/app/overview-legacy',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedAppPostureRoute = AuthenticatedAppPostureRouteImport.update({
@@ -264,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
   '/app/asset-explorer': typeof AuthenticatedAppAssetExplorerRoute
   '/app/assets': typeof AuthenticatedAppAssetsRoute
+  '/app/command': typeof AuthenticatedAppCommandRoute
   '/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
@@ -272,6 +286,7 @@ export interface FileRoutesByFullPath {
   '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/ontology': typeof AuthenticatedAppOntologyRoute
+  '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
@@ -302,6 +317,7 @@ export interface FileRoutesByTo {
   '/app/alerts': typeof AuthenticatedAppAlertsRoute
   '/app/asset-explorer': typeof AuthenticatedAppAssetExplorerRoute
   '/app/assets': typeof AuthenticatedAppAssetsRoute
+  '/app/command': typeof AuthenticatedAppCommandRoute
   '/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
@@ -310,6 +326,7 @@ export interface FileRoutesByTo {
   '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/app/map': typeof AuthenticatedAppMapRoute
   '/app/ontology': typeof AuthenticatedAppOntologyRoute
+  '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
@@ -342,6 +359,7 @@ export interface FileRoutesById {
   '/_authenticated/app/alerts': typeof AuthenticatedAppAlertsRoute
   '/_authenticated/app/asset-explorer': typeof AuthenticatedAppAssetExplorerRoute
   '/_authenticated/app/assets': typeof AuthenticatedAppAssetsRoute
+  '/_authenticated/app/command': typeof AuthenticatedAppCommandRoute
   '/_authenticated/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/_authenticated/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/_authenticated/app/deployment': typeof AuthenticatedAppDeploymentRoute
@@ -350,6 +368,7 @@ export interface FileRoutesById {
   '/_authenticated/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/_authenticated/app/map': typeof AuthenticatedAppMapRoute
   '/_authenticated/app/ontology': typeof AuthenticatedAppOntologyRoute
+  '/_authenticated/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/_authenticated/app/posture': typeof AuthenticatedAppPostureRoute
   '/_authenticated/app/risk': typeof AuthenticatedAppRiskRoute
   '/_authenticated/app/simulation': typeof AuthenticatedAppSimulationRoute
@@ -382,6 +401,7 @@ export interface FileRouteTypes {
     | '/app/alerts'
     | '/app/asset-explorer'
     | '/app/assets'
+    | '/app/command'
     | '/app/control-room'
     | '/app/copilot'
     | '/app/deployment'
@@ -390,6 +410,7 @@ export interface FileRouteTypes {
     | '/app/maintenance'
     | '/app/map'
     | '/app/ontology'
+    | '/app/overview-legacy'
     | '/app/posture'
     | '/app/risk'
     | '/app/simulation'
@@ -420,6 +441,7 @@ export interface FileRouteTypes {
     | '/app/alerts'
     | '/app/asset-explorer'
     | '/app/assets'
+    | '/app/command'
     | '/app/control-room'
     | '/app/copilot'
     | '/app/deployment'
@@ -428,6 +450,7 @@ export interface FileRouteTypes {
     | '/app/maintenance'
     | '/app/map'
     | '/app/ontology'
+    | '/app/overview-legacy'
     | '/app/posture'
     | '/app/risk'
     | '/app/simulation'
@@ -459,6 +482,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/alerts'
     | '/_authenticated/app/asset-explorer'
     | '/_authenticated/app/assets'
+    | '/_authenticated/app/command'
     | '/_authenticated/app/control-room'
     | '/_authenticated/app/copilot'
     | '/_authenticated/app/deployment'
@@ -467,6 +491,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/maintenance'
     | '/_authenticated/app/map'
     | '/_authenticated/app/ontology'
+    | '/_authenticated/app/overview-legacy'
     | '/_authenticated/app/posture'
     | '/_authenticated/app/risk'
     | '/_authenticated/app/simulation'
@@ -668,6 +693,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAssetsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/command': {
+      id: '/_authenticated/app/command'
+      path: '/app/command'
+      fullPath: '/app/command'
+      preLoaderRoute: typeof AuthenticatedAppCommandRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/control-room': {
       id: '/_authenticated/app/control-room'
       path: '/app/control-room'
@@ -724,6 +756,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppOntologyRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/overview-legacy': {
+      id: '/_authenticated/app/overview-legacy'
+      path: '/app/overview-legacy'
+      fullPath: '/app/overview-legacy'
+      preLoaderRoute: typeof AuthenticatedAppOverviewLegacyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/posture': {
       id: '/_authenticated/app/posture'
       path: '/app/posture'
@@ -766,6 +805,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppAlertsRoute: typeof AuthenticatedAppAlertsRoute
   AuthenticatedAppAssetExplorerRoute: typeof AuthenticatedAppAssetExplorerRoute
   AuthenticatedAppAssetsRoute: typeof AuthenticatedAppAssetsRoute
+  AuthenticatedAppCommandRoute: typeof AuthenticatedAppCommandRoute
   AuthenticatedAppControlRoomRoute: typeof AuthenticatedAppControlRoomRoute
   AuthenticatedAppCopilotRoute: typeof AuthenticatedAppCopilotRoute
   AuthenticatedAppDeploymentRoute: typeof AuthenticatedAppDeploymentRoute
@@ -774,6 +814,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppMaintenanceRoute: typeof AuthenticatedAppMaintenanceRoute
   AuthenticatedAppMapRoute: typeof AuthenticatedAppMapRoute
   AuthenticatedAppOntologyRoute: typeof AuthenticatedAppOntologyRoute
+  AuthenticatedAppOverviewLegacyRoute: typeof AuthenticatedAppOverviewLegacyRoute
   AuthenticatedAppPostureRoute: typeof AuthenticatedAppPostureRoute
   AuthenticatedAppRiskRoute: typeof AuthenticatedAppRiskRoute
   AuthenticatedAppSimulationRoute: typeof AuthenticatedAppSimulationRoute
@@ -786,6 +827,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppAlertsRoute: AuthenticatedAppAlertsRoute,
   AuthenticatedAppAssetExplorerRoute: AuthenticatedAppAssetExplorerRoute,
   AuthenticatedAppAssetsRoute: AuthenticatedAppAssetsRoute,
+  AuthenticatedAppCommandRoute: AuthenticatedAppCommandRoute,
   AuthenticatedAppControlRoomRoute: AuthenticatedAppControlRoomRoute,
   AuthenticatedAppCopilotRoute: AuthenticatedAppCopilotRoute,
   AuthenticatedAppDeploymentRoute: AuthenticatedAppDeploymentRoute,
@@ -794,6 +836,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppMaintenanceRoute: AuthenticatedAppMaintenanceRoute,
   AuthenticatedAppMapRoute: AuthenticatedAppMapRoute,
   AuthenticatedAppOntologyRoute: AuthenticatedAppOntologyRoute,
+  AuthenticatedAppOverviewLegacyRoute: AuthenticatedAppOverviewLegacyRoute,
   AuthenticatedAppPostureRoute: AuthenticatedAppPostureRoute,
   AuthenticatedAppRiskRoute: AuthenticatedAppRiskRoute,
   AuthenticatedAppSimulationRoute: AuthenticatedAppSimulationRoute,

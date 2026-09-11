@@ -1,26 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { OverviewPage } from "@/views/index";
+import { CommandCenterPage } from "@/views/command-center";
 
+// The Command Center is the landing page (mapped to Overview). The original
+// Operations Overview is archived at /app/overview-legacy.
 export const Route = createFileRoute("/_authenticated/app/")({
   head: () => ({
     meta: [
-      { title: "Operations Overview | Weather & Asset Risk" },
+      { title: "Command Center | OneGrid" },
       {
         name: "description",
         content:
-          "Executive view of Severe weather exposure across offshore platforms, pipelines, refineries and LNG terminals.",
+          "OneGrid command center — grid health, weather exposure, live holographic map, storm and digital-twin failure simulation, and maintenance overview.",
       },
-      { property: "og:title", content: "Operations Overview | Weather & Asset Risk" },
+      { property: "og:title", content: "Command Center | OneGrid" },
       {
         property: "og:description",
         content:
-          "Executive view of Severe weather exposure across offshore platforms, pipelines, refineries and LNG terminals.",
+          "Unified energy grid command center: weather exposure, digital-twin status, and asset-risk operations.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: OverviewPage,
+  component: CommandCenterPage,
 });

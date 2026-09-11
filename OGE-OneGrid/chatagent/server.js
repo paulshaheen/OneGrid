@@ -80,6 +80,14 @@ async function listCopilotModels(ghToken) {
         if (!id || seen[id]) continue;
         const cap = m.capabilities || {};
         if (cap.type && cap.type !== 'chat') continue; // skip embeddings, etc.
+        // Skip internal / utility models that aren't meant for user-facing chat.
+        if (/compaction|embed|whisper|tts|dall-?e|\bimage\b/i.test(id)) continue;
+        // Only keep models usable via /chat/completions. Newer models advertise a
+        // `supported_endpoints` list — some are /responses-only and would 400 on
+        // chat/completions. Legacy models (e.g. gpt-4o) omit the field and DO work,
+        // so an empty/missing list is treated as chat-capable.
+        const eps = Array.isArray(m.supported_endpoints) ? m.supported_endpoints : [];
+        if (eps.length && !eps.includes('/chat/completions')) continue;
         seen[id] = true;
         models.push({ id, name: m.name || id, vendor: m.vendor || '' });
     }
@@ -250,8 +258,18 @@ async function getToken(resource) {
     return getTokenCli(resource);
 }
 
+// The live Eventhouse `PiEvents` table uses `Timestamp` (not `Ts`) and has no
+// `Questionable` column, but the prompt/tooling were authored against an older
+// schema. Normalise both so model- and server-generated KQL runs unchanged.
+function normalizeKql(kql) {
+    return String(kql)
+        .replace(/\bnot\s*\(\s*Questionable\s*\)/gi, 'true')
+        .replace(/\bTs\b/g, 'Timestamp');
+}
+
 // ── KQL query ────────────────────────────────────────────────────────────
 async function queryKql(kql) {
+    kql = normalizeKql(kql);
     const token = await getToken(CONFIG.kustoCluster);
     const resp = await fetch(`${CONFIG.kustoCluster}/v1/rest/query`, {
         method: 'POST',
@@ -263,6 +281,20 @@ async function queryKql(kql) {
     if (!data.Tables?.[0]?.Rows) return [];
     const cols = data.Tables[0].Columns.map(c => c.ColumnName);
     return data.Tables[0].Rows.map(row => Object.fromEntries(cols.map((c, i) => [c, row[i]])));
+}
+
+// Cached PiEvents time window — the sample Eventhouse can be stale relative to
+// "today", so we tell the model the real data window to query instead of ago(3h).
+let _piRangeCache = null;
+async function getPiRange() {
+    if (_piRangeCache && Date.now() - _piRangeCache.at < 600000) return _piRangeCache.val;
+    try {
+        const rows = await queryKql('PiEvents | summarize minT=min(Timestamp), maxT=max(Timestamp)');
+        const r = rows && rows[0];
+        const val = r && r.maxT ? { min: String(r.minT), max: String(r.maxT) } : null;
+        _piRangeCache = { at: Date.now(), val };
+        return val;
+    } catch { return null; }
 }
 
 // ── DAX query ────────────────────────────────────────────────────────────
@@ -732,7 +764,110 @@ function focusDirective(ctx) {
     return s;
 }
 
-async function chatWithCopilot(userMessage, history = [], sendStatus = () => {}, persona = '', model = '', context = null, providerOverride = '', copilotToken = '') {
+// Human-facing metadata for a tool call, used by the streaming UI's tool cards.
+function toolMeta(name, args) {
+    switch (name) {
+        case 'query_kql': return { title: 'Eventhouse · KQL', preview: String(args.kql || '').replace(/\s+/g, ' ').slice(0, 120) };
+        case 'query_dax': return { title: 'Semantic model · DAX', preview: String(args.dax || '').replace(/\s+/g, ' ').slice(0, 120) };
+        case 'plot_line_chart': return { title: 'Build chart', preview: String(args.title || 'trend') };
+        case 'correlate_sensors': return { title: 'Correlate sensors', preview: (args.tags || []).join(', ') };
+        case 'search_manuals': return { title: 'Search manuals', preview: String(args.query || '') };
+        default: return { title: name, preview: '' };
+    }
+}
+function toolSummary(name, q, result) {
+    if (q && q.error) return `Error: ${String(q.error).slice(0, 60)}`;
+    if (name === 'plot_line_chart') return result && result.rendered ? `${result.points} points` : 'no data';
+    if (name === 'correlate_sensors') return q && q.rows != null ? `${q.rows} bins` : 'done';
+    if (name === 'search_manuals') return q && q.rows != null ? `${q.rows} passage${q.rows === 1 ? '' : 's'}` : 'done';
+    if (q && q.rows != null) return `${q.rows} row${q.rows === 1 ? '' : 's'}`;
+    return 'done';
+}
+// Stream a finished reply back as `token` events so the UI types it out. The
+// answer is already computed (after any tool calls); we pace the chunks so it
+// reads like a live stream without a second model round-trip.
+async function streamReply(text, emit) {
+    const s = String(text || '');
+    if (!s) return;
+    const parts = s.match(/\S+\s*/g) || [s];
+    const step = Math.max(1, Math.ceil(parts.length / 140));
+    const emits = Math.ceil(parts.length / step);
+    const delay = emits > 0 ? Math.min(16, Math.max(4, Math.floor(900 / emits))) : 0;
+    for (let i = 0; i < parts.length; i += step) {
+        emit('token', { token: parts.slice(i, i + step).join('') });
+        if (delay) await new Promise((r) => setTimeout(r, delay));
+    }
+}
+
+// Stream one model turn (OpenAI-compatible SSE). Emits assistant content tokens live via
+// `onContent` as they generate, and accumulates any tool_call deltas. Returns a message in
+// the same shape the loop expects: { role, content, tool_calls }. Tool-calling turns carry
+// no content (so nothing streams); the final answer turn streams its text token-by-token.
+async function streamModelCall(reqBody, provider, ghToken, onContent) {
+    const body = { ...reqBody, stream: true };
+    let resp;
+    if (provider === 'foundry') {
+        resp = await foundryChat(body);
+    } else {
+        resp = await fetch('https://api.githubcopilot.com/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${ghToken}`,
+                'Content-Type': 'application/json',
+                'Copilot-Integration-Id': 'pi-fabric-chat-agent',
+            },
+            body: JSON.stringify(body),
+        });
+    }
+    if (!resp.ok) {
+        const err = await resp.text();
+        const e = new Error(`API error (${resp.status}): ${err.slice(0, 200)}`);
+        e.status = resp.status;
+        throw e;
+    }
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let content = '';
+    const toolMap = new Map();
+    for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+            const s = line.trim();
+            if (!s.startsWith('data:')) continue;
+            const payload = s.slice(5).trim();
+            if (!payload || payload === '[DONE]') continue;
+            let json;
+            try { json = JSON.parse(payload); } catch { continue; }
+            const delta = json.choices && json.choices[0] && json.choices[0].delta;
+            if (!delta) continue;
+            if (delta.content) {
+                content += delta.content;
+                if (onContent) onContent(delta.content);
+            }
+            if (delta.tool_calls) {
+                for (const tcd of delta.tool_calls) {
+                    const idx = tcd.index ?? 0;
+                    let cur = toolMap.get(idx);
+                    if (!cur) { cur = { id: tcd.id || '', type: 'function', function: { name: '', arguments: '' } }; toolMap.set(idx, cur); }
+                    if (tcd.id) cur.id = tcd.id;
+                    if (tcd.function) {
+                        if (tcd.function.name) cur.function.name += tcd.function.name;
+                        if (tcd.function.arguments) cur.function.arguments += tcd.function.arguments;
+                    }
+                }
+            }
+        }
+    }
+    const tool_calls = toolMap.size ? Array.from(toolMap.values()) : undefined;
+    return { role: 'assistant', content: content || null, tool_calls };
+}
+
+async function chatWithCopilot(userMessage, history = [], sendStatus = () => {}, persona = '', model = '', context = null, providerOverride = '', copilotToken = '', emit = () => {}) {
     // Provider is per-request: the UI can flip between Azure Foundry and GitHub Copilot.
     const provider = (String(providerOverride || '').toLowerCase() || AI.provider);
     let ghToken = '';
@@ -750,12 +885,19 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
 
     const activeModel = (model && String(model).trim()) || (provider === 'foundry' ? AI.defaultModel : CONFIG.copilotModel);
 
-    // Inject the real current date so "today" resolves correctly (model has no clock).
+    // Inject the real current date so "today" resolves correctly (model has no clock),
+    // plus the actual watchlist schema (no scoring_date) and the live sensor data window
+    // so DAX/KQL match this dataset instead of an older schema.
     const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local plant time
+    const piRange = await getPiRange().catch(() => null);
+    const sensorNote = piRange
+        ? `\n- SENSOR DATA WINDOW: PiEvents currently holds data from ${piRange.min} to ${piRange.max}. For sensor trends or "latest reading" queries, query WITHIN this window (e.g. Timestamp between datetime(${piRange.min.slice(0, 10)}) and datetime(${piRange.max.slice(0, 10)}) + 1d) — do NOT use ago(3h)/ago(Nd) relative to today, there is no data after ${piRange.max}. The PiEvents time column is Timestamp (not Ts); it has columns Timestamp, Tag, AssetId, Value, Tier (no "Questionable" column).`
+        : '';
     const dateContext = `CURRENT DATE: Today is ${today} (local plant time).
-- When the user asks what to watch/monitor "today" or "now", query the fleet-wide watchlist for scoring_date = "${today}", ranked by severity. Ready-to-run:
-  EVALUATE TOPN(50, FILTER('watchlist', 'watchlist'[scoring_date] = "${today}"), SWITCH(TRUE(), 'watchlist'[recommended_action]="CRITICAL",4, 'watchlist'[recommended_action]="HIGH",3, 'watchlist'[recommended_action]="MEDIUM",2, 'watchlist'[recommended_action]="LOW",1, 0), DESC, 'watchlist'[risk_contribution], DESC) ORDER BY SWITCH(TRUE(), 'watchlist'[recommended_action]="CRITICAL",4, 'watchlist'[recommended_action]="HIGH",3, 'watchlist'[recommended_action]="MEDIUM",2, 'watchlist'[recommended_action]="LOW",1, 0) DESC, 'watchlist'[risk_contribution] DESC
-- If that returns 0 rows, run EVALUATE ROW("latest", MAX('watchlist'[scoring_date])), re-query the watchlist for that latest date, and tell the user you used the most recent scored day (not today).`;
+- The 'watchlist' table is a CURRENT snapshot of ML anomaly scores. Columns: asset_id, tag_name, descriptor, trend_direction, current_value, baseline_mean, normal_range_low, normal_range_high, trend_slope_per_day, risk_contribution, recommended_action. It has NO date column — do NOT filter or reference scoring_date, model_name, recommendation_text or watch_horizon_days (they do not exist).
+- For "what should I watch / monitor today", rank the WHOLE watchlist by recommended_action severity, then risk_contribution. Ready-to-run:
+  EVALUATE TOPN(25, 'watchlist', SWITCH(TRUE(), 'watchlist'[recommended_action]="CRITICAL",4, 'watchlist'[recommended_action]="HIGH",3, 'watchlist'[recommended_action]="MEDIUM",2, 'watchlist'[recommended_action]="LOW",1, 0), DESC, 'watchlist'[risk_contribution], DESC)
+- Tag ids in this dataset look like "<PLANT><unit>:<EQUIP>.<METRIC>" (e.g. CF2:GEN.MW, FV1:STM.BRG_TEMP, GW1:BLR.DRUM_PRESS) — use the watchlist's tag_name values, not RV2/RV3 examples.${sensorNote}`;
 
     const personaContext = PERSONAS[String(persona || '').toLowerCase()];
     const focusMsg = focusDirective(context);
@@ -775,32 +917,19 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
     sendStatus('🧠 Sending question to AI...');
     for (let iter = 0; iter < 6; iter++) {
         const reqBody = { model: activeModel, messages, tools: TOOLS, tool_choice: 'auto', max_completion_tokens: 4096 };
-        let resp;
-        if (provider === 'foundry') {
-            try {
-                resp = await foundryChat(reqBody);
-            } catch (e) {
-                return { reply: `⚠️ Azure AI Foundry request failed: ${e.message}`, queries, toolCalls };
-            }
-        } else {
-            resp = await fetch('https://api.githubcopilot.com/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${ghToken}`,
-                    'Content-Type': 'application/json',
-                    'Copilot-Integration-Id': 'pi-fabric-chat-agent'
-                },
-                body: JSON.stringify(reqBody)
-            });
+        // gpt-5 / o-series are reasoning models: without a low reasoning budget they
+        // spend 40-60s "thinking" per turn, which makes the agent loop unusable in a
+        // live chat. Cap it to keep turns snappy (override via AI_REASONING_EFFORT).
+        if (/gpt-5|^o[0-9]/i.test(String(activeModel))) {
+            reqBody.reasoning_effort = process.env.AI_REASONING_EFFORT || 'minimal';
         }
-
-        if (!resp.ok) {
-            const err = await resp.text();
-            return { reply: `API error (${resp.status}): ${err}`, queries, toolCalls };
+        if (iter > 0) sendStatus('🧠 Reviewing results and composing the answer...');
+        let choice;
+        try {
+            choice = await streamModelCall(reqBody, provider, ghToken, (chunk) => emit('token', { token: chunk }));
+        } catch (e) {
+            return { reply: `⚠️ ${provider === 'foundry' ? 'Azure AI Foundry' : 'GitHub Copilot'} request failed: ${e.message}`, queries, toolCalls };
         }
-
-        const data = await resp.json();
-        const choice = data.choices[0].message;
 
         if (!choice.tool_calls) {
             const fx = extractFocus(choice.content || '');
@@ -809,9 +938,14 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
         }
 
         messages.push(choice);
+        emit('thinking', { title: 'Planning data queries', detail: `${choice.tool_calls.length} tool call${choice.tool_calls.length === 1 ? '' : 's'}` });
         for (const tc of choice.tool_calls) {
             toolCalls++;
-            const args = JSON.parse(tc.function.arguments);
+            let args = {};
+            try { args = JSON.parse(tc.function.arguments); } catch { /* malformed args */ }
+            const _meta = toolMeta(tc.function.name, args);
+            const _started = Date.now();
+            emit('tool_call', { id: tc.id, name: tc.function.name, title: _meta.title, preview: _meta.preview });
             let result;
             try {
                 if (tc.function.name === 'query_kql') {
@@ -870,6 +1004,16 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
                 queries.push({ type: tc.function.name, query: args.kql || args.dax || args.query, error: e.message });
                 sendStatus(`❌ Query failed: ${e.message.substring(0, 60)}`);
             }
+
+            const _q = queries[queries.length - 1];
+            emit('tool_result', {
+                id: tc.id,
+                name: tc.function.name,
+                ok: !(_q && _q.error),
+                summary: toolSummary(tc.function.name, _q, result),
+                rows: _q && typeof _q.rows === 'number' ? _q.rows : undefined,
+                ms: Date.now() - _started,
+            });
 
             let resultStr = JSON.stringify(Array.isArray(result) ? result.slice(0, 30) : result);
             if (resultStr.length > 6000) resultStr = resultStr.slice(0, 6000) + `... (${result.length} total rows)`;
@@ -943,8 +1087,13 @@ const server = http.createServer(async (req, res) => {
                 const sendStatus = (status) => {
                     res.write(`data: ${JSON.stringify({ type: 'status', status })}\n\n`);
                 };
+                // Structured events for the streaming chat UI (thinking steps, tool
+                // cards, token stream). Older consumers ignore unknown event types.
+                const emit = (type, payload) => {
+                    res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+                };
 
-                const result = await chatWithCopilot(message, history || [], sendStatus, persona, model, context, provider, copilotToken);
+                const result = await chatWithCopilot(message, history || [], sendStatus, persona, model, context, provider, copilotToken, emit);
                 res.write(`data: ${JSON.stringify({ type: 'done', ...result })}\n\n`);
                 res.end();
             } catch (e) {

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ArrowUpDown, Search } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
@@ -7,7 +8,7 @@ import { AssetDetailPanel } from "@/components/ops/AssetDetailPanel";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { SkeletonRows } from "@/components/ops/Skeleton";
 import { useOpsBase } from "@/components/ops/ops-nav";
-import { useOpsSnapshot } from "@/lib/hooks/use-ops-data";
+import { useOpsSnapshot, eventsQuery } from "@/lib/hooks/use-ops-data";
 import { ASSET_TYPE_LABEL, RISK_ORDER } from "@/lib/format";
 import type { RiskLevel } from "@/lib/domain/types";
 
@@ -16,15 +17,23 @@ type SortKey = "score" | "eta" | "name" | "wind";
 export function RiskPage() {
   const base = useOpsBase();
   const { assets, risks, riskMap, event, isLoading } = useOpsSnapshot(base, 120);
+  const allEvents = useQuery(eventsQuery(base)).data ?? [];
   const [q, setQ] = useState("");
   const [level, setLevel] = useState<RiskLevel | "all">("all");
   const [sort, setSort] = useState<SortKey>("score");
   const [selected, setSelected] = useState<string | null>(null);
+  const [storm, setStorm] = useState<string>("all");
+
+  // The map + register can focus a single storm. "all" keeps the fleet-wide,
+  // worst-case-per-asset view; picking a storm filters to assets whose driving
+  // event is that storm and shows its track on the map.
+  const stormEvent = storm === "all" ? event : (allEvents.find((e) => e.id === storm) ?? event);
 
   const rows = useMemo(() => {
     const list = risks
       .map((r) => ({ risk: r, asset: assets.find((a) => a.id === r.assetId)! }))
       .filter((x) => x.asset)
+      .filter((x) => (storm === "all" ? true : x.risk.eventId === storm))
       .filter((x) => (level === "all" ? true : x.risk.level === level))
       .filter((x) =>
         q
@@ -40,7 +49,7 @@ export function RiskPage() {
       return a.asset.name.localeCompare(b.asset.name);
     });
     return list;
-  }, [risks, assets, level, q, sort]);
+  }, [risks, assets, level, q, sort, storm]);
 
   const selectedAsset = assets.find((a) => a.id === selected) ?? null;
   const counts = RISK_ORDER.map((l) => ({
@@ -90,6 +99,21 @@ export function RiskPage() {
                 <option value="wind">Sort: forecast wind</option>
                 <option value="name">Sort: asset name</option>
               </select>
+              {allEvents.length > 1 && (
+                <select
+                  value={storm}
+                  onChange={(e) => setStorm(e.target.value)}
+                  className="rounded-sm border bg-card px-2 py-1.5 text-xs"
+                  title="Focus a single storm"
+                >
+                  <option value="all">All storms</option>
+                  {allEvents.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <span className="ml-auto text-[11px] text-muted-foreground">
                 {rows.length} assets
               </span>
@@ -157,7 +181,7 @@ export function RiskPage() {
               className="h-full w-full"
               assets={assets}
               risks={riskMap}
-              event={event}
+              event={stormEvent}
               layers={{ assets: true, track: true, wind: true }}
               selectedId={selected}
               onSelect={setSelected}

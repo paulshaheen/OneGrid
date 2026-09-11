@@ -1,8 +1,12 @@
-import { useState, useMemo, useRef, useEffect, Suspense } from 'react';
+import { useState, useMemo, useRef, useEffect, Suspense, lazy } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Html, ContactShadows } from '@react-three/drei';
+import { OrbitControls, Html, ContactShadows, Environment } from '@react-three/drei';
 import { EquipmentGeometry, anchorsFor, viewFor, equipmentType } from '../three/Equipment.jsx';
 import { Feedback } from './Feedback.jsx';
+import { getJson } from '../lib/api.js';
+
+// Equipment-manual resolver (Foundry IQ) — loaded on demand when the operator opens a manual.
+const ManualResolveModal = lazy(() => import('./Manuals.jsx').then((m) => ({ default: m.ManualResolveModal })));
 
 const HORIZON = 14; // days into the future
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -261,6 +265,10 @@ function TwinStage({ theme, sim, target, stress, broken }) {
         <hemisphereLight intensity={0.85} groundColor={'#141c2b'} color={'#eaf1ff'} />
         <directionalLight position={[9, 15, 8]} intensity={2.0} />
         <directionalLight position={[-10, 8, -6]} intensity={0.8} color={'#9db8ff'} />
+        {/* Reflection environment: the equipment materials are near-pure metal, so
+            without an IBL to reflect they render black. A neutral warehouse map
+            reveals the steel/plate textures (no post-processing — Snapdragon-safe). */}
+        <Suspense fallback={null}><Environment preset="warehouse" environmentIntensity={1.0} /></Suspense>
         <pointLight position={[0, 6, 6]} intensity={broken ? 2.6 : 0.5 + stress * 1.4} color={broken ? '#ff3355' : '#ff8c42'} distance={40} />
         <Suspense fallback={null}>
           <TwinRig type={type} target={target} stress={stress} broken={broken} theme={theme} />
@@ -289,7 +297,7 @@ function TwinStage({ theme, sim, target, stress, broken }) {
   );
 }
 
-function RootCausePanel({ theme, sensor, broken }) {
+function RootCausePanel({ theme, sensor, broken, manualsOn, onManual }) {
   const rc = sensor?.rc;
   const conf = rc?.confidence != null ? Math.round(rc.confidence * 100) : null;
   const accent = broken ? '#ff5470' : '#ff8c42';
@@ -310,6 +318,16 @@ function RootCausePanel({ theme, sensor, broken }) {
               <div className="rounded-lg p-2" style={{ background: `${accent}12`, border: `1px solid ${accent}33` }}>
                 <div className="text-[9px] uppercase tracking-wider font-bold mb-0.5" style={{ color: accent }}>Recommended action</div>
                 <div className={`text-[12px] leading-snug ${theme.heading}`}>{rc.action}</div>
+                {manualsOn && (
+                  <button
+                    onClick={() => onManual?.(sensor)}
+                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold underline"
+                    style={{ color: accent }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+                    Click here for the Manual
+                  </button>
+                )}
               </div>
             )}
             {rc?.contributing && <div className={`text-[10px] mt-2 ${theme.sub}`}>Contributing: {rc.contributing.split(';').slice(0, 3).join(' · ')}</div>}
@@ -369,8 +387,28 @@ export function Simulation({ theme, asset, detail }) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(2);
   const [event, setEvent] = useState(null);
+  const [manualsOn, setManualsOn] = useState(false);
+  const [manualWO, setManualWO] = useState(null);
   const fired = useRef(new Set());
   const barRef = useRef(null);
+
+  useEffect(() => {
+    getJson('/api/manuals/health').then((h) => setManualsOn(!!h?.enabled)).catch(() => {});
+  }, []);
+
+  // Open the equipment manual for the current asset + its likely root-cause action.
+  const openManual = (sensor) => {
+    const rc = sensor?.rc;
+    setManualWO({
+      wr_id: '',
+      problem_descr: rc
+        ? [rc.mechanism, rc.cause, rc.action].filter(Boolean).join(' — ')
+        : sensor?.desc || asset?.name || '',
+      descriptor: sensor?.desc || asset?.name || '',
+      parent_descr: asset?.name || asset?.plant || '',
+      wr_type: asset?.category || asset?.equipment_category || sim.type || '',
+    });
+  };
 
   useEffect(() => {
     if (!playing) return;
@@ -428,7 +466,7 @@ export function Simulation({ theme, asset, detail }) {
       {/* 3D twin + live root cause */}
       <div className="flex flex-col lg:flex-row gap-3">
         <div className="lg:flex-1 min-w-0"><TwinStage theme={theme} sim={sim} target={target} stress={stress} broken={broken} /></div>
-        <div className="lg:w-72 shrink-0"><RootCausePanel theme={theme} sensor={sim.healthy ? null : target} broken={broken} /></div>
+        <div className="lg:w-72 shrink-0"><RootCausePanel theme={theme} sensor={sim.healthy ? null : target} broken={broken} manualsOn={manualsOn} onManual={openManual} /></div>
       </div>
 
       {/* time scrubber */}
@@ -508,6 +546,12 @@ export function Simulation({ theme, asset, detail }) {
             <button onClick={play} className="ml-auto px-4 py-1.5 rounded-lg text-[13px] font-bold" style={{ background: theme.accent, color: theme.mode === 'light' ? '#fff' : '#06121f' }}>Continue →</button>
           </div>
         </div>
+      )}
+
+      {manualWO && (
+        <Suspense fallback={null}>
+          <ManualResolveModal theme={theme} wo={manualWO} onClose={() => setManualWO(null)} />
+        </Suspense>
       )}
     </div>
   );

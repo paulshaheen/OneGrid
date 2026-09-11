@@ -1,5 +1,6 @@
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   Bell,
   Boxes,
@@ -31,7 +32,17 @@ import {
 import { cn } from "@/lib/utils";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { CopilotDock } from "@/components/ops/CopilotDock";
+import { GlobalSearch } from "@/components/ops/GlobalSearch";
 import { useAlertFeed } from "@/lib/hooks/use-ops-data";
+import { MODES } from "@/report/lib/themes.js";
+import { getJson } from "@/report/lib/api.js";
+
+// Equipment-manual resolver (Foundry IQ) — loaded on demand from a notification action.
+const ManualResolveModal = lazy(() =>
+  import("@/report/components/Manuals.jsx").then((m) => ({
+    default: m.ManualResolveModal as React.ComponentType<Record<string, unknown>>,
+  })),
+);
 import { relativeTime } from "@/lib/format";
 import { useCapacityStatus } from "@/report/lib/api.js";
 
@@ -41,7 +52,14 @@ function NotificationBell() {
   const base = useOpsBase();
   const { alerts, openCount } = useAlertFeed(base);
   const [open, setOpen] = useState(false);
+  const [manualsOn, setManualsOn] = useState(false);
+  const [manualWO, setManualWO] = useState<Record<string, unknown> | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    getJson("/api/manuals/health")
+      .then((h: { enabled?: boolean }) => setManualsOn(!!h?.enabled))
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
@@ -80,7 +98,7 @@ function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="absolute top-full right-0 z-50 mt-2 w-[22rem] overflow-hidden rounded-md border bg-popover shadow-xl">
+        <div className="absolute top-full right-0 z-[80] mt-2 w-[22rem] overflow-hidden rounded-md border bg-popover shadow-xl">
           <div className="flex items-center justify-between border-b px-3 py-2">
             <span className="text-xs font-semibold">Notifications</span>
             <span className="text-[10px] text-muted-foreground">{openCount} open</span>
@@ -94,11 +112,29 @@ function NotificationBell() {
             {top.map((a) => (
               <li key={a.id} className="flex gap-2 px-3 py-2.5">
                 <span className={cn("mt-1 size-2 shrink-0 rounded-full", tone(a.severity))} />
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium">{a.title}</div>
                   <div className="line-clamp-2 text-[11px] text-muted-foreground">{a.detail}</div>
-                  <div className="mt-0.5 text-[10px] text-muted-foreground/80">
-                    {relativeTime(a.createdAtIso)}
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground/80">
+                      {relativeTime(a.createdAtIso)}
+                    </span>
+                    {manualsOn && a.assetId && (
+                      <button
+                        onClick={() =>
+                          setManualWO({
+                            wr_id: "",
+                            problem_descr: a.detail || a.title,
+                            descriptor: a.title,
+                            parent_descr: a.title,
+                            wr_type: "",
+                          })
+                        }
+                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary hover:underline"
+                      >
+                        <Wrench className="size-3" /> Action · View manual
+                      </button>
+                    )}
                   </div>
                 </div>
               </li>
@@ -113,6 +149,14 @@ function NotificationBell() {
           </OpsLink>
         </div>
       )}
+      {manualWO &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <Suspense fallback={null}>
+            <ManualResolveModal theme={MODES.dark} wo={manualWO} onClose={() => setManualWO(null)} />
+          </Suspense>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -269,6 +313,33 @@ export function AppShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  // When the chat opens we auto-collapse an expanded nav to reclaim width; this
+  // ref remembers to re-expand it on close (only if WE collapsed it).
+  const autoCollapsedRef = useRef(false);
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const on = () => setIsDesktop(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  // Opening the chat slides the nav closed (preserving screen space) and shifts
+  // the main content left of the dock; closing restores the nav if we collapsed it.
+  useEffect(() => {
+    if (copilotOpen) {
+      setCollapsed((c) => {
+        if (!c) {
+          autoCollapsedRef.current = true;
+          return true;
+        }
+        return c;
+      });
+    } else if (autoCollapsedRef.current) {
+      autoCollapsedRef.current = false;
+      setCollapsed(false);
+    }
+  }, [copilotOpen]);
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem("og.nav.collapsed") === "1");
@@ -310,7 +381,7 @@ export function AppShell({
     >
       <aside
         className={cn(
-          "sticky top-0 hidden h-screen shrink-0 flex-col bg-sidebar lg:flex",
+          "sticky top-0 hidden h-screen shrink-0 flex-col bg-sidebar transition-[width] duration-300 ease-in-out lg:flex",
           collapsed ? "w-16" : "w-60",
         )}
       >
@@ -328,7 +399,9 @@ export function AppShell({
           </span>
           {!collapsed && (
             <div className="leading-tight">
-              <div className="text-[13px] font-semibold tracking-tight">OneGrid</div>
+              <div className="text-[13px] font-semibold tracking-tight">
+                ONE<span style={{ color: "#38bdf8" }}>GRID</span>
+              </div>
               <div className="text-[10px] text-muted-foreground">
                 Asset &amp; weather intelligence
               </div>
@@ -387,8 +460,11 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-surface/95 px-4 backdrop-blur">
+      <div
+        className="flex min-w-0 flex-1 flex-col transition-[margin] duration-300 ease-in-out"
+        style={{ marginRight: copilotOpen && isDesktop ? 400 : 0 }}
+      >
+        <header className="sticky top-0 z-[70] flex h-14 items-center gap-3 border-b bg-surface/95 px-4 backdrop-blur">
           {/* Collapse the side menu (desktop) */}
           <button
             onClick={toggleCollapsed}
@@ -418,10 +494,7 @@ export function AppShell({
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] text-muted-foreground md:inline-flex">
-              <span className="size-1.5 rounded-full bg-emerald-400" />
-              Fabric live · GoM tenant
-            </span>
+            <GlobalSearch />
 
             {/* Alerts: quick dropdown of current notifications + link to the full page */}
             <NotificationBell />

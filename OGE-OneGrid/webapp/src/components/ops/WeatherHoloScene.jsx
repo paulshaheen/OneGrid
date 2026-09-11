@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, Line, OrbitControls } from "@react-three/drei";
-import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { SimplexNoise } from "three/examples/jsm/math/SimplexNoise.js";
 
@@ -9,6 +8,10 @@ import { conePolygon, destination, quadrantPolygon } from "../../lib/map/geojson
 import { POSTFX_ENABLED } from "../../lib/postfx.js";
 import { NATION, STATES } from "../../report/three/usaGeo.js";
 import { WORLD } from "../../report/three/worldGeo.js";
+
+// Post-processing is disabled by default (?fx=1 to enable). Lazy-load it so the
+// ~250KB postprocessing bundle stays off the critical path of a normal load.
+const PostFXComposer = lazy(() => import("./PostFXComposer.jsx"));
 
 // ── US equirectangular projection (lon/lat → world X/Z) ──────────────────────
 // Same vocabulary as the Control Room map (Facility.jsx): the whole continental
@@ -24,6 +27,11 @@ function project(lon, lat) {
 // World units per statute mile (1° lat ≈ 69 mi) — keeps storm geometry sized in
 // real distance regardless of the map scale K.
 const UNITS_PER_MI = K / 69;
+
+// Captured default framing for the flat command view (pos + orbit target).
+// Camera sits on the same view line as the captured target, pulled in ~6 scroll
+// clicks (≈ ×0.72 distance) so the US fills the panel at the preferred zoom.
+const FLAT_HOME = { pos: [-6.4, 66.3, 85.1], target: [-6.4, 0.1, -1.3] };
 
 // Flat drape of a lon/lat ring onto a constant height, used for the storm track
 // (which floats just above the water rather than following land topography).
@@ -125,6 +133,19 @@ function categoryColor(category, windMph) {
 function categoryLabel(category, windMph) {
   if (category >= 1) return `C${category}`;
   return windMph >= 39 ? "TS" : "TD";
+}
+// Compact storm name for the command view: the distinctive token only.
+// "Hurricane (Ida track)" → "Ida", "Plains Tornado Outbreak" → "Tornado",
+// "Cascadia Windstorm" → "Cascadia".
+function shortStormName(name = "") {
+  const paren = name.match(/\(([^)]+)\)/);
+  if (paren) {
+    const inner = paren[1].replace(/\b(track|storm|system|cyclone)\b/gi, "").trim();
+    if (inner) return inner.split(/\s+/)[0];
+  }
+  if (/tornado/i.test(name)) return "Tornado";
+  const first = name.trim().split(/\s+/)[0];
+  return first || name;
 }
 const RISK_FALLBACK = {
   normal: "#64748b",
@@ -320,7 +341,7 @@ function StarField({ count = 3000, radius = 640, full = false }) {
 // Ported from the Control Room map (Facility.jsx SceneMap): a SimplexNoise
 // heightfield draped with an elevation colour ramp, sea fragments discarded via
 // a shader clip, scattered warm city lights, and neon borders that hug terrain.
-function buildUSMap() {
+function buildUSMap(flat = false) {
   const poly = (NATION[0] || []).map(([lon, lat]) => {
     const [x, z] = project(lon, lat);
     return [x, z];
@@ -344,6 +365,7 @@ function buildUSMap() {
     HS = 3.6;
   const heightAt = (wx, wz) => {
     if (!pointInPoly(wx, wz, poly)) return seaY;
+    if (flat) return 0.06; // command view: no elevation — a flat holographic slab
     const n =
       simplex.noise(wx * 0.02, wz * 0.02) * 0.5 +
       simplex.noise(wx * 0.055, wz * 0.055) * 0.3 +
@@ -361,6 +383,9 @@ function buildUSMap() {
     cMid = new THREE.Color("#12463a"),
     cHi = new THREE.Color("#3f5238"),
     cPeak = new THREE.Color("#6b6f63");
+  // command view: dark, cool navy palette (no green/earth elevation ramp)
+  const cDarkLo = new THREE.Color("#0a1626"),
+    cDarkHi = new THREE.Color("#122a44");
   for (let i = 0; i < p.count; i++) {
     const wx = p.getX(i) + cx,
       wz = p.getZ(i) + cz;
@@ -368,7 +393,10 @@ function buildUSMap() {
     p.setY(i, h);
     let c;
     if (h <= seaY + 0.01) c = cLow;
-    else {
+    else if (flat) {
+      const n2 = (simplex.noise(wx * 0.05, wz * 0.05) + 1) * 0.5;
+      c = cDarkLo.clone().lerp(cDarkHi, n2);
+    } else {
       const e = h / HS;
       c = e < 0.4 ? cMid.clone().lerp(cHi, e / 0.4) : cHi.clone().lerp(cPeak, (e - 0.4) / 0.6);
     }
@@ -439,6 +467,16 @@ function buildUSMap() {
   const cg = new THREE.BufferGeometry();
   cg.setAttribute("position", new THREE.Float32BufferAttribute(lp, 3));
   cg.setAttribute("color", new THREE.Float32BufferAttribute(lc, 3));
+  // Per-light twinkle metadata: each light keeps its base colour plus a random
+  // phase + speed so they shimmer independently instead of pulsing in unison.
+  const nLights = lp.length / 3;
+  const phase = new Float32Array(nLights);
+  const speed = new Float32Array(nLights);
+  for (let i = 0; i < nLights; i++) {
+    phase[i] = Math.random() * Math.PI * 2;
+    speed[i] = 1.4 + Math.random() * 3.6;
+  }
+  cg.userData.twinkle = { base: Float32Array.from(lc), phase, speed };
   const cityLights = new THREE.Points(
     cg,
     new THREE.PointsMaterial({
@@ -458,21 +496,159 @@ function buildUSMap() {
   const drapeH = (ring, off) =>
     ring.map(([lon, lat]) => {
       const [x, z] = project(lon, lat);
-      return [x, heightAt(x, z) + off, z];
+      // Flat view: sit every line on the slab. Sampling heightAt for the national
+      // outline (whose vertices lie ON the polygon edge, where pointInPoly is
+      // unreliable) would drop the coastline to sea level and hide it under the slab.
+      const y = flat ? 0.06 + off : heightAt(x, z) + off;
+      return [x, y, z];
     });
   const nationLine = drapeH(NATION[0], 0.25);
   const stateLines = STATES.map((r) => drapeH(r, 0.15));
   return { terrain, cityLights, nationLine, stateLines, heightAt };
 }
 
-// City lights twinkle by modulating point size, exactly like the Control Room map.
+// City lights twinkle RANDOMLY: each point modulates its own brightness at its own
+// phase + speed (stored per-vertex in the geometry), so the field shimmers like a real
+// city grid at night rather than pulsing all together.
 function CityLights({ points }) {
   const ref = useRef();
   useFrame((st) => {
-    if (ref.current)
-      ref.current.material.size = 0.6 * (0.82 + 0.22 * Math.sin(st.clock.elapsedTime * 3.2));
+    const p = ref.current;
+    const tw = p?.geometry?.userData?.twinkle;
+    if (!tw) return;
+    const t = st.clock.elapsedTime;
+    const colAttr = p.geometry.getAttribute("color");
+    const arr = colAttr.array;
+    const { base, phase, speed } = tw;
+    for (let i = 0; i < phase.length; i++) {
+      const f = 0.32 + 0.68 * (0.5 + 0.5 * Math.sin(t * speed[i] + phase[i]));
+      const j = i * 3;
+      arr[j] = base[j] * f;
+      arr[j + 1] = base[j + 1] * f;
+      arr[j + 2] = base[j + 2] * f;
+    }
+    colAttr.needsUpdate = true;
   });
   return <primitive ref={ref} object={points} />;
+}
+
+// Command view: a glowing "relationship" web between the named sites — an arc
+// (rising quadratic bezier) linking each site to its nearest neighbours, plus a
+// bright halo + core at every node so the locations read clearly on the flat
+// slab. A travelling pulse animates along each arc to suggest live flow.
+function SiteNetwork({ assets, heightAt, risks, highlightSet }) {
+  const { nodes, arcs } = useMemo(() => {
+    const named = assets.filter(
+      (a) =>
+        (LABEL_TYPES.has(a.type) || MAJOR_SET.has(a.type)) &&
+        Number.isFinite(a.lon) &&
+        Number.isFinite(a.lat),
+    );
+    const nodes = named.map((a) => {
+      const [x, z] = project(a.lon, a.lat);
+      const lvl = risks?.get?.(a.id)?.level;
+      // At-risk sites glow in their risk colour (e.g. red near the storm);
+      // normal/monitor sites stay the network cyan so they still read clearly.
+      const color = lvl && lvl !== "normal" && lvl !== "monitor" ? riskColor(lvl) : "#5fd8ff";
+      const dim = highlightSet ? !highlightSet.has(a.id) : false;
+      return { id: a.id, x, z, y: Math.max(0.05, heightAt(x, z)), color, dim };
+    });
+    const seen = new Set();
+    const arcs = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const near = nodes
+        .map((n, j) => ({ j, d: (n.x - nodes[i].x) ** 2 + (n.z - nodes[i].z) ** 2 }))
+        .filter((o) => o.j !== i)
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 2);
+      for (const { j } of near) {
+        const key = i < j ? `${i}-${j}` : `${j}-${i}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const a = nodes[i],
+          b = nodes[j];
+        const dist = Math.hypot(b.x - a.x, b.z - a.z);
+        const lift = Math.min(7, 1 + dist * 0.16);
+        const ctrl = new THREE.Vector3(
+          (a.x + b.x) / 2,
+          Math.max(a.y, b.y) + lift,
+          (a.z + b.z) / 2,
+        );
+        const curve = new THREE.QuadraticBezierCurve3(
+          new THREE.Vector3(a.x, a.y + 0.18, a.z),
+          ctrl,
+          new THREE.Vector3(b.x, b.y + 0.18, b.z),
+        );
+        arcs.push(curve.getPoints(36).map((p) => [p.x, p.y, p.z]));
+      }
+    }
+    return { nodes, arcs };
+  }, [assets, heightAt, risks, highlightSet]);
+
+  const pulses = useRef([]);
+  useFrame((st) => {
+    const t = st.clock.elapsedTime;
+    pulses.current.forEach((m, i) => {
+      if (!m) return;
+      const pts = arcs[i];
+      if (!pts) return;
+      const f = (t * 0.28 + i * 0.13) % 1;
+      const idx = Math.min(pts.length - 1, Math.floor(f * (pts.length - 1)));
+      const p = pts[idx];
+      m.position.set(p[0], p[1], p[2]);
+    });
+  });
+
+  return (
+    <group>
+      {arcs.map((pts, i) => (
+        <group key={`arc${i}`}>
+          <Line points={pts} color="#3fd0ff" lineWidth={3.5} transparent opacity={0.14} />
+          <Line points={pts} color="#8fe8ff" lineWidth={1.2} transparent opacity={0.6} />
+          <mesh ref={(el) => (pulses.current[i] = el)}>
+            <sphereGeometry args={[0.16, 12, 12]} />
+            <meshBasicMaterial color="#dff6ff" toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+      {nodes.map((n) => {
+        const d = n.dim ? 0.26 : 1;
+        return (
+        <group key={`node${n.id}`} position={[n.x, n.y + 0.05, n.z]}>
+          {/* large soft halo — a billboard, so it reads from any angle/distance */}
+          <sprite position={[0, 0.75, 0]} scale={[6.5, 6.5, 1]}>
+            <spriteMaterial
+              map={GLOW_TEX}
+              color={n.color}
+              transparent
+              opacity={0.5 * d}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+              toneMapped={false}
+            />
+          </sprite>
+          {/* glowing orb — a sphere looks identical from every camera angle */}
+          <mesh position={[0, 0.75, 0]}>
+            <sphereGeometry args={[0.62, 24, 24]} />
+            <meshStandardMaterial
+              color="#eaf7ff"
+              emissive={n.color}
+              emissiveIntensity={2.2 * d}
+              transparent
+              opacity={n.dim ? 0.5 : 1}
+              toneMapped={false}
+            />
+          </mesh>
+          {/* ground footprint ring */}
+          <mesh rotation-x={-Math.PI / 2} position={[0, 0.02, 0]}>
+            <ringGeometry args={[0.95, 1.3, 44]} />
+            <meshBasicMaterial color={n.color} transparent opacity={0.55 * d} toneMapped={false} />
+          </mesh>
+        </group>
+        );
+      })}
+    </group>
+  );
 }
 
 // ── Procedural hurricane: a spinning top of grey/white clouds with a clear eye ─
@@ -741,11 +917,12 @@ const LABEL_TYPES = new Set(["refinery", "lng_terminal", "port"]);
 // pipelines) renders as a small flat dot so the Gulf field reads like the 2D
 // map's dot scatter instead of a forest of pins.
 const MAJOR_SET = new Set(["refinery", "lng_terminal", "port", "storage", "offshore_platform"]);
-function AssetPin({ asset, level, selected, hovered, onSelect, onHover, heightAt }) {
+function AssetPin({ asset, level, selected, dimmed = false, hovered, onSelect, onHover, heightAt, flat = false }) {
   const g = useRef();
   const ring = useRef();
   const color = riskColor(level);
   const hot = level === "high" || level === "critical";
+  const dd = dimmed ? 0.3 : 1;
   const [x, z] = project(asset.lon, asset.lat);
   // Onshore assets sit on the terrain; offshore assets rest just above the water.
   const baseY = heightAt ? Math.max(0.05, heightAt(x, z)) : 0;
@@ -784,7 +961,7 @@ function AssetPin({ asset, level, selected, hovered, onSelect, onHover, heightAt
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.06, 0]}>
         <ringGeometry args={[0.9, 1.15, 32]} />
-        <meshBasicMaterial color={color} transparent opacity={hot ? 0.8 : 0.4} toneMapped={false} />
+        <meshBasicMaterial color={color} transparent opacity={(hot ? 0.8 : 0.4) * dd} toneMapped={false} />
       </mesh>
       {hot && (
         <mesh ref={ring} rotation-x={-Math.PI / 2} position={[0, 0.07, 0]}>
@@ -793,27 +970,33 @@ function AssetPin({ asset, level, selected, hovered, onSelect, onHover, heightAt
         </mesh>
       )}
       <group ref={g}>
-        <mesh position={[0, 0.9, 0]}>
-          <cylinderGeometry args={[0.09, 0.09, 1.8, 10]} />
-          <meshStandardMaterial color="#5a6678" metalness={0.6} roughness={0.4} />
-        </mesh>
-        <mesh position={[0, 2, 0]}>
-          <sphereGeometry args={[0.42, 20, 20]} />
-          <meshStandardMaterial
-            color={color}
-            emissive={color}
-            emissiveIntensity={hot ? 1.5 : 0.6}
-            toneMapped={false}
-          />
-        </mesh>
-        {(selected || hot) && (
-          <pointLight
-            position={[0, 2, 0]}
-            color={color}
-            intensity={hot ? 5 : 3}
-            distance={16}
-            decay={2}
-          />
+        {/* Flat command view: the big SiteNetwork orb is the marker, so skip the
+            tall pole + sphere here (keep the interaction hitbox + ground rings). */}
+        {!flat && (
+          <>
+            <mesh position={[0, 0.9, 0]}>
+              <cylinderGeometry args={[0.09, 0.09, 1.8, 10]} />
+              <meshStandardMaterial color="#5a6678" metalness={0.6} roughness={0.4} />
+            </mesh>
+            <mesh position={[0, 2, 0]}>
+              <sphereGeometry args={[0.42, 20, 20]} />
+              <meshStandardMaterial
+                color={color}
+                emissive={color}
+                emissiveIntensity={hot ? 1.5 : 0.6}
+                toneMapped={false}
+              />
+            </mesh>
+            {(selected || hot) && (
+              <pointLight
+                position={[0, 2, 0]}
+                color={color}
+                intensity={hot ? 5 : 3}
+                distance={16}
+                decay={2}
+              />
+            )}
+          </>
         )}
       </group>
     </group>
@@ -824,11 +1007,15 @@ function AssetPin({ asset, level, selected, hovered, onSelect, onHover, heightAt
 // No tall pin, ring pulse or per-frame work — there are ~170 of these, so they
 // stay lightweight and unobtrusive, matching the flat well dots on the 2D map.
 // Selecting one (from the map or the sidebar list) pops it and shows its label.
-function WellMarker({ asset, level, selected, hovered, onSelect, onHover, heightAt }) {
+function WellMarker({ asset, level, selected, dimmed = false, hovered, onSelect, onHover, heightAt, flat = false }) {
   const color = riskColor(level);
   const [x, z] = project(asset.lon, asset.lat);
   const baseY = heightAt ? Math.max(0.05, heightAt(x, z)) : 0;
   const s = selected ? 1.9 : hovered ? 1.4 : 1;
+  const dd = dimmed ? 0.28 : 1;
+  const dot = (flat ? 0.42 : 0.15) * s;
+  const rIn = (flat ? 0.5 : 0.22) * s;
+  const rOut = (flat ? 0.78 : 0.32) * s;
   return (
     <group position={[x, baseY + 0.16, z]}>
       <mesh
@@ -850,49 +1037,86 @@ function WellMarker({ asset, level, selected, hovered, onSelect, onHover, height
       >
         <sphereGeometry args={[0.7, 8, 8]} />
       </mesh>
+      {flat && (
+        <sprite position={[0, 0.15, 0]} scale={[3 * s, 3 * s, 1]}>
+          <spriteMaterial
+            map={GLOW_TEX}
+            color={color}
+            transparent
+            opacity={0.6 * dd}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </sprite>
+      )}
       <mesh>
-        <sphereGeometry args={[0.15 * s, 12, 12]} />
+        <sphereGeometry args={[dot, 12, 12]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={selected ? 1.4 : 0.45}
+          emissiveIntensity={(selected ? 1.4 : flat ? 0.9 : 0.45) * dd}
+          transparent
+          opacity={dimmed ? 0.5 : 1}
           toneMapped={false}
         />
       </mesh>
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.15, 0]}>
-        <ringGeometry args={[0.22 * s, 0.32 * s, 18]} />
-        <meshBasicMaterial color={color} transparent opacity={0.38} toneMapped={false} />
+        <ringGeometry args={[rIn, rOut, 18]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={(flat ? 0.55 : 0.38) * dd}
+          toneMapped={false}
+        />
       </mesh>
     </group>
   );
 }
 
 // ── Camera: intro sweep, click-to-zoom on assets, click-to-recenter on the map ─
-function CameraRig({ focus, focusKey, recenter, recenterKey, entry, entryKey }) {
+function CameraRig({ focus, focusKey, recenter, recenterKey, entry, entryKey, home, homeKey, flat }) {
   const controls = useRef();
   const { camera } = useThree();
-  // If we drilled in from the globe, frame the chosen storm region; otherwise do
-  // the establishing whole-US sweep.
+  // If we drilled in from the globe, frame the chosen storm region; if a flat
+  // command `home` is supplied, settle on that captured pose; otherwise do the
+  // establishing whole-US sweep.
   const anim = useRef(
     entry
       ? {
           active: true,
           elapsed: 0,
-          dur: 1.8,
-          fromPos: new THREE.Vector3(entry[0] - 30, 210, entry[2] + 190),
-          toPos: new THREE.Vector3(entry[0], 96, entry[2] + 120),
-          fromTgt: new THREE.Vector3(entry[0], 4, entry[2]),
-          toTgt: new THREE.Vector3(entry[0], 4, entry[2]),
+          dur: flat ? 1.6 : 1.8,
+          // Command (flat) view frames a tight, local shot of the storm; the
+          // globe drill-in uses the wider regional framing.
+          fromPos: flat
+            ? new THREE.Vector3(entry[0] - 12, 92, entry[2] + 96)
+            : new THREE.Vector3(entry[0] - 30, 210, entry[2] + 190),
+          toPos: flat
+            ? new THREE.Vector3(entry[0], 40, entry[2] + 50)
+            : new THREE.Vector3(entry[0], 96, entry[2] + 120),
+          fromTgt: new THREE.Vector3(entry[0], flat ? 1 : 4, entry[2]),
+          toTgt: new THREE.Vector3(entry[0], flat ? 1 : 4, entry[2]),
         }
-      : {
-          active: true,
-          elapsed: 0,
-          dur: 2.6,
-          fromPos: new THREE.Vector3(-70, 220, 260),
-          toPos: new THREE.Vector3(0, 140, 185),
-          fromTgt: new THREE.Vector3(0, 2, 6),
-          toTgt: new THREE.Vector3(0, 2, 6),
-        },
+      : home
+        ? {
+            active: true,
+            elapsed: 0,
+            dur: 2.0,
+            fromPos: new THREE.Vector3(home.pos[0] - 20, home.pos[1] + 55, home.pos[2] + 45),
+            toPos: new THREE.Vector3(home.pos[0], home.pos[1], home.pos[2]),
+            fromTgt: new THREE.Vector3(home.target[0], home.target[1], home.target[2]),
+            toTgt: new THREE.Vector3(home.target[0], home.target[1], home.target[2]),
+          }
+        : {
+            active: true,
+            elapsed: 0,
+            dur: 2.6,
+            fromPos: new THREE.Vector3(-70, 220, 260),
+            toPos: new THREE.Vector3(0, 140, 185),
+            fromTgt: new THREE.Vector3(0, 2, 6),
+            toTgt: new THREE.Vector3(0, 2, 6),
+          },
   );
   // Set the initial orbit pivot once (no `target` prop, so re-renders can't reset
   // the pivot the user has moved by clicking/panning).
@@ -957,14 +1181,36 @@ function CameraRig({ focus, focusKey, recenter, recenterKey, entry, entryKey }) 
     if (!c) return;
     const a = anim.current;
     a.fromPos.copy(camera.position);
-    a.toPos.set(entry[0], 96, entry[2] + 120);
+    if (flat) {
+      // Tight, local shot of the selected storm.
+      a.toPos.set(entry[0], 40, entry[2] + 50);
+      a.toTgt.set(entry[0], 1, entry[2]);
+    } else {
+      a.toPos.set(entry[0], 96, entry[2] + 120);
+      a.toTgt.set(entry[0], 4, entry[2]);
+    }
     a.fromTgt.copy(c.target);
-    a.toTgt.set(entry[0], 4, entry[2]);
     a.elapsed = 0;
-    a.dur = 1.8;
+    a.dur = flat ? 1.4 : 1.8;
     a.active = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryKey]);
+  // Return to the default framing when the storm selection is cleared
+  // ("All storms · centered").
+  useEffect(() => {
+    if (!home || !homeKey) return;
+    const c = controls.current;
+    if (!c) return;
+    const a = anim.current;
+    a.fromPos.copy(camera.position);
+    a.toPos.set(home.pos[0], home.pos[1], home.pos[2]);
+    a.fromTgt.copy(c.target);
+    a.toTgt.set(home.target[0], home.target[1], home.target[2]);
+    a.elapsed = 0;
+    a.dur = 1.4;
+    a.active = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeKey]);
   useFrame((_, dt) => {
     const c = controls.current;
     if (!c) return;
@@ -1001,13 +1247,83 @@ function CameraRig({ focus, focusKey, recenter, recenterKey, entry, entryKey }) 
     />
   );
 }
+
+// Twin failure simulation: pulsing red alarm beacons at the sites currently in
+// a failed state (the `count` highest-risk named locations). They light up
+// progressively as the simulation playhead advances, so failures read clearly.
+function FailurePin({ x, y, z }) {
+  const ring = useRef();
+  const core = useRef();
+  useFrame((st) => {
+    const p = (st.clock.elapsedTime * 1.6) % 1;
+    if (ring.current) {
+      ring.current.scale.setScalar(1 + p * 2.4);
+      ring.current.material.opacity = 0.75 * (1 - p);
+    }
+    if (core.current) {
+      core.current.material.emissiveIntensity = 1.6 + 0.9 * Math.sin(st.clock.elapsedTime * 6);
+    }
+  });
+  const R = "#ff3b52";
+  return (
+    <group position={[x, y, z]} renderOrder={30}>
+      <sprite position={[0, 0.6, 0]} scale={[3.6, 3.6, 1]}>
+        <spriteMaterial
+          map={GLOW_TEX}
+          color={R}
+          transparent
+          opacity={0.65}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </sprite>
+      <mesh ref={ring} rotation-x={-Math.PI / 2} position={[0, 0.05, 0]}>
+        <ringGeometry args={[0.5, 0.72, 40]} />
+        <meshBasicMaterial color={R} transparent opacity={0.7} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 1.4, 0]}>
+        <cylinderGeometry args={[0.04, 0.04, 2.8, 8]} />
+        <meshBasicMaterial color={R} transparent opacity={0.5} toneMapped={false} />
+      </mesh>
+      <mesh ref={core} position={[0, 2.9, 0]}>
+        <sphereGeometry args={[0.34, 18, 18]} />
+        <meshStandardMaterial color="#ffd7dd" emissive={R} emissiveIntensity={1.8} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+const RISK_RANK = { critical: 5, high: 4, elevated: 3, monitor: 2, normal: 1 };
+function FailureMarkers({ assets, risks, count, heightAt }) {
+  const ordered = useMemo(() => {
+    const named = assets.filter(
+      (a) =>
+        (LABEL_TYPES.has(a.type) || MAJOR_SET.has(a.type)) &&
+        Number.isFinite(a.lon) &&
+        Number.isFinite(a.lat),
+    );
+    return named
+      .map((a) => {
+        const r = risks?.get?.(a.id);
+        const s = (r?.score ?? 0) + (RISK_RANK[r?.level] ?? 0) * 20;
+        return { a, s };
+      })
+      .sort((x, y) => y.s - x.s)
+      .map((o) => o.a);
+  }, [assets, risks]);
+  const failed = ordered.slice(0, Math.max(0, count));
+  return failed.map((a) => {
+    const [x, z] = project(a.lon, a.lat);
+    return <FailurePin key={`fail-${a.id}`} x={x} y={Math.max(0.05, heightAt(x, z))} z={z} />;
+  });
+}
 
 // ── Label declutter ──────────────────────────────────────────────────────────
 // Each label is a per-anchor drei <Html>, so drei keeps it glued to its 3D point
 // every frame (robust across pan/rotate/zoom/resize). We only compute the
 // vertical stacking OFFSET here and apply it as a CSS transform, with a leader
 // line back down to the anchor.
-function SmartLabels({ items }) {
+function SmartLabels({ items, compact = false }) {
   const { camera, size } = useThree();
   const vec = useMemo(() => new THREE.Vector3(), []);
   const nodes = useRef(new Map());
@@ -1023,22 +1339,53 @@ function SmartLabels({ items }) {
     camera.updateMatrixWorld();
     const proj = items.map((it) => {
       vec.set(it.world[0], it.world[1], it.world[2]).project(camera);
-      return { id: it.id, sy: (-vec.y * 0.5 + 0.5) * size.height, behind: vec.z > 1 };
+      const storm = !!it.storm;
+      // Approximate the rendered chip box so we can resolve real 2D overlaps
+      // (the old logic only stacked vertically and let storm chips land on top
+      // of nearby location chips).
+      const w = storm ? (it.text?.length ?? 4) * 8.5 + 34 : (it.text?.length ?? 4) * 6.2 + 16;
+      const chipH = storm ? 24 : 18;
+      return {
+        id: it.id,
+        storm,
+        w,
+        chipH,
+        sx: (vec.x * 0.5 + 0.5) * size.width,
+        sy: (-vec.y * 0.5 + 0.5) * size.height,
+        behind: vec.z > 1,
+      };
     });
-    proj.sort((a, b) => b.sy - a.sy);
-    const gap = 22;
-    const rise = 34;
-    let last = Infinity;
+    // Storms claim their slot first (kept clear of everything else), then the
+    // rest settle top-down. Command view hugs pins with short leaders.
+    proj.sort((a, b) => (b.storm ? 1 : 0) - (a.storm ? 1 : 0) || a.sy - b.sy);
+    const baseRise = compact ? 12 : 30;
+    const stormRise = compact ? 16 : 34;
+    const maxOff = compact ? 140 : 300;
+    const pad = 5;
+    const placed = [];
     for (const pr of proj) {
       const n = nodes.current.get(pr.id);
       if (!n || !n.chip) continue;
       if (n.wrap) n.wrap.style.opacity = pr.behind ? "0" : "1";
       if (pr.behind) continue;
-      let top = pr.sy - rise;
-      if (top > last - gap) top = last - gap;
-      top = Math.max(top, 6);
-      last = top;
-      const off = Math.min(pr.sy - top, 220);
+      const xL = pr.sx - pr.w / 2,
+        xR = pr.sx + pr.w / 2;
+      const hits = (o) => {
+        const yB = pr.sy - o,
+          yT = yB - pr.chipH;
+        for (const r of placed) {
+          if (xR < r.xL - pad || xL > r.xR + pad) continue;
+          if (yB < r.yT - pad || yT > r.yB + pad) continue;
+          return true;
+        }
+        return false;
+      };
+      let off = pr.storm ? stormRise : baseRise;
+      let guard = 0;
+      while (hits(off) && off < maxOff && guard++ < 80) off += pr.chipH + pad;
+      off = Math.min(off, maxOff);
+      const yB = pr.sy - off;
+      placed.push({ xL, xR, yB, yT: yB - pr.chipH });
       n.chip.style.transform = `translate(-50%, calc(-100% - ${off}px))`;
       if (n.leader) {
         n.leader.style.top = `${-off}px`;
@@ -1062,7 +1409,7 @@ function SmartLabels({ items }) {
               top: 0,
               width: 1,
               height: 0,
-              background: "rgba(205, 216, 232, 0.32)",
+              background: "rgba(150, 180, 220, 0.45)",
             }}
           />
           <div
@@ -1070,7 +1417,7 @@ function SmartLabels({ items }) {
             className={
               storm
                 ? "flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-bold tracking-wide uppercase"
-                : "whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-semibold"
+                : "whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-semibold"
             }
             style={
               storm
@@ -1087,9 +1434,10 @@ function SmartLabels({ items }) {
                     position: "absolute",
                     left: 0,
                     top: 0,
-                    background: "rgba(6,12,20,.85)",
-                    color: it.sel ? it.color : "#dce4ef",
-                    border: `1px solid ${it.color}${it.sel ? "aa" : "55"}`,
+                    background: "rgba(13,20,33,0.94)",
+                    color: it.sel ? it.color : "#eef4ff",
+                    border: it.sel ? `1px solid ${it.color}aa` : "1px solid rgba(120,150,190,0.28)",
+                    boxShadow: "0 2px 12px rgba(0,0,0,0.45)",
                   }
             }
           >
@@ -1111,6 +1459,44 @@ function SmartLabels({ items }) {
       </Html>
     );
   });
+}
+
+// On-map weather readout near the primary storm — matches the reference's
+// "Gulf Weather · 81 mph · Gusts · Pressure" panel.
+function WeatherInfoBox({ storm, hour }) {
+  const p = interpolate(storm, hour);
+  if (!p) return null;
+  const [x, z] = project(p.lon, p.lat);
+  const wind = Math.round(p.windMph || storm.currentWindMph || 0);
+  const gust = Math.round(storm.gustMph || wind * 1.25);
+  const pres = Math.round(p.pressureMb || storm.pressureMb || 0);
+  const region = (storm.region || storm.name || "Weather").replace(/_/g, " ");
+  const title = region.replace(/\b\w/g, (m) => m.toUpperCase());
+  return (
+    <Html position={[x, 2.4, z]} zIndexRange={[44, 0]} style={{ pointerEvents: "none" }}>
+      <div
+        style={{
+          transform: "translate(20px, 10px)",
+          minWidth: 132,
+          background: "rgba(11,17,28,0.9)",
+          border: "1px solid rgba(120,150,190,0.28)",
+          borderRadius: 10,
+          padding: "9px 12px",
+          boxShadow: "0 6px 22px rgba(0,0,0,0.5)",
+          color: "#dce6f5",
+          fontSize: 12.5,
+          lineHeight: 1.5,
+        }}
+      >
+        <div style={{ fontWeight: 700, color: "#f1f6ff", marginBottom: 2 }}>{title} Weather</div>
+        <div>
+          <span style={{ fontWeight: 700, color: "#eaf2ff" }}>{wind}</span> mph
+        </div>
+        <div style={{ color: "#aab8ce" }}>Gusts {gust} mph</div>
+        <div style={{ color: "#aab8ce" }}>Pressure {pres} mb</div>
+      </div>
+    </Html>
+  );
 }
 
 // ── Level-0 globe: a rotating hemisphere with storm hotspots to drill into ───
@@ -1395,9 +1781,9 @@ function GlobeScene({ storms, hour, onEnter, accent = "#3f96ff" }) {
         maxPolarAngle={Math.PI / 2.05}
       />
       {POSTFX_ENABLED && (
-        <EffectComposer disableNormalPass>
-          <Bloom mipmapBlur intensity={0.55} luminanceThreshold={0.0} luminanceSmoothing={0.2} />
-        </EffectComposer>
+        <Suspense fallback={null}>
+          <PostFXComposer variant="globe" />
+        </Suspense>
       )}
     </>
   );
@@ -1409,17 +1795,28 @@ function Scene({
   events,
   hour,
   selectedId,
+  highlightIds,
   onSelect,
   entry,
   onBackToGlobe,
   showAssets = true,
   showTrack = true,
   showWind = true,
+  showLinks = true,
+  flat = false,
+  failures = 0,
+  homeKey = 0,
 }) {
   const [hovered, setHovered] = useState(null);
   const [pivot, setPivot] = useState(null);
-  const map = useMemo(() => buildUSMap(), []);
+  const map = useMemo(() => buildUSMap(flat), [flat]);
   const storms = useMemo(() => (events || []).filter(Boolean), [events]);
+  // Optional focus set (Asset Explorer): when a non-empty highlight set is given,
+  // sites NOT in it are dimmed so the highlighted estate reads clearly.
+  const highlightSet = useMemo(
+    () => (highlightIds && highlightIds.length ? new Set(highlightIds) : null),
+    [highlightIds],
+  );
   // Click empty map (not a drag, not an asset) → set that point as the orbit pivot.
   const onGround = (e) => {
     if (e.delta > 4) return; // ignore drags
@@ -1440,9 +1837,11 @@ function Scene({
       const rMi =
         THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(p.windMph, 30, 160, 90, 190), 80, 210) *
         UNITS_PER_MI;
-      const text = tropical
-        ? `${s.name} · ${categoryLabel(p.category, p.windMph)} · ${Math.round(p.windMph)} mph`
-        : `${s.name} · ${Math.round(p.windMph)} mph wind`;
+      const text = flat
+        ? shortStormName(s.name)
+        : tropical
+          ? `${s.name} · ${categoryLabel(p.category, p.windMph)} · ${Math.round(p.windMph)} mph`
+          : `${s.name} · ${Math.round(p.windMph)} mph wind`;
       out.push({
         id: `storm-${s.id}`,
         world: [x, (tropical ? rMi * 0.55 : 2) + 2, z],
@@ -1458,7 +1857,8 @@ function Scene({
       const hov = hovered === a.id;
       if (!(LABEL_TYPES.has(a.type) || sel || hov)) continue;
       const [x, z] = project(a.lon, a.lat);
-      const y = Math.max(0.05, map.heightAt(x, z)) + (MAJOR_SET.has(a.type) ? 1.2 : 0.4);
+      const y =
+        Math.max(0.05, map.heightAt(x, z)) + (flat ? 0.35 : MAJOR_SET.has(a.type) ? 1.2 : 0.4);
       out.push({
         id: `asset-${a.id}`,
         world: [x, y, z],
@@ -1468,7 +1868,7 @@ function Scene({
       });
     }
     return out;
-  }, [storms, hour, assets, selectedId, hovered, risks, map, showAssets]);
+  }, [storms, hour, assets, selectedId, hovered, risks, map, showAssets, flat]);
 
   // World position of the selected asset, for click-to-zoom.
   const focus = useMemo(() => {
@@ -1488,20 +1888,29 @@ function Scene({
 
   return (
     <>
-      <color attach="background" args={["#02040a"]} />
-      <fog attach="fog" args={["#02040a", 340, 900]} />
+      {!flat && <color attach="background" args={["#02040a"]} />}
+      {!flat && <fog attach="fog" args={["#02040a", 340, 900]} />}
       <hemisphereLight intensity={0.12} groundColor={"#0a0f18"} color={"#33405a"} />
       {/* warm "sun" keys the topography; cool fill lifts the shadow side */}
       <directionalLight position={[70, 150, 90]} intensity={0.75} color={"#fff2d6"} />
       <directionalLight position={[-90, 120, -40]} intensity={0.25} color={"#5f79b8"} />
-      <StarField />
-      {/* deep-water plane revealed through the discarded-sea terrain fragments */}
+      {!flat && <StarField />}
+      {/* Ground plane: opaque deep water for the globe/regional view; an invisible
+          click-catcher in the flat command view so the CSS background gradient
+          shows through the discarded-sea fragments. */}
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.5, 0]} onClick={onGround}>
         <planeGeometry args={[1600, 1600]} />
-        <meshStandardMaterial color="#04121f" metalness={0.2} roughness={0.95} />
+        {flat ? (
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        ) : (
+          <meshStandardMaterial color="#04121f" metalness={0.2} roughness={0.95} />
+        )}
       </mesh>
       <primitive object={map.terrain} onClick={onGround} />
       <CityLights points={map.cityLights} />
+      {flat && showLinks && (
+        <SiteNetwork assets={assets} heightAt={map.heightAt} risks={risks} highlightSet={highlightSet} />
+      )}
       {map.stateLines.map((pts, i) => (
         <Line
           key={`st${i}`}
@@ -1515,6 +1924,12 @@ function Scene({
       {storms.map((s) => (
         <StormLayer key={s.id} event={s} hour={hour} showTrack={showTrack} showWind={showWind} />
       ))}
+      {flat &&
+        (() => {
+          const s =
+            storms.find((x) => x.kind === "hurricane" || x.kind === "tropical_storm") || storms[0];
+          return s ? <WeatherInfoBox storm={s} hour={hour} /> : null;
+        })()}
       {showAssets &&
         assets.map((a) => {
           const Marker = MAJOR_SET.has(a.type) ? AssetPin : WellMarker;
@@ -1524,10 +1939,12 @@ function Scene({
               asset={a}
               level={risks?.get?.(a.id)?.level}
               selected={selectedId === a.id}
+              dimmed={!!highlightSet && !highlightSet.has(a.id)}
               hovered={hovered === a.id}
               onSelect={onSelect}
               onHover={setHovered}
               heightAt={map.heightAt}
+              flat={flat}
             />
           );
         })}
@@ -1538,10 +1955,16 @@ function Scene({
         recenterKey={pivot?.key}
         entry={entryWorld}
         entryKey={entry?.key}
+        home={flat ? FLAT_HOME : null}
+        homeKey={homeKey}
+        flat={flat}
       />
       {/* Rendered after CameraRig so its projection runs once the camera is
           finalised for the frame — keeps labels pinned to their markers. */}
-      <SmartLabels items={labelItems} />
+      <SmartLabels items={labelItems} compact={flat} />
+      {failures > 0 && (
+        <FailureMarkers assets={assets} risks={risks} count={failures} heightAt={map.heightAt} />
+      )}
       {onBackToGlobe && (
         <Html fullscreen zIndexRange={[50, 0]} style={{ pointerEvents: "none" }}>
           <button
@@ -1559,10 +1982,9 @@ function Scene({
         </Html>
       )}
       {POSTFX_ENABLED && (
-        <EffectComposer disableNormalPass>
-          <Bloom mipmapBlur intensity={0.7} luminanceThreshold={0.42} luminanceSmoothing={0.28} />
-          <Vignette eskil={false} offset={0.22} darkness={0.5} />
-        </EffectComposer>
+        <Suspense fallback={null}>
+          <PostFXComposer variant="scene" />
+        </Suspense>
       )}
     </>
   );
@@ -1580,11 +2002,14 @@ export default function WeatherHoloScene({
   events,
   hour = 0,
   selectedId,
+  highlightIds,
   onSelect,
   autoPlay = false,
   initialFocusEventId,
   skipGlobe = false,
   layers,
+  flat = false,
+  failures = 0,
 }) {
   const storms = useMemo(
     () => (events && events.length ? events : event ? [event] : []),
@@ -1598,6 +2023,7 @@ export default function WeatherHoloScene({
   const showAssets = layers ? !!layers.assets : true;
   const showTrack = layers ? !!layers.track : true;
   const showWind = layers ? !!layers.wind : true;
+  const showLinks = layers ? layers.links !== false : true;
   // When embedded (e.g. the Overview) we auto-advance our own playhead so the
   // storm animates without an external timeline. The horizon is the furthest
   // forecast hour we actually have data for (some systems only forecast 24 h),
@@ -1635,6 +2061,13 @@ export default function WeatherHoloScene({
   useEffect(() => {
     if (seeded.current || initialFocusEventId) return;
     if (skipGlobe && storms.length) {
+      // Flat command view opens on the captured `home` framing (handled by
+      // CameraRig), so leave `entry` null and just switch to the map.
+      if (flat) {
+        setLevel("map");
+        seeded.current = true;
+        return;
+      }
       const focus = (event && storms.find((s) => s.id === event.id)) || storms[0];
       const p = interpolate(focus, 0);
       setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
@@ -1644,30 +2077,39 @@ export default function WeatherHoloScene({
       setLevel("globe");
       seeded.current = true;
     }
-  }, [storms, initialFocusEventId, skipGlobe, event]);
+  }, [storms, initialFocusEventId, skipGlobe, event, flat]);
   // Reactive focus: fly the camera to the focused storm whenever the selection
   // changes (e.g. the Weather Events pills). Frames on its current position and
   // only re-frames when the focused id actually changes (not on a data refetch).
   const framedFocus = useRef(null);
+  const [homeKey, setHomeKey] = useState(0);
   useEffect(() => {
-    if (!initialFocusEventId || framedFocus.current === initialFocusEventId) return;
-    const fs = storms.find((s) => s.id === initialFocusEventId);
-    if (!fs) return;
-    const p = interpolate(fs, 0);
-    setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
-    setLevel("map");
-    framedFocus.current = initialFocusEventId;
-  }, [initialFocusEventId, storms]);
+    if (initialFocusEventId) {
+      if (framedFocus.current === initialFocusEventId) return;
+      const fs = storms.find((s) => s.id === initialFocusEventId);
+      if (!fs) return;
+      const p = interpolate(fs, 0);
+      setEntry(p ? { lon: p.lon, lat: p.lat, key: Date.now() } : null);
+      setLevel("map");
+      framedFocus.current = initialFocusEventId;
+    } else if (flat && framedFocus.current) {
+      // Cleared the storm selection ("All storms · centered") → glide back to
+      // the default command framing.
+      framedFocus.current = null;
+      setHomeKey((k) => k + 1);
+    }
+  }, [initialFocusEventId, storms, flat]);
   const allowGlobe = (skipGlobe || !initialFocusEventId) && storms.length > 0;
   return (
     <Canvas
       shadows={false}
       dpr={[1, 2]}
       camera={{ position: [0, 140, 185], fov: 45 }}
-      gl={{ antialias: true, powerPreference: "high-performance" }}
+      gl={{ antialias: true, powerPreference: "high-performance", alpha: true }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.AgXToneMapping;
         gl.toneMappingExposure = 1.0;
+        if (flat) gl.setClearColor(0x000000, 0);
       }}
     >
       {level === "globe" ? (
@@ -1686,12 +2128,17 @@ export default function WeatherHoloScene({
           events={storms}
           hour={activeHour}
           selectedId={selectedId}
+          highlightIds={highlightIds}
           onSelect={onSelect}
           entry={entry}
-          onBackToGlobe={allowGlobe ? () => setLevel("globe") : null}
+          onBackToGlobe={allowGlobe && !flat ? () => setLevel("globe") : null}
           showAssets={showAssets}
           showTrack={showTrack}
           showWind={showWind}
+          showLinks={showLinks}
+          flat={flat}
+          failures={failures}
+          homeKey={homeKey}
         />
       )}
     </Canvas>

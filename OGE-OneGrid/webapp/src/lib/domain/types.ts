@@ -120,6 +120,10 @@ export interface CopilotAnswer {
   citations: CopilotCitation[];
   /** Assets the map should highlight for this answer. */
   highlightAssetIds: string[];
+  /** Evidence the answer was grounded on — data sources + counts (transparency). */
+  evidence?: { label: string; detail: string }[];
+  /** The raw grounding context that was sent to the model (for a "view data" expand). */
+  context?: string;
 }
 
 export interface GeospatialLayer {

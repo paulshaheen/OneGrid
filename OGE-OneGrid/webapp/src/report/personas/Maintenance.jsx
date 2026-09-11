@@ -14,7 +14,7 @@ const FILTERS = [
   { key: 'ok', label: 'Healthy', color: '#2fd07a' },
 ];
 
-export default function Maintenance({ theme }) {
+export default function Maintenance({ theme, focusWo }) {
   const { data: health } = useApi('/api/fleet-health', { pollMs: 60000 });
   const { data: assets } = useApi('/api/fleet-assets', { pollMs: 60000 });
   const { data: wos } = useApi('/api/work-orders?limit=100');
@@ -23,7 +23,7 @@ export default function Maintenance({ theme }) {
   const manualsOn = !!manualsHealth?.enabled;
   const [asset, setAsset] = useState(null);
   const [resolveWo, setResolveWo] = useState(null);
-  const [woQuery, setWoQuery] = useState('');
+  const [woQuery, setWoQuery] = useState(focusWo || '');
   const [filter, setFilter] = useState('critical');
   const c = counts(assets || []);
   const h = health || {};

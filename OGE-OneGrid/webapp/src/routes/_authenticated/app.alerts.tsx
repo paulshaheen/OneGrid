@@ -3,6 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertsPage } from "@/views/alerts";
 
 export const Route = createFileRoute("/_authenticated/app/alerts")({
+  validateSearch: (search: Record<string, unknown>): { asset?: string } => ({
+    asset: typeof search.asset === "string" ? search.asset : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Alerts | Weather & Asset Risk" },

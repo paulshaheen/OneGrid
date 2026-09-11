@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useApi, getJson, useRealtime } from '../lib/api.js';
 import { useFocus } from '../lib/focus.js';
@@ -7,7 +7,7 @@ import { Facility, plantGenTags } from '../three/Facility.jsx';
 import { AssetModal } from '../components/FleetGrid.jsx';
 import { Spinner, StatusDot, StatusGlyph } from '../components/ui.jsx';
 
-export default function ControlRoom({ theme }) {
+export default function ControlRoom({ theme, initialPlant, initialAsset }) {
   const { data: model } = useApi('/api/facility-model');
   const { data: assets } = useApi('/api/fleet-assets', { pollMs: 60000 });
   const { data: narrative } = useApi('/api/narrative');
@@ -19,6 +19,25 @@ export default function ControlRoom({ theme }) {
   const [snapshot, setSnapshot] = useState({});
   const [tagQuery, setTagQuery] = useState('');
   useEffect(() => { setTagQuery(''); }, [sel?.asset_id]);
+  // Deep-link: when arrived with ?plant=… (from the Command Center site drill-in),
+  // open that site's equipment train once the model resolves. Match on name
+  // case-insensitively so "permian ridge" resolves to "Permian Ridge".
+  const didDeepLink = useRef(false);
+  useEffect(() => {
+    if (didDeepLink.current || !model?.plants?.length || !initialPlant) return;
+    const want = String(initialPlant).toLowerCase();
+    const p = model.plants.find((pl) => String(pl.name).toLowerCase() === want);
+    if (p) {
+      setActivePlant(p.name);
+      didDeepLink.current = true;
+    }
+  }, [model, initialPlant]);
+  // Deep-link to a specific asset (?asset=…): select it once its plant is loaded.
+  useEffect(() => {
+    if (!initialAsset || !assets?.length) return;
+    const a = assets.find((x) => x.asset_id === initialAsset || x.asset_id?.toLowerCase() === String(initialAsset).toLowerCase());
+    if (a) { setActivePlant(a.plant); setSel(a); }
+  }, [initialAsset, assets]);
   const [viewMode, setViewMode] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('pm.cr.view')) || 'map');
   const setView = (v) => { setViewMode(v); try { localStorage.setItem('pm.cr.view', v); } catch { /* ignore */ } };
 
@@ -70,8 +89,8 @@ export default function ControlRoom({ theme }) {
           <Divider /><Stat theme={theme} label="Healthy" value={c.ok ?? '—'} color="#2fd07a" />
           <Stat theme={theme} label="Watch" value={c.watch ?? '—'} color="#ffcc4d" />
           <Stat theme={theme} label="Critical" value={c.critical ?? '—'} color="#ff5470" />
-          <Divider /><Stat theme={theme} label="Tags" value={pulse?.totalTags ?? model?.counts?.tags ?? '—'} />
-          <Stat theme={theme} label="Events/min" value={pulse ? Math.round(pulse.eventsPerMin) : '—'} />
+          <Divider /><Stat theme={theme} label="Tags" value={pulse?.totalTags || model?.counts?.tags || '—'} />
+          <Stat theme={theme} label="Events/min" value={pulse?.totalTags ? Math.round(pulse.eventsPerMin) : (model?.counts?.tags ?? '—')} />
           <Stat theme={theme} label="Last data" value={pulse?.lastTs ? timeAgo(pulse.lastTs) : '—'} sub="· ~1m feed" hint="Fleet feed is 1-minute resolution. Open an equipment's 3D model for per-second live values." />
         </div>
         <div className={`pointer-events-auto px-3 py-2 ${theme.panel} flex items-center gap-2`}>
@@ -110,16 +129,30 @@ export default function ControlRoom({ theme }) {
         <div className={`pointer-events-auto ${theme.panel} flex flex-col overflow-hidden`}>
           <div className={`px-4 py-2.5 text-[11px] font-bold uppercase tracking-widest ${theme.sub} border-b border-white/5`}>Live Alert Stream</div>
           <div className="overflow-y-auto no-scrollbar p-2 space-y-1.5">
-            {alerts.map((a, i) => (
-              <div key={i} className={`px-3 py-2 rounded-lg ${theme.panelSolid}`}>
-                <div className="flex items-center gap-1.5">
-                  <StatusGlyph status={a.level === 'critical' ? 'critical' : 'watch'} size={12} />
-                  <span className={`text-xs font-semibold truncate ${theme.heading}`}>{a.asset}</span>
-                  <span className="ml-auto text-[10px] font-bold" style={{ color: a.level === 'critical' ? '#ff5470' : '#ffcc4d' }}>{a.severity}</span>
-                </div>
-                <div className={`text-[11px] mt-0.5 line-clamp-2 ${theme.sub}`}>{a.headline}</div>
-              </div>
-            ))}
+            {alerts.map((a, i) => {
+              const alertAsset = assets?.find(
+                (x) => `${x.unit} ${x.name}` === a.asset || x.asset_id === a.asset || x.name === a.asset,
+              );
+              return (
+                <button
+                  key={i}
+                  onClick={() => alertAsset && setDrill(alertAsset)}
+                  disabled={!alertAsset}
+                  title={alertAsset ? 'Open 3D model & diagnostics' : undefined}
+                  className={`w-full text-left px-3 py-2 rounded-lg ${theme.panelSolid} transition ${alertAsset ? 'hover:brightness-125 cursor-pointer' : 'cursor-default'}`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <StatusGlyph status={a.level === 'critical' ? 'critical' : 'watch'} size={12} />
+                    <span className={`text-xs font-semibold truncate ${theme.heading}`}>{a.asset}</span>
+                    <span className="ml-auto text-[10px] font-bold" style={{ color: a.level === 'critical' ? '#ff5470' : '#ffcc4d' }}>{a.severity}</span>
+                  </div>
+                  <div className={`text-[11px] mt-0.5 line-clamp-2 ${theme.sub}`}>{a.headline}</div>
+                  {alertAsset && (
+                    <div className="mt-1 text-[10px] font-semibold" style={{ color: theme.accent }}>Open 3D diagnostics →</div>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

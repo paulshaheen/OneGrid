@@ -770,7 +770,14 @@ function SceneInterior({ plant, theme, selected, onSelect, values }) {
       {/* strong overhead key light illuminating the whole plant, cool fill from behind */}
       <directionalLight position={[0, 100, 40]} intensity={1.5} color={'#fff3e2'} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-110} shadow-camera-right={110} shadow-camera-top={110} shadow-camera-bottom={-110} shadow-bias={-0.0002} />
       <directionalLight position={[-40, 45, -25]} intensity={0.55} color={'#9db8ff'} />
-      <SafeEnvironment preset="night" intensity={0.6} />
+      {/* Reflection environment. The equipment materials are near-pure metal
+          (metalness ~1.0), so their entire surface colour comes from what they
+          reflect — under a dark "night" IBL they read as flat black. A brighter
+          neutral warehouse IBL lets the steel/plate textures + reflections show
+          (the look from the diagnostics modal) while the scene BACKGROUND stays
+          the dark navy set above (Environment has no `background`, so only
+          lighting/reflections change). No post-processing — Snapdragon-safe. */}
+      <SafeEnvironment preset="warehouse" intensity={1.05} />
       {/* moon low in the night sky — soft halo comes from bloom, plus a gentle moonlight fill */}
       <group position={[-165, 72, -160]}>
         <mesh><sphereGeometry args={[16, 40, 40]} /><meshStandardMaterial map={moonTex} emissiveMap={moonTex} color={'#c9d4ef'} emissive={'#dbe4ff'} emissiveIntensity={1.9} toneMapped={false} /></mesh>

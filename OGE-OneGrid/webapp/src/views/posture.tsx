@@ -82,7 +82,8 @@ export function PosturePage() {
   const base = useOpsBase();
   const snap = useOpsSnapshot(base, 120);
   const { assets, riskMap, event } = snap;
-  const postures = useQuery(postureQuery(base)).data ?? [];
+  const postureQ = useQuery(postureQuery(base));
+  const postures = postureQ.data ?? [];
   const [onlyActive, setOnlyActive] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -309,7 +310,13 @@ export function PosturePage() {
               </tbody>
             </table>
           </div>
-          {rows.length === 0 && (
+          {postureQ.isLoading && rows.length === 0 && (
+            <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-muted-foreground">
+              <Loader2 className="size-6 animate-spin text-primary" />
+              <span className="text-xs">Loading response posture…</span>
+            </div>
+          )}
+          {!postureQ.isLoading && rows.length === 0 && (
             <div className="px-4 py-8 text-center text-xs text-muted-foreground">
               No facility is currently in an active response posture.
             </div>

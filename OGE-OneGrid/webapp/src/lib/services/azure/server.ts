@@ -4,6 +4,10 @@
 // bundle. The client reaches these only through the exported server functions.
 
 import { createServerFn } from "@tanstack/react-start";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 
 import type {
   Asset,
@@ -44,6 +48,11 @@ function geoCatalogApiUrl(baseUrl: string, path: string): string {
  * we fall back to the IMDS endpoint for VMs. No SDK, no secrets — the identity is
  * the site's system-assigned managed identity, granted data-plane roles in
  * main.bicep.
+ *
+ * LOCAL DEV: when neither is present (running on a laptop, not Azure) we fall back
+ * to the developer's Azure CLI session (`az account get-access-token`), so the
+ * exact same code paths — Foundry chat, storage, GeoCatalog — light up locally
+ * for anyone who has run `az login`, matching the deployed behaviour.
  */
 async function getManagedIdentityToken(resource: string): Promise<string | null> {
   const endpoint = process.env["IDENTITY_ENDPOINT"];
@@ -56,11 +65,50 @@ async function getManagedIdentityToken(resource: string): Promise<string | null>
       const json = (await res.json()) as { access_token?: string };
       return json.access_token ?? null;
     }
+    // Not on App Service / Container Apps → try the local Azure CLI session first
+    // (fast path for developers), then IMDS for VM-hosted managed identities.
+    const cli = await getAzureCliToken(resource);
+    if (cli) return cli;
     const imds = `http://169.254.169.254/metadata/identity/oauth2/token?resource=${encodeURIComponent(resource)}&api-version=2018-02-01`;
     const res = await fetch(imds, { headers: { Metadata: "true" } });
     if (!res.ok) return null;
     const json = (await res.json()) as { access_token?: string };
     return json.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Cached Azure CLI tokens per audience (az is slow to spawn; tokens last ~1h).
+const cliTokenCache = new Map<string, { token: string; exp: number }>();
+
+/**
+ * Local-dev token fallback: shell out to the Azure CLI for an access token for
+ * `resource`. Returns null when az is not installed / not logged in (so the app
+ * degrades exactly as before on a bare server). Never used on Azure App Service,
+ * where IDENTITY_ENDPOINT short-circuits above.
+ */
+async function getAzureCliToken(resource: string): Promise<string | null> {
+  const cached = cliTokenCache.get(resource);
+  if (cached && cached.exp - Date.now() > 60_000) return cached.token;
+  // `resource` is always a fixed audience constant (see *_RESOURCE above); guard
+  // anyway so nothing but a bare https audience is ever interpolated into the shell.
+  if (!/^https:\/\/[a-z0-9.-]+$/i.test(resource)) return null;
+  try {
+    // The default shell resolves `az` → `az.cmd` on Windows via PATHEXT.
+    const { stdout } = await execAsync(
+      `az account get-access-token --resource ${resource} -o json`,
+      { timeout: 15_000, windowsHide: true, maxBuffer: 1024 * 1024 },
+    );
+    const json = JSON.parse(stdout) as { accessToken?: string; expires_on?: number; expiresOn?: string };
+    if (!json.accessToken) return null;
+    const exp = json.expires_on
+      ? json.expires_on * 1000
+      : json.expiresOn
+        ? Date.parse(json.expiresOn) || Date.now() + 3_000_000
+        : Date.now() + 3_000_000;
+    cliTokenCache.set(resource, { token: json.accessToken, exp });
+    return json.accessToken;
   } catch {
     return null;
   }
@@ -125,9 +173,26 @@ export const listStacLayers = createServerFn({ method: "GET" }).handler(
 // Compact, model-friendly summary of the console's live data (active weather events +
 // asset exposure) so the assistant answers from real tenant data in a single call —
 // no slow, rate-limit-prone multi-tool agent loop.
-function buildOpsContext(events: unknown, exposure: unknown): string {
+function buildOpsContext(
+  events: unknown,
+  exposure: unknown,
+  outages?: unknown,
+  workOrders?: unknown,
+  sites?: unknown,
+): string {
   const evs = Array.isArray(events) ? (events as Array<Record<string, unknown>>) : [];
   const exp = Array.isArray(exposure) ? (exposure as Array<Record<string, unknown>>) : [];
+  // Site-code legend so the model never guesses site names (e.g. PF = Port Fourchon,
+  // not "Pegasus Field"). Asset ids are "<CODE>_U<n>_<Equipment>" where CODE maps to
+  // a site (SITE_<CODE> in dim_site).
+  const siteRows = Array.isArray(sites) ? (sites as Array<Record<string, unknown>>) : [];
+  const codeToName = new Map<string, string>();
+  for (const s of siteRows) {
+    const id = String(s["id"] ?? "");
+    const name = String(s["name"] ?? "");
+    const code = id.replace(/^SITE_/, "");
+    if (code && name) codeToName.set(code, name);
+  }
   const active = evs.filter((e) => e["status"] === "active");
   const evLines = (active.length ? active : evs)
     .slice(0, 8)
@@ -148,9 +213,32 @@ function buildOpsContext(events: unknown, exposure: unknown): string {
       (e) =>
         `- ${e["assetId"]} (${e["level"]}, score ${e["score"]}, ${e["forecastWindMph"] ?? "?"} mph, ${e["hoursToImpact"] ?? "?"}h to impact${e["insideCone"] ? ", INSIDE cone" : ""}, event ${e["eventId"]})`,
     );
+  // Downtime / outage history (recent trips, derates, restorations).
+  const outs = Array.isArray(outages) ? (outages as Array<Record<string, unknown>>) : [];
+  const outLines = outs
+    .slice(0, 12)
+    .map(
+      (o) =>
+        `- ${o["asset_id"] ?? o["assetId"] ?? o["unit"] ?? "?"}: ${o["reason"] ?? o["cause"] ?? o["event_type"] ?? o["status"] ?? "outage"}${o["start_date"] || o["start"] ? `, from ${o["start_date"] ?? o["start"]}` : ""}${o["end_date"] || o["end"] ? ` to ${o["end_date"] ?? o["end"]}` : ""}${o["status"] ? ` (${o["status"]})` : ""}`,
+    );
+  // Open maintenance work orders (near-term maintenance backlog).
+  const wos = Array.isArray(workOrders) ? (workOrders as Array<Record<string, unknown>>) : [];
+  const woLines = wos
+    .slice(0, 12)
+    .map(
+      (w) =>
+        `- ${w["wr_id"] ?? "WR"}: ${w["entity_descr"] ?? "?"} — ${w["problem_descr"] ?? "?"}${w["location"] ? ` @ ${w["location"]}` : ""}, P${w["priority"] ?? "?"}, ${w["wr_status"] ?? "?"}`,
+    );
   const today = new Date().toLocaleDateString("en-CA");
+  const codeLegend =
+    codeToName.size > 0
+      ? `SITE CODES (asset-id prefix = site — use the exact names, do not invent): ${[...codeToName.entries()]
+          .map(([c, n]) => `${c}=${n}`)
+          .join(", ")}`
+      : "";
   return [
     `DATA CONTEXT — live tenant data (as of ${today}):`,
+    ...(codeLegend ? ["", codeLegend] : []),
     "",
     `ACTIVE WEATHER EVENTS (${active.length} active of ${evs.length} total):`,
     ...(evLines.length ? evLines : ["- none"]),
@@ -162,17 +250,449 @@ function buildOpsContext(events: unknown, exposure: unknown): string {
     }`,
     "Most exposed assets:",
     ...(expLines.length ? expLines : ["- none above monitor"]),
+    "",
+    `RECENT OUTAGES / DOWNTIME (${outs.length} record${outs.length === 1 ? "" : "s"}):`,
+    ...(outLines.length ? outLines : ["- none in the current data"]),
+    "",
+    `OPEN WORK ORDERS (${wos.length} shown):`,
+    ...(woLines.length ? woLines : ["- none"]),
   ].join("\n");
 }
 
+// GitHub OAuth device-flow client. Defaults to the public VS Code / Copilot app
+// (device-flow enabled, Copilot-capable); deployers can register their own OAuth
+// app and set GITHUB_CLIENT_ID to override.
+const GITHUB_CLIENT_ID = process.env["GITHUB_CLIENT_ID"] || "Iv1.b507a08c87ecfe98";
+
+const OPS_SYSTEM =
+  "You are OneGrid's operations assistant for weather and asset risk in energy infrastructure. Answer concisely and specifically using ONLY the DATA CONTEXT provided below. The tenant's live data is already included — NEVER ask the user to supply data that is present in the context. If a specific detail is missing, state what additional query would be needed.\n\n" +
+  "FORMAT the answer as clean GitHub-Flavoured Markdown so it renders beautifully:\n" +
+  "- Use `##` / `###` headings for sections (never a bare bold line as a heading).\n" +
+  "- Use `-` bullet lists for enumerations, and `**bold**` for key values/labels.\n" +
+  "- When presenting per-asset or comparative data (assets, scores, wind, lead-time, etc.), use a Markdown TABLE with a header row and `|---|` separators.\n" +
+  "- Keep paragraphs short. Do not use raw HTML.\n\n" +
+  "At the very END of your response, add a section titled exactly `### How I reasoned` with 2-4 short bullet points describing which data you used and how you cross-referenced it to reach the answer.";
+
+// Data sources folded into the grounding context — surfaced as answer citations.
+const OPS_CITATIONS: CopilotCitation[] = [
+  { label: "weather events", kind: "event" },
+  { label: "asset exposure", kind: "risk" },
+  { label: "outages", kind: "dataset" },
+  { label: "work orders", kind: "dataset" },
+];
+
+// Persona lens: steer tone/focus without changing the grounding. Mirrors the
+// report-app chat personas (executive / control room / maintenance).
+function personaDirective(persona?: string): string {
+  switch (String(persona || "").toLowerCase()) {
+    case "executive":
+      return "PERSONA: Executive. Lead with the bottom line and business/operational impact. Keep it brief (2-4 sentences or a few bullets), quantify risk, and recommend the single most important action. Avoid deep technical tag-level detail.";
+    case "controlroom":
+    case "control room":
+    case "analyst":
+      return "PERSONA: Control-room analyst. Be precise and technical — cite specific assets, tags, scores, wind/lead-time and event ids. Prioritise what to watch right now and the next few hours.";
+    case "maintenance":
+      return "PERSONA: Maintenance planner. Focus on work orders, equipment condition, and concrete next maintenance actions with priority and location. Tie recommendations to specific assets/units.";
+    default:
+      return "";
+  }
+}
+
+// Ground the assistant in the tenant's live ops data with a single fetch. Shared
+// by the Azure and GitHub-Copilot answer paths. Also returns an evidence summary
+// (data sources + counts) that powers the chat's "Thought process" panel.
+async function groundOps(): Promise<{
+  dataContext: string;
+  highlightAssetIds: string[];
+  evidence: { label: string; detail: string }[];
+}> {
+  let dataContext = "";
+  let highlightAssetIds: string[] = [];
+  const evidence: { label: string; detail: string }[] = [];
+  try {
+    const apiBase = reportApiBase();
+    const getJson = (path: string) =>
+      fetch(`${apiBase}${path}`, { headers: { Accept: "application/json" } })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []);
+    const [events, exposure, outagesRaw, workOrders, sites] = await Promise.all([
+      getJson("/api/weather/events"),
+      getJson("/api/exposure"),
+      getJson("/api/outages"),
+      getJson("/api/work-orders?limit=12"),
+      getJson("/api/sites-geo"),
+    ]);
+    // /api/outages returns { rows, summary }; other feeds are plain arrays.
+    const outages =
+      Array.isArray(outagesRaw)
+        ? outagesRaw
+        : ((outagesRaw as { rows?: unknown[] } | null)?.rows ?? []);
+    dataContext = buildOpsContext(events, exposure, outages, workOrders, sites);
+    const evs = Array.isArray(events) ? (events as Array<Record<string, unknown>>) : [];
+    const exp = Array.isArray(exposure) ? (exposure as Array<Record<string, unknown>>) : [];
+    const wos = Array.isArray(workOrders) ? (workOrders as unknown[]) : [];
+    highlightAssetIds = exp
+      .filter((e) => e["level"] && e["level"] !== "normal" && e["level"] !== "monitor")
+      .sort((a, b) => Number(b["score"] ?? 0) - Number(a["score"] ?? 0))
+      .slice(0, 12)
+      .map((e) => String(e["assetId"] ?? ""))
+      .filter(Boolean);
+    // Evidence summary — the datasets (and counts) the answer was grounded on.
+    const activeEv = evs.filter((e) => e["status"] === "active").length;
+    const byLevel: Record<string, number> = {};
+    for (const e of exp) {
+      const l = String(e["level"] ?? "unknown");
+      byLevel[l] = (byLevel[l] ?? 0) + 1;
+    }
+    const lvlStr = ["critical", "high", "elevated", "monitor"]
+      .filter((l) => byLevel[l])
+      .map((l) => `${byLevel[l]} ${l}`)
+      .join(", ");
+    const outs = Array.isArray(outages) ? (outages as Array<Record<string, unknown>>) : [];
+    const activeOut = outs.filter(
+      (o) => o["outage_status"] === "Active" || o["status"] === "Active" || o["active"] === true,
+    ).length;
+    evidence.push(
+      { label: "Weather events", detail: `${activeEv} active of ${evs.length}` },
+      { label: "Asset exposure", detail: `${exp.length} scored${lvlStr ? ` — ${lvlStr}` : ""}` },
+      { label: "Outages", detail: `${outs.length}${outs.length ? ` (${activeOut} active)` : ""}` },
+      { label: "Work orders", detail: `${wos.length} open` },
+    );
+  } catch {
+    /* grounding is best-effort */
+  }
+  return { dataContext, highlightAssetIds, evidence };
+}
+
+// ── Ontology / semantic-model grounding ─────────────────────────────────────
+const ONTOLOGY_SYSTEM =
+  "You are OneGrid's data-model assistant. Answer questions about the semantic model / knowledge graph — its entities (tables), columns, keys, grain and relationships — using ONLY the ONTOLOGY CONTEXT provided below. Be specific: name the exact entities, keys and relationships involved, and describe how tables join. Do NOT reference live operational metrics (weather, outages, work orders) unless the user explicitly asks. Format the answer in clean Markdown: short paragraphs, **bold** key names, and bullet lists. At the very END, add a section titled exactly `### How I reasoned` with 2-4 short bullets naming which entities and relationships you referenced.";
+
+const ONTOLOGY_CITATIONS: CopilotCitation[] = [
+  { label: "semantic model", kind: "dataset" },
+  { label: "knowledge graph", kind: "dataset" },
+];
+
+// Compact text view of the knowledge graph: entities (table, grain, columns) and
+// the typed relationships between them — grounds schema/ontology questions.
+function buildOntologyContext(onto: Record<string, unknown>): string {
+  const nodes = Array.isArray(onto["nodes"]) ? (onto["nodes"] as Array<Record<string, unknown>>) : [];
+  const edges = Array.isArray(onto["edges"]) ? (onto["edges"] as Array<Record<string, unknown>>) : [];
+  const cats = (onto["categories"] as Record<string, { label?: string }>) || {};
+  const byId: Record<string, Record<string, unknown>> = {};
+  for (const n of nodes) byId[String(n["id"])] = n;
+  const nodeLines = nodes.map((n) => {
+    const cols = Array.isArray(n["columns"])
+      ? (n["columns"] as Array<Record<string, unknown>>)
+          .map((c) => `${c["name"]}${c["key"] === "pk" ? " (PK)" : c["key"] === "fk" ? " (FK)" : ""}`)
+          .join(", ")
+      : "";
+    const cat = cats[String(n["category"])]?.label ?? n["category"] ?? "";
+    return `- ${n["label"]} [table ${n["table"] ?? "?"}${n["source"] ? `, ${n["source"]}` : ""}] — ${cat}; grain: ${n["grain"] ?? "?"}; columns: ${cols || "—"}`;
+  });
+  const edgeLines = edges.map(
+    (e) =>
+      `- ${byId[String(e["from"])]?.["label"] ?? e["from"]} ${e["label"] ?? "relates to"} ${byId[String(e["to"])]?.["label"] ?? e["to"]} (${e["kind"] ?? "relationship"})`,
+  );
+  return [
+    `ONTOLOGY CONTEXT — OneGrid semantic model${onto["source"] ? ` (source: ${onto["source"]})` : ""}: ${nodes.length} entities, ${edges.length} relationships.`,
+    "",
+    "ENTITIES:",
+    ...(nodeLines.length ? nodeLines : ["- none"]),
+    "",
+    "RELATIONSHIPS:",
+    ...(edgeLines.length ? edgeLines : ["- none"]),
+  ].join("\n");
+}
+
+// Ground a schema/ontology question in the knowledge graph (entities + relationships).
+async function groundOntology(): Promise<{
+  dataContext: string;
+  evidence: { label: string; detail: string }[];
+}> {
+  let dataContext = "";
+  const evidence: { label: string; detail: string }[] = [];
+  try {
+    const onto = await fetch(`${reportApiBase()}/api/ontology`, { headers: { Accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    if (onto && Array.isArray(onto["nodes"])) {
+      dataContext = buildOntologyContext(onto);
+      const nodes = onto["nodes"] as unknown[];
+      const edges = Array.isArray(onto["edges"]) ? (onto["edges"] as unknown[]) : [];
+      const nCats = onto["categories"] ? Object.keys(onto["categories"] as object).length : 0;
+      evidence.push(
+        { label: "Entities", detail: `${nodes.length}${nCats ? ` across ${nCats} categories` : ""}` },
+        { label: "Relationships", detail: `${edges.length}` },
+        { label: "Source", detail: String(onto["source"] ?? "semantic model") },
+      );
+    }
+  } catch {
+    /* grounding is best-effort */
+  }
+  return { dataContext, evidence };
+}
+
+// Schema/ontology intent: questions about the data model, entities, keys or how
+// tables relate. These get knowledge-graph grounding instead of live ops data.
+function isOntologyQuestion(q: string): boolean {
+  return /\b(ontolog\w*|knowledge graph|semantic model|data model|schema|entit(?:y|ies)|relationship\w*|foreign key|primary key|\bpk\b|\bfk\b|grain|dimension table|fact table|star schema|\berd\b|data dictionary|which tables?|what tables?|how (?:are|do|does)\b[^?]*\b(?:connect|relate|join|link)\w*)\b/i.test(
+    String(q || ""),
+  );
+}
+
+type Grounding = {
+  dataContext: string;
+  evidence: { label: string; detail: string }[];
+  highlightAssetIds: string[];
+  system: string;
+  citations: CopilotCitation[];
+};
+
+// Route a question to the right grounding: schema/ontology → knowledge graph;
+// everything else → live ops data. Stops ontology questions from "reviewing"
+// weather/outage/work feeds that are irrelevant to the model's structure.
+async function selectGrounding(question: string): Promise<Grounding> {
+  if (isOntologyQuestion(question)) {
+    const g = await groundOntology();
+    return {
+      dataContext: g.dataContext,
+      evidence: g.evidence,
+      highlightAssetIds: [],
+      system: ONTOLOGY_SYSTEM,
+      citations: g.dataContext ? ONTOLOGY_CITATIONS : [],
+    };
+  }
+  const g = await groundOps();
+  return {
+    dataContext: g.dataContext,
+    evidence: g.evidence,
+    highlightAssetIds: g.highlightAssetIds,
+    system: OPS_SYSTEM,
+    citations: g.dataContext ? OPS_CITATIONS : [],
+  };
+}
+
+// Answer via the user's own GitHub Copilot license (GitHub token → Copilot API).
+async function answerViaGithubCopilot(
+  question: string,
+  copilotToken: string,
+  model: string,
+  dataContext: string,
+  highlightAssetIds: string[],
+  persona?: string,
+  evidence?: { label: string; detail: string }[],
+  system: string = OPS_SYSTEM,
+  citations: CopilotCitation[] = OPS_CITATIONS,
+): Promise<CopilotAnswer> {
+  const pd = personaDirective(persona);
+  const messages = [
+    { role: "system", content: system },
+    ...(pd ? [{ role: "system", content: pd }] : []),
+    ...(dataContext ? [{ role: "system", content: dataContext }] : []),
+    { role: "user", content: question },
+  ];
+  const FALLBACK_MODEL = "gpt-4o";
+  const chat = (bearer: string, modelId: string) =>
+    fetch("https://api.githubcopilot.com/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bearer}`,
+        "Content-Type": "application/json",
+        // A device-flow (GitHub App) token exchanged for a Copilot token only
+        // accepts a KNOWN integration id — a custom one returns 400 "unknown
+        // Copilot-Integration-Id". `vscode-chat` is accepted by both exchanged
+        // Copilot tokens and direct editor tokens.
+        "Copilot-Integration-Id": "vscode-chat",
+        "Editor-Version": "vscode/1.99.0",
+        "Editor-Plugin-Version": "copilot-chat/0.26.7",
+        "User-Agent": "GitHubCopilotChat/0.26.7",
+      },
+      body: JSON.stringify({ model: modelId, messages, max_completion_tokens: 2048 }),
+    });
+  // Some models the /models list advertises aren't actually callable for a given
+  // token/integrator (they 400 with model_not_supported / "not available"). When
+  // that happens, transparently retry once with a near-universal fallback model.
+  const isModelError = async (res: Response): Promise<boolean> => {
+    if (res.status !== 400) return false;
+    try {
+      const b = (await res.clone().json()) as { error?: { code?: string; message?: string } };
+      const c = (b?.error?.code || "").toLowerCase();
+      const m = (b?.error?.message || "").toLowerCase();
+      return (
+        c.includes("model_not_supported") ||
+        c.includes("unsupported_api_for_model") ||
+        m.includes("not supported") ||
+        m.includes("not available") ||
+        m.includes("not accessible")
+      );
+    } catch {
+      return false;
+    }
+  };
+  try {
+    let activeModel = model || FALLBACK_MODEL;
+    let usedFallback = false;
+    let res = await chat(copilotToken.trim(), activeModel);
+    // A raw GitHub OAuth token (e.g. from the device flow) may need to be
+    // exchanged for a short-lived Copilot token before the Copilot API accepts it.
+    let bearer = copilotToken.trim();
+    if (res.status === 401 || res.status === 403) {
+      try {
+        const ex = await fetch("https://api.github.com/copilot_internal/v2/token", {
+          headers: {
+            Authorization: `token ${copilotToken.trim()}`,
+            Accept: "application/json",
+            "User-Agent": "OneGrid/1.0",
+          },
+        });
+        if (ex.ok) {
+          const j = (await ex.json()) as { token?: string };
+          if (j.token) {
+            bearer = j.token;
+            res = await chat(bearer, activeModel);
+          }
+        }
+      } catch {
+        /* fall through to the error below */
+      }
+    }
+    // Selected model unavailable for this token → retry once with the fallback.
+    if (activeModel !== FALLBACK_MODEL && (await isModelError(res))) {
+      usedFallback = true;
+      activeModel = FALLBACK_MODEL;
+      res = await chat(bearer, FALLBACK_MODEL);
+    }
+    if (!res.ok) {
+      let apiMsg = "";
+      try {
+        const errBody = (await res.clone().json()) as { error?: { message?: string } };
+        apiMsg = errBody?.error?.message ? ` — ${errBody.error.message}` : "";
+      } catch {
+        /* non-JSON error body */
+      }
+      const detail =
+        res.status === 401 || res.status === 403
+          ? " — token rejected or the account has no Copilot access."
+          : apiMsg;
+      return {
+        text: `The Copilot request failed (${res.status})${detail}`,
+        citations: [],
+        highlightAssetIds,
+      };
+    }
+    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = body.choices?.[0]?.message?.content?.trim();
+    const note =
+      usedFallback && model
+        ? `_(“${model}” isn’t available for your Copilot license — answered with ${FALLBACK_MODEL}.)_\n\n`
+        : "";
+    return {
+      text: text ? note + text : "No answer was returned.",
+      citations: dataContext ? citations : [],
+      highlightAssetIds,
+      evidence,
+      context: dataContext || undefined,
+    };
+  } catch {
+    return { text: "The Copilot service is currently unavailable.", citations: [], highlightAssetIds };
+  }
+}
+
+// ── GitHub OAuth device flow (server-side to avoid browser CORS) ─────────────
+export const startGithubDeviceLogin = createServerFn({ method: "POST" }).handler(
+  async (): Promise<{
+    ok: boolean;
+    userCode?: string;
+    verificationUri?: string;
+    deviceCode?: string;
+    interval?: number;
+    expiresIn?: number;
+    error?: string;
+  }> => {
+    try {
+      const res = await fetch("https://github.com/login/device/code", {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, scope: "read:user" }),
+      });
+      const j = (await res.json()) as Record<string, unknown>;
+      if (!res.ok || j["error"]) {
+        return { ok: false, error: String(j["error_description"] || j["error"] || res.status) };
+      }
+      return {
+        ok: true,
+        userCode: String(j["user_code"] ?? ""),
+        verificationUri: String(j["verification_uri"] ?? "https://github.com/login/device"),
+        deviceCode: String(j["device_code"] ?? ""),
+        interval: Number(j["interval"] ?? 5),
+        expiresIn: Number(j["expires_in"] ?? 900),
+      };
+    } catch {
+      return { ok: false, error: "Could not reach GitHub." };
+    }
+  },
+);
+
+export const pollGithubDeviceLogin = createServerFn({ method: "POST" })
+  .validator((data: { deviceCode: string }) => data)
+  .handler(
+    async ({
+      data,
+    }): Promise<{ status: "ok" | "pending" | "error"; token?: string; error?: string }> => {
+      try {
+        const res = await fetch("https://github.com/login/oauth/access_token", {
+          method: "POST",
+          headers: { Accept: "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_id: GITHUB_CLIENT_ID,
+            device_code: data.deviceCode,
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          }),
+        });
+        const j = (await res.json()) as Record<string, unknown>;
+        if (j["access_token"]) return { status: "ok", token: String(j["access_token"]) };
+        if (j["error"] === "authorization_pending" || j["error"] === "slow_down")
+          return { status: "pending" };
+        return {
+          status: "error",
+          error: String(j["error_description"] || j["error"] || "Device login failed."),
+        };
+      } catch {
+        return { status: "error", error: "Could not reach GitHub." };
+      }
+    },
+  );
+
 export const askFoundryCopilot = createServerFn({ method: "POST" })
-  .validator((data: { question: string }) => data)
+  .validator(
+    (data: { question: string; copilotToken?: string; model?: string; persona?: string }) => data,
+  )
   .handler(async ({ data }): Promise<CopilotAnswer> => {
-    const endpoint = process.env["FOUNDRY_ENDPOINT"];
-    const deployment = process.env["FOUNDRY_DEPLOYMENT"];
+    // Route to the user's own GitHub Copilot license when connected.
+    if (data.copilotToken && data.copilotToken.trim()) {
+      const g = await selectGrounding(data.question);
+      return answerViaGithubCopilot(
+        data.question,
+        data.copilotToken,
+        data.model || "gpt-4o",
+        g.dataContext,
+        g.highlightAssetIds,
+        data.persona,
+        g.evidence,
+        g.system,
+        g.citations,
+      );
+    }
+    const endpoint = process.env["FOUNDRY_ENDPOINT"] || process.env["AZURE_AI_ENDPOINT"];
+    // The UI can pick a specific Foundry deployment; fall back to the configured default.
+    const deployment =
+      (data.model && data.model.trim()) ||
+      process.env["FOUNDRY_DEPLOYMENT"] ||
+      process.env["AI_DEFAULT_MODEL"];
     if (!endpoint || !deployment) {
       return {
-        text: "The AI assistant is not configured for this deployment. Set FOUNDRY_ENDPOINT and FOUNDRY_DEPLOYMENT to enable grounded answers from your Azure OpenAI (Foundry) resource.",
+        text: "The AI assistant is not configured for this deployment. Set FOUNDRY_ENDPOINT and FOUNDRY_DEPLOYMENT (or AZURE_AI_ENDPOINT and AI_DEFAULT_MODEL) to enable grounded answers from your Azure OpenAI (Foundry) resource.",
         citations: [],
         highlightAssetIds: [],
       };
@@ -187,31 +707,11 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
       };
     }
 
-    // Ground the assistant in the tenant's live ops data with a single fetch (fast, and
-    // avoids a slow, rate-limit-prone multi-tool agent loop).
-    let dataContext = "";
-    let highlightAssetIds: string[] = [];
-    try {
-      const apiBase = reportApiBase();
-      const [events, exposure] = await Promise.all([
-        fetch(`${apiBase}/api/weather/events`, { headers: { Accept: "application/json" } })
-          .then((r) => (r.ok ? r.json() : []))
-          .catch(() => []),
-        fetch(`${apiBase}/api/exposure`, { headers: { Accept: "application/json" } })
-          .then((r) => (r.ok ? r.json() : []))
-          .catch(() => []),
-      ]);
-      dataContext = buildOpsContext(events, exposure);
-      const exp = Array.isArray(exposure) ? (exposure as Array<Record<string, unknown>>) : [];
-      highlightAssetIds = exp
-        .filter((e) => e["level"] && e["level"] !== "normal" && e["level"] !== "monitor")
-        .sort((a, b) => Number(b["score"] ?? 0) - Number(a["score"] ?? 0))
-        .slice(0, 12)
-        .map((e) => String(e["assetId"] ?? ""))
-        .filter(Boolean);
-    } catch {
-      /* grounding is best-effort */
-    }
+    // Ground the assistant with a single fetch (fast, and avoids a slow,
+    // rate-limit-prone multi-tool agent loop). Schema/ontology questions ground on
+    // the knowledge graph; ops questions ground on live weather/exposure/outage/work.
+    const { dataContext, highlightAssetIds, evidence, system: sysPrompt, citations } =
+      await selectGrounding(data.question);
 
     try {
       const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2025-01-01-preview`;
@@ -220,11 +720,10 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           messages: [
-            {
-              role: "system",
-              content:
-                "You are OneGrid's operations assistant for weather and asset risk in energy infrastructure. Answer concisely and specifically using ONLY the DATA CONTEXT provided below. The tenant's live data is already included — NEVER ask the user to supply data that is present in the context. If a specific detail is missing, state what additional query would be needed.",
-            },
+            { role: "system", content: sysPrompt },
+            ...(personaDirective(data.persona)
+              ? [{ role: "system" as const, content: personaDirective(data.persona) }]
+              : []),
             ...(dataContext ? [{ role: "system" as const, content: dataContext }] : []),
             { role: "user", content: data.question },
           ],
@@ -232,6 +731,11 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
           // and use `max_completion_tokens` (not `max_tokens`). Sending a custom
           // `temperature` returns 400 "temperature does not support <x>".
           max_completion_tokens: 2048,
+          // Reasoning models otherwise spend 40-60s "thinking" — cap it so this
+          // single grounded answer stays fast. Ignored by non-reasoning deployments.
+          ...(/gpt-5|^o[0-9]/i.test(String(deployment))
+            ? { reasoning_effort: process.env["AI_REASONING_EFFORT"] || "minimal" }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -245,7 +749,13 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
         choices?: Array<{ message?: { content?: string } }>;
       };
       const text = body.choices?.[0]?.message?.content?.trim();
-      return { text: text || "No answer was returned.", citations: [], highlightAssetIds };
+      return {
+        text: text || "No answer was returned.",
+        citations,
+        highlightAssetIds,
+        evidence,
+        context: dataContext || undefined,
+      };
     } catch {
       return {
         text: "The assistant is currently unavailable.",

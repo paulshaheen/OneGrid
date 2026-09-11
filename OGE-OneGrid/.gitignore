@@ -32,3 +32,6 @@ obj/
 # Webapp (Explorer) build output
 webapp/dist/
 webapp/dist-sample/
+
+# Unused 3D model assets (not referenced by live code)
+webapp/public/models/

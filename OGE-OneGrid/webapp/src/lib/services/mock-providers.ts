@@ -194,7 +194,15 @@ export class MockCopilotService implements CopilotService {
     ];
   }
 
-  async ask(question: string): Promise<CopilotAnswer> {
+  async startGithubLogin() {
+    return { ok: false, error: "Connect a Copilot license from a live tenant deployment." };
+  }
+  async pollGithubLogin() {
+    return { status: "error" as const, error: "Not available in the demo." };
+  }
+
+  async ask(question: string, _opts?: { copilotToken?: string; model?: string; persona?: string }): Promise<CopilotAnswer> {
+    void _opts;
     const q = question.toLowerCase();
     const risks = sampleAssets.map((a) => scoreAsset(a, sampleEvent, 120));
     const byId = new Map(risks.map((r) => [r.assetId, r]));

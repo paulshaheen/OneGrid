@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearch } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
@@ -75,8 +76,12 @@ export function AlertsPage() {
   );
   const [severity, setSeverity] = useState<AlertSeverity | "all">("all");
   const [status, setStatus] = useState<OpsAlert["status"] | "all">("all");
+  const router = useRouter();
+  const { asset: focusAsset } = useSearch({ strict: false }) as { asset?: string };
+  const focusName = focusAsset ? (assets.find((a) => a.id === focusAsset)?.name ?? focusAsset) : null;
 
   const rows = alerts
+    .filter((a) => (focusAsset ? a.assetId === focusAsset : true))
     .filter((a) => (severity === "all" ? true : a.severity === severity))
     .filter((a) => (status === "all" ? true : a.status === status));
 
@@ -111,6 +116,18 @@ export function AlertsPage() {
         }
       />
       <div className="space-y-4 p-4">
+        {focusAsset && (
+          <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs">
+            <span className="text-muted-foreground">Filtered to</span>
+            <span className="font-semibold text-foreground">{focusName}</span>
+            <button
+              onClick={() => (router.navigate as (o: { to: string; search?: Record<string, string> }) => void)({ to: `${base}/alerts`, search: {} })}
+              className="ml-auto rounded-sm border px-2 py-0.5 font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              Clear filter
+            </button>
+          </div>
+        )}
         {actionError && (
           <div
             role="alert"

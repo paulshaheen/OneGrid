@@ -61,9 +61,24 @@ export interface PlanetaryComputerService {
   listLayers(): Promise<GeospatialLayer[]>;
 }
 
+export type GithubDeviceStart = {
+  ok: boolean;
+  userCode?: string;
+  verificationUri?: string;
+  deviceCode?: string;
+  interval?: number;
+  expiresIn?: number;
+  error?: string;
+};
+export type GithubDevicePoll = { status: "ok" | "pending" | "error"; token?: string; error?: string };
+
 export interface CopilotService {
-  ask(question: string): Promise<CopilotAnswer>;
+  ask(question: string, opts?: { copilotToken?: string; model?: string; persona?: string }): Promise<CopilotAnswer>;
   suggestions(): string[];
+  /** Begin a GitHub OAuth device-flow login to connect the user's own Copilot license. */
+  startGithubLogin(): Promise<GithubDeviceStart>;
+  /** Poll the device-flow login until the user authorises (returns a token) or it errors. */
+  pollGithubLogin(deviceCode: string): Promise<GithubDevicePoll>;
 }
 
 export interface PlatformServices {
