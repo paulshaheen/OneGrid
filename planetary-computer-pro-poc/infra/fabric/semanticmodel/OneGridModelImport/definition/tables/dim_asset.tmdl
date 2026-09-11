@@ -1,0 +1,80 @@
+table dim_asset
+	lineageTag: 4b8dc156-7660-51c7-ad49-c8c699773fd7
+
+	measure 'Asset Count' = COUNTROWS(dim_asset)
+		formatString: 0
+		lineageTag: f1603c1b-3663-5b0a-a1c9-2fdf7ce13a8e
+
+	measure 'Site Count' = COUNTROWS(dim_site)
+		formatString: 0
+		lineageTag: 3b50b99a-a567-5bf9-83b7-f270ce5fea90
+
+	measure 'Avg Health Score' = AVERAGE(aakr_health[health_score])
+		lineageTag: 7be1bf17-bb56-59f2-b8e6-4f015cfb712c
+
+	measure 'Survival Risk' = MAX(predictions_longterm[risk_score])
+		lineageTag: 9c260f4d-b970-5a76-bfbc-15b8b6db2e38
+
+	measure 'Assets At Critical Exposure' = CALCULATE(DISTINCTCOUNT(fact_asset_exposure[asset_id]), fact_asset_exposure[level] IN {"critical","high"})
+		formatString: 0
+		lineageTag: c375e085-84c0-5bba-9221-284c18839978
+
+	measure 'Open Work Requests' = COUNTROWS(fact_work_requests)
+		formatString: 0
+		lineageTag: e574318a-df7b-566f-b6bd-7346aba14f35
+
+	measure 'Active Watchlist Tags' = COUNTROWS(watchlist)
+		formatString: 0
+		lineageTag: 0d9a344b-2c65-5ae5-b35c-e1e2a71879cb
+
+	column asset_id
+		dataType: string
+		lineageTag: 61225e80-3b04-5ee7-93e0-2b97fbfba781
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column site_id
+		dataType: string
+		lineageTag: 0eeea944-ef93-5a73-bed2-d07db5c2b0ae
+		summarizeBy: none
+		sourceColumn: site_id
+
+	column unit_id
+		dataType: string
+		lineageTag: c38be8c3-c39a-5176-b529-09c88abecd87
+		summarizeBy: none
+		sourceColumn: unit_id
+
+	column asset_display_name
+		dataType: string
+		lineageTag: e748d225-395d-5d49-a54c-0044b4700259
+		summarizeBy: none
+		sourceColumn: asset_display_name
+
+	column equipment_category
+		dataType: string
+		lineageTag: e42fc070-b071-58d9-82e3-cbed047f5d47
+		summarizeBy: none
+		sourceColumn: equipment_category
+
+	column equipment_group
+		dataType: string
+		lineageTag: a1429fbb-db8d-54fe-94fb-25fefe85b1ff
+		summarizeBy: none
+		sourceColumn: equipment_group
+
+	column running_tag
+		dataType: string
+		lineageTag: a15cac95-2522-5bbe-ae6b-076812651a0f
+		summarizeBy: none
+		sourceColumn: running_tag
+
+	partition dim_asset = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, Database),
+				    Data = Source{[Schema="og",Item="dim_asset"]}[Data]
+				in
+				    Data
+

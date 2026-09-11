@@ -1,0 +1,63 @@
+table WeatherForecast
+	lineageTag: 48901344-0e3f-56f8-ac85-c6b770033e4b
+
+	column event_id
+		dataType: string
+		lineageTag: d9efcadf-3178-5a66-aab9-9d262c97f7b1
+		summarizeBy: none
+		sourceColumn: event_id
+
+	column hour
+		dataType: int64
+		formatString: 0
+		lineageTag: f7d29c05-5f83-50b2-bcd2-7be4e347df1a
+		summarizeBy: none
+		sourceColumn: hour
+
+	column lat
+		dataType: double
+		lineageTag: cd44dde6-3910-578a-bebd-9afae624a207
+		summarizeBy: none
+		sourceColumn: lat
+
+	column lon
+		dataType: double
+		lineageTag: f9ff3dd8-dac2-5cb4-9f88-7cdb4d0d9681
+		summarizeBy: none
+		sourceColumn: lon
+
+	column wind_mph
+		dataType: double
+		lineageTag: bcb6f41a-3872-5058-9285-007ecb5841a1
+		summarizeBy: none
+		sourceColumn: wind_mph
+
+	column cone_radius_mi
+		dataType: double
+		lineageTag: 328085dc-f3c2-5010-b3ed-b8349f0584ea
+		summarizeBy: none
+		sourceColumn: cone_radius_mi
+
+	column category
+		dataType: int64
+		formatString: 0
+		lineageTag: 6f443b9a-7d9f-5f9c-b74e-f170e5ed5775
+		summarizeBy: none
+		sourceColumn: category
+
+	column pressure_mb
+		dataType: int64
+		formatString: 0
+		lineageTag: d6e376f3-ada6-5f76-8463-dc1327ed526d
+		summarizeBy: none
+		sourceColumn: pressure_mb
+
+	partition WeatherForecast = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, Database),
+				    Data = Source{[Schema="og",Item="weatherforecast"]}[Data]
+				in
+				    Data
+

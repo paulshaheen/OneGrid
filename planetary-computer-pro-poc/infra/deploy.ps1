@@ -778,11 +778,51 @@ function New-FoundryAccount($name, $rg) {
 # is already set by Phase-ChatAgent, so the webapp reads /api (assets + weather) from it.
 # Opt-in + non-fatal: set config `deployUnifiedModel: true` to enable. When off, deploys
 # are unchanged (the twin Import model remains the target).
+# Bind a fixed-identity SP SQL connection to an Import semantic model + refresh, so the app's
+# managed identity can DAX-query it. A Direct Lake model returns 401 PowerBINotAuthorized for a
+# service principal (see data/HANDOFF-BACKEND-DEPLOY.md §11); an Import model over the lakehouse
+# SQL endpoint has no query-time data-source auth, so the app MI (Build) can query it. Mirrors the
+# proven Phase-Semantic bind flow, parameterized for any Import model over a Lakehouse SQL endpoint.
+function Bind-SqlImportModel($ws, $smId, $sqlEndpoint, $database) {
+  $fi = Ensure-DeploySP
+  if (-not ($fi -and $fi.clientId -and $fi.clientSecret -and $fi.tenantId)) {
+    Log "  (no fixedIdentity in config - bind connection + refresh manually; see README)" "Yellow"; return $false
+  }
+  try {
+    # Grant the SP workspace access FIRST - the SQL connection type tests the connection at
+    # create time, so the SP must already be able to read the SQL endpoint.
+    $pbi = PbiTok
+    try { Invoke-RestMethod -Uri "https://api.powerbi.com/v1.0/myorg/groups/$ws/users" -Method Post -Headers @{ Authorization="Bearer $pbi"; "Content-Type"="application/json" } -Body (@{ identifier=$fi.objectId; principalType="App"; groupUserAccessRight="Member" } | ConvertTo-Json) | Out-Null; Log "  granted refresh SP workspace access" }
+    catch { if ($_.Exception.Message -notmatch '400') { Log "  SP workspace grant: $($_.Exception.Message)" "Yellow" } }
+    Start-Sleep -Seconds 25   # let the workspace grant propagate before the connection test
+    $connName = "$($cfg.fabric.workspaceName) - sql"
+    $connPayload = [ordered]@{
+      connectivityType="ShareableCloud"; displayName=$connName
+      connectionDetails=[ordered]@{ type="SQL"; creationMethod="Sql"; parameters=@(
+        @{ dataType="Text"; name="server"; value=$sqlEndpoint },
+        @{ dataType="Text"; name="database"; value=$database }) }
+      privacyLevel="Organizational"
+      credentialDetails=[ordered]@{ singleSignOnType="None"; connectionEncryption="Encrypted"; skipTestConnection=$false
+        credentials=[ordered]@{ credentialType="ServicePrincipal"; tenantId=$fi.tenantId; servicePrincipalClientId=$fi.clientId; servicePrincipalSecret=$fi.clientSecret } } }
+    # Remove any stale same-named connection (post-teardown it points at a deleted endpoint and
+    # makes the refresh fail with "default data connection without explicit credentials").
+    foreach ($old in @((FGet "connections").value | Where-Object { $_.displayName -eq $connName })) {
+      try { FDelete "connections/$($old.id)" | Out-Null; Log "  removed stale SQL connection $($old.id)" } catch { Log "  could not remove stale connection $($old.id): $($_.Exception.Message)" "Yellow" }
+    }
+    $conn = FWait (FPost "connections" $connPayload)
+    $pbi = PbiTok
+    Invoke-RestMethod -Uri "https://api.powerbi.com/v1.0/myorg/groups/$ws/datasets/$smId/Default.TakeOver" -Method Post -Headers @{ Authorization="Bearer $pbi" } | Out-Null
+    Invoke-RestMethod -Uri "https://api.powerbi.com/v1.0/myorg/groups/$ws/datasets/$smId/Default.BindToGateway" -Method Post -Headers @{ Authorization="Bearer $pbi"; "Content-Type"="application/json" } -Body (@{ gatewayObjectId=$conn.id; datasourceObjectIds=@($conn.id) } | ConvertTo-Json) | Out-Null
+    Invoke-RestMethod -Uri "https://api.powerbi.com/v1.0/myorg/groups/$ws/datasets/$smId/refreshes" -Method Post -Headers @{ Authorization="Bearer $pbi"; "Content-Type"="application/json" } -Body '{"type":"full","notifyOption":"NoNotification"}' | Out-Null
+    Log "  Import model connection bound + refresh started" "Green"; return $true
+  } catch { $de = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }; Log "  bind/refresh: $de (do manually - see README)" "Yellow"; return $false }
+}
+
 function Phase-Unified {
   if ($cfg.deployUnifiedModel -ne $true) { Log "PHASE unified: skipped (set config deployUnifiedModel=true to enable)" "DarkGray"; return }
   $ws = $state.WorkspaceId
   if (-not $ws -or -not $state.LakehouseId) { Log "PHASE unified: need workspace + lakehouse - run 'core' first" "Yellow"; return }
-  Log "PHASE unified: og.* tables + Direct Lake OneGridModel"
+  Log "PHASE unified: og.* tables + Import OneGridModelImport"
   $map = @{ $SRC.WorkspaceId = $ws; $SRC.LakehouseId = $state.LakehouseId }
 
   # 1) Seed the HURDAT best-track csv the generator reads (Files/reference/…).
@@ -799,13 +839,26 @@ function Phase-Unified {
   Log "  running generate_onegrid_data (builds og.* tables; PiEvents disabled)..."
   if (-not (Run-FabricNotebook $ws $nb.id "generate_onegrid_data" 90)) { Log "  generator did not complete cleanly - OneGridModel may find no og.* tables" "Yellow" }
 
-  # 3) Make the new og.* tables visible to the SQL endpoint, then deploy the Direct Lake model.
+  # 3) Make the new og.* tables visible to the SQL endpoint, then deploy the IMPORT model.
+  #    A Direct Lake model can't be DAX-queried by the app's managed identity (401 - see
+  #    data/HANDOFF-BACKEND-DEPLOY.md §11), so the app targets an Import model over the lakehouse
+  #    SQL endpoint (og schema), bound to the fixed-identity SP + refreshed. (The Direct Lake
+  #    OneGridModel/ definition is retained in-repo for anyone who wants a user-token/report model.)
   try { Sync-SqlEndpointMetadata $ws $state.LakehouseId } catch {}
-  $smFolder = Join-Path $Here "fabric\semanticmodel\OneGridModel"
-  if (-not (Test-Path $smFolder)) { Log "  OneGridModel definition missing - skipping" "Yellow"; return }
-  $sm = UpsertItem $ws "semanticModels" "OneGridModel" (BuildDefinition $smFolder $map)
-  $state.DatasetId = $sm.id     # app PBI_DATASET now targets the unified model (Direct Lake - no refresh needed)
-  Log "  OneGridModel = $($sm.id)  (set as the app's semantic target)" "Green"
+  $smFolder = Join-Path $Here "fabric\semanticmodel\OneGridModelImport"
+  if (-not (Test-Path $smFolder)) { Log "  OneGridModelImport definition missing - skipping" "Yellow"; return }
+  # Rebind the Import model's SQL source: Server = THIS deployment's lakehouse SQL endpoint,
+  # Database = the lakehouse holding the og.* schema. (The exported model points at the source
+  # OneGridLake endpoint; these two find/replace tokens are its only environment-specific strings.)
+  $importMap = @{
+    "i22siiabnewedg7vb3coyirmp4-uukkou43e3kuxazykadug2qvce" = (($state.SqlEndpoint -split '\.')[0])
+    "OneGridLake" = $cfg.fabric.lakehouseName
+  }
+  $sm = UpsertItem $ws "semanticModels" "OneGridModelImport" (BuildDefinition $smFolder $importMap)
+  $state.DatasetId = $sm.id     # app PBI_DATASET targets the Import model (queryable by the app MI)
+  Log "  OneGridModelImport = $($sm.id)  (set as the app's semantic target)" "Green"
+  # Bind the fixed-identity SP SQL connection + refresh so the app's MI can DAX-query it.
+  Bind-SqlImportModel $ws $sm.id $state.SqlEndpoint $cfg.fabric.lakehouseName | Out-Null
 }
 
 function Phase-Foundry {

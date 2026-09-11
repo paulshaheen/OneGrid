@@ -1,0 +1,78 @@
+table watchlist
+	lineageTag: 66d66c21-a100-5c28-b5ca-ffcbc0b9eb65
+
+	column tag_name
+		dataType: string
+		lineageTag: 836d265d-f343-5c21-8d09-b5cc40d26af4
+		summarizeBy: none
+		sourceColumn: tag_name
+
+	column asset_id
+		dataType: string
+		lineageTag: fd835be5-3c38-564c-a53d-55e09b1f65ae
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column descriptor
+		dataType: string
+		lineageTag: bf8c38ed-3509-5ce6-8a58-b5554c2845a5
+		summarizeBy: none
+		sourceColumn: descriptor
+
+	column trend_direction
+		dataType: string
+		lineageTag: a57effcc-3f5e-506a-8536-813fd72b53b3
+		summarizeBy: none
+		sourceColumn: trend_direction
+
+	column current_value
+		dataType: double
+		lineageTag: 7e5fa55e-50d4-506c-bf7c-4cc761f5209f
+		summarizeBy: none
+		sourceColumn: current_value
+
+	column baseline_mean
+		dataType: double
+		lineageTag: 8da3dbe6-ee50-534a-805c-35b8da3ba107
+		summarizeBy: none
+		sourceColumn: baseline_mean
+
+	column normal_range_low
+		dataType: double
+		lineageTag: 0d441883-a0e3-5a78-9a29-9da1b9e57cbd
+		summarizeBy: none
+		sourceColumn: normal_range_low
+
+	column normal_range_high
+		dataType: double
+		lineageTag: 2fecd1b7-636a-5816-b9e7-3a826d19c165
+		summarizeBy: none
+		sourceColumn: normal_range_high
+
+	column trend_slope_per_day
+		dataType: double
+		lineageTag: f7b8f2d4-4648-55ca-a388-200cf11f7efa
+		summarizeBy: none
+		sourceColumn: trend_slope_per_day
+
+	column risk_contribution
+		dataType: double
+		lineageTag: fa32d09c-c6fb-5ee2-aa5b-4d6cd9d7c7fd
+		summarizeBy: none
+		sourceColumn: risk_contribution
+
+	column recommended_action
+		dataType: string
+		lineageTag: 85c10117-6117-5417-b921-657b5c75b7d2
+		summarizeBy: none
+		sourceColumn: recommended_action
+
+	partition watchlist = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, Database),
+				    Data = Source{[Schema="og",Item="watchlist"]}[Data]
+				in
+				    Data
+

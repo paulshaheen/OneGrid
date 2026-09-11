@@ -1,0 +1,102 @@
+table dim_weather_event
+	lineageTag: 85925d84-7cb7-50f4-beb1-99f777ae7ee4
+
+	column event_id
+		dataType: string
+		lineageTag: 1d8d0e99-639b-51a3-9a4d-0b1a397119f5
+		summarizeBy: none
+		sourceColumn: event_id
+
+	column hazard_kind
+		dataType: string
+		lineageTag: 90b11f05-65df-5e8d-94d0-fde1df21cd06
+		summarizeBy: none
+		sourceColumn: hazard_kind
+
+	column name
+		dataType: string
+		lineageTag: 81b62e7a-32d6-5d79-b63b-facaa197c653
+		summarizeBy: none
+		sourceColumn: name
+
+	column region
+		dataType: string
+		lineageTag: 22fd1cdc-b05f-511f-8aac-c447ae6fbafc
+		summarizeBy: none
+		sourceColumn: region
+
+	column status
+		dataType: string
+		lineageTag: f34f2dfb-303b-5783-ba7e-71a9dc341d79
+		summarizeBy: none
+		sourceColumn: status
+
+	column category
+		dataType: int64
+		formatString: 0
+		lineageTag: cfe2ba82-6054-587b-97d4-8567ee8629cf
+		summarizeBy: none
+		sourceColumn: category
+
+	column current_wind_mph
+		dataType: int64
+		formatString: 0
+		lineageTag: f47e7911-2398-5126-8416-c656a845cc1f
+		summarizeBy: none
+		sourceColumn: current_wind_mph
+
+	column gust_mph
+		dataType: int64
+		formatString: 0
+		lineageTag: 0635ad57-155e-51da-b3d1-b26a59c6b7ca
+		summarizeBy: none
+		sourceColumn: gust_mph
+
+	column pressure_mb
+		dataType: int64
+		formatString: 0
+		lineageTag: 41bdcb32-eab1-5614-94e6-b32db7b822c1
+		summarizeBy: none
+		sourceColumn: pressure_mb
+
+	column lat
+		dataType: double
+		lineageTag: e88b9a7c-6576-59be-856a-e1670bb05599
+		summarizeBy: none
+		sourceColumn: lat
+
+	column lon
+		dataType: double
+		lineageTag: b1389c83-5180-5805-bac2-9042d9b3f26a
+		summarizeBy: none
+		sourceColumn: lon
+
+	column movement_deg
+		dataType: int64
+		formatString: 0
+		lineageTag: 57023e25-a0f3-519a-93ca-2acb48fed9fc
+		summarizeBy: none
+		sourceColumn: movement_deg
+
+	column movement_mph
+		dataType: int64
+		formatString: 0
+		lineageTag: 4ec4e11b-c5d2-56e1-8ac9-aaccd28311a5
+		summarizeBy: none
+		sourceColumn: movement_mph
+
+	column updated_at
+		dataType: string
+		lineageTag: 85ce96c6-e7b8-5a50-98d9-17f445efc664
+		summarizeBy: none
+		sourceColumn: updated_at
+
+	partition dim_weather_event = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, Database),
+				    Data = Source{[Schema="og",Item="dim_weather_event"]}[Data]
+				in
+				    Data
+

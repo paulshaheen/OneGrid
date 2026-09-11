@@ -1,0 +1,54 @@
+table predictions_longterm
+	lineageTag: 98f38991-53f1-5054-bd93-e740541b7308
+
+	column asset_id
+		dataType: string
+		lineageTag: c39de4cc-b8e9-574f-b52b-811c4eaa9217
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column horizon
+		dataType: string
+		lineageTag: 4e550d19-2a24-57d1-95cf-296731c40db1
+		summarizeBy: none
+		sourceColumn: horizon
+
+	column risk_level
+		dataType: string
+		lineageTag: 2eb79bac-6f29-5d5c-9798-3e7148ba85ae
+		summarizeBy: none
+		sourceColumn: risk_level
+
+	column risk_score
+		dataType: double
+		lineageTag: 584a6251-84ce-5c41-94e9-eac975b674d2
+		summarizeBy: none
+		sourceColumn: risk_score
+
+	column survival_probability_7d
+		dataType: double
+		lineageTag: b869caa6-24d8-5132-8e77-86db6789809d
+		summarizeBy: none
+		sourceColumn: survival_probability_7d
+
+	column survival_probability_14d
+		dataType: double
+		lineageTag: d7f9c42d-0ea8-5f4b-8b92-0b5c3438fc69
+		summarizeBy: none
+		sourceColumn: survival_probability_14d
+
+	column predicted_median_survival_days
+		dataType: double
+		lineageTag: dc7ad131-e7a2-5adf-ba1f-19ebbcb99d47
+		summarizeBy: none
+		sourceColumn: predicted_median_survival_days
+
+	partition predictions_longterm = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, Database),
+				    Data = Source{[Schema="og",Item="predictions_longterm"]}[Data]
+				in
+				    Data
+

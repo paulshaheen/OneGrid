@@ -1,0 +1,4 @@
+expression Server = "i22siiabnewedg7vb3coyirmp4-uukkou43e3kuxazykadug2qvce.datawarehouse.fabric.microsoft.com" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = "Text"]
+
+expression Database = "OneGridLake" meta [IsParameterQuery = true, IsParameterQueryRequired = true, Type = "Text"]
+

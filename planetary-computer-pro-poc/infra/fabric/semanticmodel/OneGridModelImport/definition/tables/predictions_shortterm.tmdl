@@ -1,0 +1,42 @@
+table predictions_shortterm
+	lineageTag: 87c01e5d-5d34-5759-85ea-f8a7966c66bb
+
+	column asset_id
+		dataType: string
+		lineageTag: baa15caa-ec70-5f5f-9fe0-529fbde8f2f7
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column prediction_horizon
+		dataType: string
+		lineageTag: 4b295025-d683-543d-9ec0-360d972621f2
+		summarizeBy: none
+		sourceColumn: prediction_horizon
+
+	column stop_probability
+		dataType: double
+		lineageTag: 830ce4a6-c7f6-5e17-8e64-5254b4de1d93
+		summarizeBy: none
+		sourceColumn: stop_probability
+
+	column alert_level
+		dataType: string
+		lineageTag: cfe08e1b-2f75-5b77-98ad-8b8386dbdb5f
+		summarizeBy: none
+		sourceColumn: alert_level
+
+	column scoring_timestamp
+		dataType: string
+		lineageTag: dba4f2be-e33b-5d37-b116-477c0c36b8b9
+		summarizeBy: none
+		sourceColumn: scoring_timestamp
+
+	partition predictions_shortterm = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, Database),
+				    Data = Source{[Schema="og",Item="predictions_shortterm"]}[Data]
+				in
+				    Data
+

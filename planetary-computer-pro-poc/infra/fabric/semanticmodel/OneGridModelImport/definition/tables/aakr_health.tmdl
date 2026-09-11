@@ -1,0 +1,36 @@
+table aakr_health
+	lineageTag: d413ef36-a599-532f-a6b3-1c102679280a
+
+	column asset_id
+		dataType: string
+		lineageTag: 10dc5bef-8575-5c19-af8b-cefc797481b0
+		summarizeBy: none
+		sourceColumn: asset_id
+
+	column health_score
+		dataType: double
+		lineageTag: f269dd67-6793-5a17-9fce-1d1cea1ffa8f
+		summarizeBy: none
+		sourceColumn: health_score
+
+	column anomaly_pct
+		dataType: double
+		lineageTag: ea5e2210-6fab-5e58-ab87-4f740db7d975
+		summarizeBy: none
+		sourceColumn: anomaly_pct
+
+	column max_abs_z
+		dataType: double
+		lineageTag: b06d4af6-80c5-5bda-8461-2353e6f4d42a
+		summarizeBy: none
+		sourceColumn: max_abs_z
+
+	partition aakr_health = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database(Server, Database),
+				    Data = Source{[Schema="og",Item="aakr_health"]}[Data]
+				in
+				    Data
+
