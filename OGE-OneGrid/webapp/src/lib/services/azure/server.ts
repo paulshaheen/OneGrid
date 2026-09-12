@@ -713,8 +713,19 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
     const { dataContext, highlightAssetIds, evidence, system: sysPrompt, citations } =
       await selectGrounding(data.question);
 
+    const isReasoning = /gpt-5|^o[0-9]/i.test(String(deployment));
+    const reasoningEffort = process.env["AI_REASONING_EFFORT"] || "minimal";
+    const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2025-01-01-preview`;
+    // gpt-5 / o-series reasoning models spend `max_completion_tokens` on hidden
+    // reasoning FIRST and the visible answer second — a tight cap can leave zero
+    // tokens for the answer (finish_reason "length", empty content), which the UI
+    // renders as "No answer was returned". Start with a generous budget and, if the
+    // answer still comes back empty, retry once with much more room so it can't starve.
+    let maxTokens = 8000;
     try {
-      const url = `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}/chat/completions?api-version=2025-01-01-preview`;
+      let content = "";
+      let finish = "";
+      for (let attempt = 0; attempt < 2; attempt++) {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -730,12 +741,8 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
           // gpt-5 family are reasoning models: they only accept the default temperature
           // and use `max_completion_tokens` (not `max_tokens`). Sending a custom
           // `temperature` returns 400 "temperature does not support <x>".
-          max_completion_tokens: 2048,
-          // Reasoning models otherwise spend 40-60s "thinking" — cap it so this
-          // single grounded answer stays fast. Ignored by non-reasoning deployments.
-          ...(/gpt-5|^o[0-9]/i.test(String(deployment))
-            ? { reasoning_effort: process.env["AI_REASONING_EFFORT"] || "minimal" }
-            : {}),
+          max_completion_tokens: maxTokens,
+          ...(isReasoning ? { reasoning_effort: reasoningEffort } : {}),
         }),
       });
       if (!res.ok) {
@@ -746,11 +753,20 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
         };
       }
       const body = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
       };
-      const text = body.choices?.[0]?.message?.content?.trim();
+      const choice = body.choices?.[0];
+      content = choice?.message?.content?.trim() || "";
+      finish = choice?.finish_reason || "";
+      // Got an answer, or it stopped for a reason other than exhausting the budget.
+      if (content || finish !== "length") break;
+      // Reasoning consumed the whole budget — give it much more room and retry once.
+      maxTokens = 16000;
+      }
       return {
-        text: text || "No answer was returned.",
+        text:
+          content ||
+          "I couldn't fit a complete answer in the available space — try asking about one part at a time, or rephrase more specifically.",
         citations,
         highlightAssetIds,
         evidence,
