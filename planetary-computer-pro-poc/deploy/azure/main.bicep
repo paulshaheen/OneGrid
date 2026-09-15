@@ -147,6 +147,9 @@ param oneGridRepoUrl string = 'https://github.com/paulshaheen/OneGrid.git'
 @description('Git ref (branch/tag/commit) of the OneGrid repository to deploy.')
 param oneGridRef string = 'main'
 
+@description('Internal: unique per-deployment seed (do not set manually). Used ONLY to keep the Aurora Key Vault name fresh on every deployment operation, because Key Vault soft-deletes for 90 days and a name derived only from the resource group id collides with a vault left over from an earlier failed/torn-down deployment into the same RG (ConflictError: "A vault with the same name already exists in deleted state").')
+param deploymentToken string = utcNow()
+
 // ------------------------------------------------------------------------------------
 // Variables
 // ------------------------------------------------------------------------------------
@@ -184,7 +187,11 @@ var cognitiveServicesOpenAiUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var amlSuffix = take(uniqueString(resourceGroup().id), 8)
 var amlWorkspaceName = 'pcpro-aml-${amlSuffix}'
 var amlStorageName = toLower('pcproaml${take(uniqueString(resourceGroup().id), 12)}')
-var amlKeyVaultName = 'pcpro-kv-${amlSuffix}'
+// NOT amlSuffix: Key Vault names are globally unique and soft-delete for 90 days, so a
+// name derived only from the (stable) resource group id collides with a soft-deleted
+// vault from a prior deploy/teardown of this same RG. Fold in deploymentToken so every
+// deployment operation gets a fresh name; everything else keeps the stable amlSuffix.
+var amlKeyVaultName = 'pcpro-kv-${take(uniqueString(resourceGroup().id, deploymentToken), 13)}'
 var amlApplicationInsightsName = 'pcpro-ai-${amlSuffix}'
 var auroraEndpointName = 'aurora-${amlSuffix}'
 var auroraDeploymentName = 'aurora'
