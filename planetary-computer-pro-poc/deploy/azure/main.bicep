@@ -589,7 +589,13 @@ var provisionCommonEnv = [
   { name: 'PCP_GEOCATALOG_URI', value: geoCatalog.properties.catalogUri }
   { name: 'PCP_GEOCATALOG_ID', value: geoCatalog.id }
   { name: 'PCP_SAMPLE_CONTAINER', value: sampleContainerName }
-  { name: 'PCP_AURORA_ENDPOINT', value: deployAuroraModel ? auroraEndpoint.properties.scoringUri : '' }
+  // Deterministic AML managed-online-endpoint scoring URL (https://<endpoint>.<region>.inference.ml.azure.com/score) -
+  // NOT a symbolic reference to the auroraEndpoint/amlWorkspace/amlKeyVault resource chain. That chain can fail
+  // independently (GPU quota, Key Vault soft-delete, etc.); a symbolic reference here previously made BOTH
+  // provisioner deploymentScripts implicitly depend on it via this shared env block, so a Key Vault conflict
+  // silently skipped app-plane wiring too (GeoCatalog/Foundry/storage never got set). A plain string has no such
+  // dependency - the app just probes it and shows "Unreachable" if the endpoint never came up.
+  { name: 'PCP_AURORA_ENDPOINT', value: deployAuroraModel ? 'https://${auroraEndpointName}.${location}.inference.ml.azure.com/score' : '' }
   { name: 'PCP_AURORA_DEPLOYED', value: string(deployAuroraDeployment) }
   { name: 'ENTRA_SIGNIN_ENABLED', value: enableEntraSignIn ? 'true' : 'false' }
   { name: 'ENTRA_SIGNIN_CLIENT_ID', value: entraSignInClientId }
