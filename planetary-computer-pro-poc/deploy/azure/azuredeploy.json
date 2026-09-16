@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "3688724277025621506"
+      "templateHash": "13703298454131534648"
     }
   },
   "parameters": {
@@ -617,9 +617,9 @@
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]",
-      "name": "[guid(if(variables('deployOneGridAppEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), resourceGroup().id), variables('chatAgentAppName'), variables('storageBlobDataReaderRoleId'))]",
+      "name": "[guid(if(variables('deployOneGridAppEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), resourceGroup().id), variables('chatAgentAppName'), variables('storageBlobDataContributorRoleId'))]",
       "properties": {
-        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataReaderRoleId'))]",
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
         "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01', 'full').identity.principalId, '')]",
         "principalType": "ServicePrincipal"
       },

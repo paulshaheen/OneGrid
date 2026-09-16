@@ -537,11 +537,14 @@ resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEf
 // Fabric-independent data-plane grants for the web app identity, declared here so they are in
 // place (and propagated) before the provisioner runs. Foundry/Cognitive grants stay in the
 // provisioner because the Foundry account may be created there (created-vs-reused).
-resource chatAgentStorageReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
-  name: guid(deployOneGridAppEffective ? sampleStorage.id : resourceGroup().id, chatAgentAppName, storageBlobDataReaderRoleId)
+// Contributor (not just Reader): the Asset Management page's upload feature
+// (server.ts uploadAsset) writes new blobs to sample-assets using this same
+// identity - Reader-only made every upload 403.
+resource chatAgentStorageContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
+  name: guid(deployOneGridAppEffective ? sampleStorage.id : resourceGroup().id, chatAgentAppName, storageBlobDataContributorRoleId)
   scope: sampleStorage
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataReaderRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalId: deployOneGridAppEffective ? chatAgentSite.identity.principalId : ''
     principalType: 'ServicePrincipal'
   }
