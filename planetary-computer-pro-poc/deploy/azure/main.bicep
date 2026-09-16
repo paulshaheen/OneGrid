@@ -647,6 +647,11 @@ resource appProvisionScript 'Microsoft.Resources/deploymentScripts@2023-08-01' =
     retentionInterval: 'P1D'
     timeout: 'PT2H'
     cleanupPreference: 'OnSuccess'
+    // Without this, an otherwise-unchanged redeploy is a no-op for this script (Azure skips
+    // re-running it), while chatAgentSite's inline appSettings still gets fully replaced by
+    // ARM's PUT down to the 4 baseline values - silently wiping GEOCATALOG_URI/FOUNDRY_ENDPOINT/
+    // SAMPLE_CONTAINER_URL/etc. Forcing a re-run every deployment re-applies them every time.
+    forceUpdateTag: deploymentToken
     environmentVariables: concat(provisionCommonEnv, [
       { name: 'ONEGRID_PHASES', value: ogAppPhasesCsv }
       { name: 'FABRIC_CAPACITY_ID', value: '' }
@@ -685,6 +690,10 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
     retentionInterval: 'P1D'
     timeout: 'PT3H'
     cleanupPreference: 'OnSuccess'
+    // Same reasoning as appProvisionScript above: force a re-run every deployment so the
+    // Fabric-derived app settings (KUSTO_*/PBI_*/DATA_AGENT_*) get re-applied after ARM resets
+    // chatAgentSite's appSettings to baseline on every redeploy.
+    forceUpdateTag: deploymentToken
     environmentVariables: concat(provisionCommonEnv, [
       { name: 'ONEGRID_PHASES', value: ogFabricPhasesCsv }
       { name: 'FABRIC_CAPACITY_ID', value: createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId }
