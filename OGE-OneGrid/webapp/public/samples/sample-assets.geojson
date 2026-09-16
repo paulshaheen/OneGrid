@@ -1,0 +1,55 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-90.35, 27.62] },
+      "properties": {
+        "id": "PLT-D7",
+        "name": "Platform Delta-7",
+        "type": "offshore_platform",
+        "operator": "Meridian Energy",
+        "region": "Central Gulf",
+        "business_unit": "Deepwater Production",
+        "operating_status": "producing",
+        "criticality": "business_critical",
+        "metadata": { "design_wind_mph": 130, "production_boepd": 92000, "personnel_on_board": 148, "water_depth_ft": 5240 }
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-90.35, 27.62], [-90.10, 28.05], [-89.42, 28.41]]
+      },
+      "properties": {
+        "id": "PIPE-17",
+        "name": "Mars-Ursa Trunkline",
+        "type": "pipeline",
+        "operator": "Meridian Energy",
+        "region": "Central Gulf",
+        "business_unit": "Midstream",
+        "operating_status": "producing",
+        "criticality": "important",
+        "metadata": { "diameter_in": 24, "throughput_bpd": 150000 }
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-93.10, 29.75], [-92.95, 29.75], [-92.95, 29.86], [-93.10, 29.86], [-93.10, 29.75]]]
+      },
+      "properties": {
+        "id": "LEASE-GC640",
+        "name": "Green Canyon 640 Lease Block",
+        "type": "well",
+        "operator": "Gulfstar Offshore",
+        "region": "Central Gulf",
+        "business_unit": "Upstream",
+        "operating_status": "producing",
+        "criticality": "standard"
+      }
+    }
+  ]
+}

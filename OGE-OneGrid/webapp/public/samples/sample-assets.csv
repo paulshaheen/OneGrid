@@ -1,0 +1,12 @@
+id,name,type,latitude,longitude,operator,region,business_unit,operating_status,criticality
+PLT-D7,Platform Delta-7,offshore_platform,27.62,-90.35,Meridian Energy,Central Gulf,Deepwater Production,producing,business_critical
+PLT-M4,Platform Mercury-4,offshore_platform,28.41,-89.42,Meridian Energy,Mississippi Canyon,Deepwater Production,producing,business_critical
+PLT-T1,Platform Titan-1,offshore_platform,27.05,-88.70,Meridian Energy,Eastern Gulf,Deepwater Production,producing,business_critical
+PLT-A9,Platform Atlas-9,offshore_platform,28.05,-92.40,Gulfstar Offshore,Western Gulf,Shelf Production,producing,important
+PLT-K3,Platform Kestrel-3,offshore_platform,26.10,-93.20,Delta Petroleum,Western Gulf,Shelf Production,standby,standard
+WELL-1042,MC-252 #3,well,28.44,-88.36,Meridian Energy,Mississippi Canyon,Upstream,producing,standard
+WELL-1088,GC-640 #2,well,27.31,-91.02,Gulfstar Offshore,Central Gulf,Upstream,producing,standard
+LNG-01,Cameron LNG Terminal,lng_terminal,29.79,-93.33,Coastal LNG Partners,Gulf Coast,Midstream,producing,business_critical
+REF-01,Port Arthur Refinery,refinery,29.87,-93.93,Meridian Energy,Gulf Coast,Downstream,producing,important
+STO-04,Clovelly Crude Storage,storage,29.42,-90.30,Delta Petroleum,Gulf Coast,Midstream,producing,important
+PORT-02,Fourchon Logistics Base,port,29.10,-90.20,Coastal LNG Partners,Gulf Coast,Logistics,producing,important

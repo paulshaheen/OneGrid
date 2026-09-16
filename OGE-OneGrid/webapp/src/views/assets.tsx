@@ -3,14 +3,18 @@ import { useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   Database,
+  Download,
   FileSpreadsheet,
   Globe,
+  HelpCircle,
   Layers,
   Loader2,
   Plug,
   Server,
   Upload,
 } from "lucide-react";
+
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { useOpsBase } from "@/components/ops/ops-nav";
@@ -30,6 +34,29 @@ function readAsBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+// Downloadable examples matching SCHEMA exactly, so a user can see the expected shape
+// before uploading (same idea as Azure Migrate's downloadable assessment templates).
+// Served as static files from public/samples/ so no server round-trip is needed.
+const SAMPLE_FILES: Record<string, { file: string; label: string }> = {
+  csv: { file: "sample-assets.csv", label: "Download sample CSV" },
+  geojson: { file: "sample-assets.geojson", label: "Download sample GeoJSON" },
+};
+
+function sampleHref(file: string): string {
+  return `${import.meta.env.BASE_URL.replace(/\/$/, "")}/samples/${file}`;
+}
+
+// Plain-language "what is this and how do I use it" text behind the (?) on each card.
+const CONNECTOR_HELP: Record<string, string> = {
+  csv: "A spreadsheet of your assets, one row per asset. Required columns: id, name, type, latitude, longitude. Download the sample below to see the exact format, fill in your own rows, then click Upload file.",
+  geojson: "A GeoJSON FeatureCollection for assets that aren't a single point \u2014 pipelines (LineString) and lease blocks (Polygon), plus regular point assets. Each feature's properties use the same fields as the CSV. Download the sample below for a working example of all three geometry types.",
+  shapefile: "A zipped ESRI shapefile (.shp/.shx/.dbf/.prj bundled in one .zip) exported from GIS software like ArcGIS or QGIS. Upload the .zip directly \u2014 it's converted to the same asset schema on ingest.",
+  arcgis: "Point this at a live ArcGIS Feature Service URL from your corporate GIS so assets stay in sync automatically instead of being uploaded as a one-time file. Set the service URL when you deploy this environment (or ask your admin to configure it).",
+  blob: "Wire this deployment to read from a cloud storage container you already manage (e.g. an existing data lake landing zone), so new files dropped there are ingested on a schedule instead of uploaded by hand. Configured at deploy time.",
+  fabric: "Connect to a governed asset master in your enterprise analytics platform (e.g. a Fabric/Power BI dataset) so this becomes the system of record instead of a duplicate copy. Configured at deploy time.",
+  rest: "Pull assets from an existing system \u2014 a maintenance system, SCADA historian, or asset-management API \u2014 over a REST endpoint you provide. Configured at deploy time.",
+};
 
 const CONNECTORS = [
   {
@@ -164,31 +191,58 @@ export function AssetsPage() {
           <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
             {CONNECTORS.map((c) => {
               const isUpload = c.status === "Available";
+              const sample = SAMPLE_FILES[c.id];
+              const help = CONNECTOR_HELP[c.id];
               return (
                 <div key={c.id} className="bg-card p-4">
                   <div className="flex items-center gap-2">
                     <c.icon className="size-4 text-primary" />
                     <span className="text-xs font-medium">{c.name}</span>
+                    {help && (
+                      <Popover>
+                        <PopoverTrigger
+                          className="ml-auto text-muted-foreground hover:text-foreground"
+                          aria-label={`What is ${c.name}?`}
+                        >
+                          <HelpCircle className="size-3.5" />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 text-xs leading-relaxed">
+                          {help}
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                   <p className="mt-1.5 text-[11px] text-muted-foreground">{c.detail}</p>
-                  {isUpload ? (
-                    <button
-                      disabled={!uploadReady || upload.isPending}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {upload.isPending ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Upload className="size-3" />
-                      )}
-                      {uploadReady ? "Upload file" : "Storage not wired"}
-                    </button>
-                  ) : (
-                    <span className="mt-3 inline-block rounded-sm border px-2 py-1 text-[11px] text-muted-foreground">
-                      Configure at deploy time
-                    </span>
-                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {isUpload ? (
+                      <button
+                        disabled={!uploadReady || upload.isPending}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {upload.isPending ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Upload className="size-3" />
+                        )}
+                        {uploadReady ? "Upload file" : "Storage not wired"}
+                      </button>
+                    ) : (
+                      <span className="inline-block rounded-sm border px-2 py-1 text-[11px] text-muted-foreground">
+                        Configure at deploy time
+                      </span>
+                    )}
+                    {sample && (
+                      <a
+                        href={sampleHref(sample.file)}
+                        download
+                        className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                      >
+                        <Download className="size-3" />
+                        {sample.label}
+                      </a>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -251,7 +305,17 @@ export function AssetsPage() {
 
           <div className="space-y-4">
             <div className="panel">
-              <div className="border-b px-4 py-2.5 label-xs">Asset schema</div>
+              <div className="flex items-center justify-between border-b px-4 py-2.5">
+                <span className="label-xs">Asset schema</span>
+                <a
+                  href={sampleHref(SAMPLE_FILES.csv.file)}
+                  download
+                  className="inline-flex items-center gap-1.5 text-[11px] text-primary hover:underline"
+                >
+                  <Download className="size-3" />
+                  Download sample CSV
+                </a>
+              </div>
               <table className="w-full text-[11px]">
                 <tbody>
                   {SCHEMA.map(([field, type, desc, req]) => (
