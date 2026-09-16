@@ -1,4 +1,4 @@
-# Microsoft Planetary Computer Pro Rapid POC
+# OneGrid Asset and Weather Intelligence
 
 A **turnkey Azure environment** for exploring
 [Microsoft Planetary Computer Pro](https://github.com/Azure/microsoft-planetary-computer-pro):
