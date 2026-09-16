@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
@@ -127,6 +127,7 @@ const SCHEMA = [
 
 export function AssetsPage() {
   const base = useOpsBase();
+  const queryClient = useQueryClient();
   const assetsQ = useQuery(assetsQuery(base));
   const assets = assetsQ.data ?? [];
   const [q, setQ] = useState("");
@@ -145,7 +146,15 @@ export function AssetsPage() {
       const contentBase64 = await readAsBase64(file);
       return uploadAsset({ data: { name: file.name, contentBase64, contentType: file.type } });
     },
-    onSuccess: (res) => setNote({ ok: res.ok, text: res.message }),
+    onSuccess: (res) => {
+      setNote({ ok: res.ok, text: res.message });
+      if (res.ok) {
+        // The upload only writes a blob — nothing re-parses it into the asset
+        // register until this query refetches, so the table would otherwise
+        // keep showing stale (often empty) data after a successful upload.
+        queryClient.invalidateQueries({ queryKey: [base, "assets"] });
+      }
+    },
     onError: () => setNote({ ok: false, text: "Upload failed unexpectedly." }),
   });
 
@@ -176,17 +185,22 @@ export function AssetsPage() {
         }}
       />
       <div className="space-y-4 p-4">
+        {note && (
+          <div
+            className={`flex items-center gap-2 rounded-sm border px-4 py-2.5 text-xs font-medium ${
+              note.ok
+                ? "border-risk-normal/40 bg-risk-normal/10 text-risk-normal"
+                : "border-risk-high/40 bg-risk-high/10 text-risk-high"
+            }`}
+          >
+            {note.ok ? <CheckCircle2 className="size-4 shrink-0" /> : <Upload className="size-4 shrink-0" />}
+            {note.text}
+            {note.ok && " The asset register below has been refreshed."}
+          </div>
+        )}
         <div className="panel">
-          <div className="flex items-center justify-between border-b px-4 py-2.5">
+          <div className="border-b px-4 py-2.5">
             <span className="label-xs">Data sources</span>
-            {note && (
-              <span
-                className={`inline-flex items-center gap-1.5 text-[11px] ${note.ok ? "text-risk-normal" : "text-risk-high"}`}
-              >
-                {note.ok && <CheckCircle2 className="size-3.5" />}
-                {note.text}
-              </span>
-            )}
           </div>
           <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
             {CONNECTORS.map((c) => {
