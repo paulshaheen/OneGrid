@@ -65,32 +65,41 @@ Microsoft's original notebooks and SDK, clone the
 
 ## Logical architecture
 
-The GeoCatalog is the top-level container for geospatial data. The **web app** runs on a
-managed **Azure App Service (Linux, Node)**, reached over HTTPS. Users sign in with their
-**Microsoft Entra identity**; the app's **system-assigned managed identity** is granted the
-data-plane roles it needs (GeoCatalog Administrator on the GeoCatalog, Storage Blob Data
-Contributor on the sample storage, and Cognitive Services OpenAI User on the Foundry account),
-so its backend API routes call the GeoCatalog STAC / Tiler / ingestion APIs, write model
-outputs to storage, and invoke the GeoAI models **without keys or SAS**. The optional storage
-account and user-assigned identity support the managed-identity ingestion path for your own
-data.
+OneGrid unifies five kinds of external data — operational/OT telemetry (historian, SCADA),
+asset/maintenance systems (AIMM, CMMS, work orders), geospatial/customer data, public NOAA
+weather forecasts, and equipment manuals — into one governed platform spanning **Microsoft
+Fabric** (the data plane), a **geospatial plane** (GeoCatalog), a **weather/Aurora plane**
+(storm forecasting), an **AI/model plane** (Azure OpenAI/Foundry), and the **OneGrid
+Application** (the web app users sign in to). Every box below is a real, deployed component —
+there are no reference-only or illustrative services:
 
-This mirrors the Planetary Computer Pro reference architecture: public + private data flow
-into the GeoCatalog (the enterprise STAC catalog), which then feeds downstream apps and GeoAI
-models, using this POC's concrete components (every box is an Azure resource this template
-provisions in your subscription; the AI agent and Aurora are optional):
+[![OneGrid end-to-end logical architecture: external data sources feed Microsoft Fabric (Eventstream, Eventhouse, Lakehouse, Semantic Model, Digital Twin Builder), which joins the Geospatial plane (GeoCatalog) and Weather/Aurora plane (NOAA GFS forecast pipeline) into the OneGrid Application on Azure App Service, authenticated by Microsoft Entra ID and grounded by Azure OpenAI/Foundry, all provisioned by main.bicep + deploy.ps1.](docs/onegrid-logical-architecture.png)](docs/onegrid-logical-architecture.png)
 
-[![Logical architecture for the Planetary Computer Pro POC: public and private data ingest into a GeoCatalog inside your Azure subscription, which feeds the optional Microsoft Foundry GeoAI models (Azure OpenAI agent and Aurora) and the web app.](planetary-computer-pro-poc/deploy/azure/media/logical-architecture.png)](planetary-computer-pro-poc/deploy/azure/media/logical-architecture.png)
+**How data flows through the planes:**
 
-```mermaid
-flowchart LR
-    U[You<br/>Microsoft Entra sign-in] -->|HTTPS| APP[Web app<br/>Azure App Service - Node SSR]
-    APP -->|managed identity| GC[(GeoCatalog<br/>STAC / Tiler / ingestion)]
-    APP -->|managed identity| SA[Sample storage<br/>model outputs]
-    APP -->|managed identity| FDN[Foundry<br/>Azure OpenAI agent]
-    APP -->|managed identity| AUR[Aurora<br/>GPU endpoint]
-    GC --> APP
-```
+- **Fabric (data plane)** — Eventstream ingests streaming operational data into the Eventhouse
+  (KQL, real-time telemetry/queries); OneLake/Lakehouse holds curated assets, maintenance and
+  historical data; Fabric Notebooks run anomaly detection, predictive maintenance and survival
+  analysis; Digital Twin Builder contextualizes asset relationships/ontology; a Fabric Semantic
+  Model (Direct Lake/Import, DAX) exposes it all as a governed business model; an optional
+  Fabric Data Agent answers natural-language questions over KQL/DAX; an optional OneLake
+  shortcut links in Aurora's `model-outputs`.
+- **Geospatial plane** — a private storage account (`sample-assets`) plus **Planetary Computer
+  Pro (GeoCatalog)** for STAC search, tiles and spatial analytics over customer geospatial data
+  and imagery.
+- **Weather/Aurora plane** — a scheduled Container Apps Job pulls **NOAA GFS** weather data,
+  runs the **Aurora** model on an Azure ML/Foundry GPU endpoint (via a private storage account
+  used as scratch + `model-outputs`), and publishes storm forecasts back to the app.
+- **AI/model plane** — **Azure OpenAI/Foundry** (e.g. `gpt-5-mini`) for the chat/reasoning agent,
+  called by the OneGrid Node AI agent with managed identity — no keys.
+- **OneGrid Application** — one Azure App Service (Linux, Node 22, system-assigned managed
+  identity) running the `report-app` Node BFF (REST + WebSocket), the TanStack Start/React SSR
+  web app, and the AI agent, mounted read-only from a private blob package via
+  `WEBSITE_RUN_FROM_PACKAGE`. Users authenticate via **Microsoft Entra ID** (OIDC/MSAL) before
+  reaching the app.
+- **Deployment/provisioning (control plane)** — `main.bicep` (ARM/Bicep) provisions the Azure
+  resources; `deploy.ps1` provisions Fabric over REST and configures app settings/identities —
+  together they are the only things that create or change any of the above.
 
 ### Where Azure AI Foundry fits
 
