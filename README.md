@@ -219,19 +219,26 @@ deployed; add the web app and/or sample storage), pick the App Service plan SKU,
 
 ## Publish the web app code
 
+> **Note:** this section describes the standalone GeoCatalog-only deploy path. For the full
+> **OneGrid** solution (this monorepo), the app is published differently — a GitHub Action
+> ("Release OneGrid App") builds a self-contained `onegrid-app.zip` on every push to `main`,
+> and `deploy.ps1`'s `chatagent` phase mounts it via `WEBSITE_RUN_FROM_PACKAGE` (no `az webapp up`,
+> no manual build step). See `OGE-OneGrid/data/HANDOFF.md` for the full deploy contract.
+
 The template creates the **App Service** (Linux, Node) configured to build and start the app,
-but it does **not** contain your application bits. Publish the `webapp/` folder once the
-infrastructure is deployed. Oryx runs `npm install` + `npm run build` and the site starts with
-`node server.mjs`.
+but it does **not** contain your application bits by itself if you deploy this template in
+isolation. To publish the web app manually in that standalone scenario, use the
+[`OGE-OneGrid/webapp/`](OGE-OneGrid/webapp/) folder once the infrastructure is deployed. Oryx
+runs `npm install` + `npm run build` and the site starts with `node server.mjs`.
 
 ```bash
-# from planetary-computer-pro-poc/
-cd webapp
+# from the repo root
+cd OGE-OneGrid/webapp
 az webapp up --name <webAppName> --resource-group pcpro-poc-rg --runtime "NODE:22-lts"
 ```
 
 `<webAppName>` and the site URL are in the `webAppName` / `webAppUrl` deployment outputs. You
-can also wire CI/CD (GitHub Actions or Azure DevOps) to deploy `webapp/` on push.
+can also wire CI/CD (GitHub Actions or Azure DevOps) to deploy `OGE-OneGrid/webapp/` on push.
 
 ## Deploy from the command line (optional)
 
@@ -484,7 +491,7 @@ against the active forecast.
 
 | Path | Purpose |
 | --- | --- |
-| `planetary-computer-pro-poc/webapp/` | The web app — a server-rendered React app (TanStack Start + Vite) that signs in with Entra, browses STAC, renders tiles, and drives ingest/GeoAI workflows via managed-identity backend routes. Deployed to Azure App Service (Linux, Node) |
+| `OGE-OneGrid/webapp/` | The web app — a server-rendered React app (TanStack Start + Vite) that signs in with Entra, browses STAC, renders tiles, and drives ingest/GeoAI workflows via managed-identity backend routes. Deployed to Azure App Service (Linux, Node) |
 | `planetary-computer-pro-poc/deploy/azure/main.bicep` | Bicep source that provisions the GeoCatalog, optional web app (App Service), and optional sample storage + ingestion identity, plus the optional AI agent + Aurora model plane |
 | `planetary-computer-pro-poc/deploy/azure/azuredeploy.json` | Compiled ARM template behind the **Deploy to Azure** button |
 | `planetary-computer-pro-poc/deploy/azure/createUiDefinition.json` | Portal form for the one-click deployment (component selection + App Service SKU + optional Entra IDs) |
