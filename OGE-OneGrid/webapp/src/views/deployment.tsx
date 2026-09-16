@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Check, CloudSun, Database, ExternalLink, Loader2, PlayCircle, Shield, Sparkles } from "lucide-react";
+import { Boxes, Check, CloudSun, Database, ExternalLink, HelpCircle, Loader2, PlayCircle, Shield, Sparkles } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
@@ -7,6 +7,7 @@ import { layersQuery } from "@/lib/hooks/use-ops-data";
 import { isEntraConfigured } from "@/lib/auth/config";
 import { getServiceConfig } from "@/lib/services/azure-config";
 import { getDataPlaneStatus, type ProbeResult } from "@/lib/services/azure/server";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // Honest, read-only deployment status. Infrastructure is provisioned by the
 // Bicep/ARM template ("Deploy to Azure"), not from the app — so this page reports
@@ -311,6 +312,48 @@ export function DeploymentPage() {
           <div className="panel p-4">
             <div className="label-xs mb-2 flex items-center gap-1.5">
               <PlayCircle className="size-3.5 text-primary" /> Aurora forecast job
+              <Popover>
+                <PopoverTrigger
+                  className="ml-auto text-muted-foreground hover:text-foreground"
+                  aria-label="How does the Aurora forecast job work?"
+                >
+                  <HelpCircle className="size-3.5" />
+                </PopoverTrigger>
+                <PopoverContent className="w-96 text-[11px] leading-relaxed">
+                  <div className="space-y-2">
+                    <p>
+                      <strong className="text-foreground">Where the data comes from:</strong> the
+                      job reads a public NOAA GFS feed directly (updated every 6 hours, no
+                      credentials needed) — nothing lands in your storage account first. It
+                      builds a snapshot of pressure, wind and temperature at 13 altitudes over a
+                      fixed region (the Gulf of Mexico + Caribbean).
+                    </p>
+                    <p>
+                      <strong className="text-foreground">What your storage account is for:</strong>{" "}
+                      Aurora's predictions are too large for a normal API response, so the job
+                      uses a scratch blob container as a relay — it uploads the snapshot, the
+                      Aurora GPU endpoint reads it and writes back its forecast, and the job reads
+                      that back. It's temporary plumbing, not a saved dataset. The only thing that
+                      persists afterward is the small final result,{" "}
+                      <code className="text-foreground">model-outputs/weather-events.json</code>{" "}
+                      (storm track + intensity), which is what this app displays.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Cron vs. this button:</strong> both do
+                      the exact same thing — fetch the current atmosphere, scan for storms, run
+                      Aurora, publish results. The schedule just runs it automatically 4×/day; this
+                      button runs the identical cycle on demand.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Changing which storm it finds:</strong>{" "}
+                      there's no "pick a storm" input — Aurora only forecasts a real cyclone it
+                      detects in the data, it can't invent one. The only levers are the
+                      geographic search box and the point in time analyzed, and neither is
+                      exposed here yet — they're fixed values in the deployment template today.
+                    </p>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               A scheduled job runs the full forecast cycle four times a day (roughly every 6
