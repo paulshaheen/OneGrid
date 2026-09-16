@@ -178,6 +178,11 @@ var storageBlobDataReaderRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
 // channel SAS and the published weather-events.json to the sample storage account.
 var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
+// Container Apps Jobs Operator — read/start/stop a Container Apps Job (no write/delete).
+// Lets the web app trigger the Aurora forecast job on demand without granting it any
+// ability to redefine, delete, or reconfigure the job.
+var containerAppsJobsOperatorRoleId = 'b9a307c4-5aa3-4b52-ba60-2b17c136cd7b'
+
 // Azure OpenAI (Foundry) agent.
 var openAiName = toLower('pcpro-oai-${uniqueString(resourceGroup().id)}')
 // Cognitive Services OpenAI User — key-less inference access.
@@ -552,6 +557,20 @@ resource chatAgentGeoCatalogAdmin 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
+// Lets the app's "Run Aurora forecast now" button start the scheduled Container Apps Job
+// on demand (the same job the cron trigger runs), scoped ONLY to that one job resource -
+// not the environment or registry. Container Apps Jobs Operator = read/start/stop only
+// (no write/delete), so the app identity cannot redefine or remove the job.
+resource chatAgentAuroraJobOperator 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployAuroraJob && deployOneGridAppEffective) {
+  name: guid(auroraJob.id, chatAgentAppName, containerAppsJobsOperatorRoleId)
+  scope: auroraJob
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', containerAppsJobsOperatorRoleId)
+    principalId: deployOneGridAppEffective ? chatAgentSite.identity.principalId : ''
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // In-template provisioning of the whole OneGrid solution. Fabric workspaces/lakehouses/
 // eventhouses/KQL, the AI Foundry account, and the chat/report Container App are not ARM
 // resource types, so we run OneGrid's own orchestrator (deploy.ps1) headless as a
@@ -597,6 +616,9 @@ var provisionCommonEnv = [
   // dependency - the app just probes it and shows "Unreachable" if the endpoint never came up.
   { name: 'PCP_AURORA_ENDPOINT', value: deployAuroraModel ? 'https://${auroraEndpointName}.${location}.inference.ml.azure.com/score' : '' }
   { name: 'PCP_AURORA_DEPLOYED', value: string(deployAuroraDeployment) }
+  // Deterministic job name (no resource reference) so the app can be told which Container
+  // Apps Job to start on demand - see chatAgentAuroraJobOperator above for the RBAC grant.
+  { name: 'PCP_AURORA_JOB_NAME', value: deployAuroraJob ? auroraJobName : '' }
   { name: 'ENTRA_SIGNIN_ENABLED', value: enableEntraSignIn ? 'true' : 'false' }
   { name: 'ENTRA_SIGNIN_CLIENT_ID', value: entraSignInClientId }
 ]

@@ -16,6 +16,7 @@ import { isCapacityPausedError } from './fabric.js';
 import * as api from './dataApi.js';
 import * as gov from './governance.js';
 import * as manuals from './manuals.js';
+import * as aurora from './aurora.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.REPORT_PORT || 7700;
@@ -72,6 +73,8 @@ async function handleApi(req, res, url) {
     if (p.startsWith('/api/asset-workorders/')) return json(res, 200, await api.assetWorkOrders(decodeURIComponent(p.split('/api/asset-workorders/')[1])));
     if (p === '/api/narrative') return json(res, 200, await api.narrative());
     if (p === '/api/ontology') return json(res, 200, loadOntology());
+    // ── Aurora forecast job: manual trigger + last-run status ─────────────────
+    if (p === '/api/aurora/status') return json(res, 200, await aurora.auroraStatus());
     // ── Governance / OneLake-security review plane (read-only) ──────────────
     if (p.startsWith('/api/governance/')) {
       if (!gov.isAuthorized(req)) return json(res, 403, { error: 'forbidden: Governance.Reader required' });
@@ -143,6 +146,12 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url.pathname === '/api/models' && req.method === 'GET') return proxyModels(req, res);
+  if (url.pathname === '/api/aurora/run' && req.method === 'POST') {
+    try {
+      const result = await aurora.runAuroraNow();
+      return json(res, result.ok ? 200 : 400, result);
+    } catch (e) { return json(res, 500, { ok: false, message: String(e.message || e) }); }
+  }
   if (url.pathname === '/api/feedback' && req.method === 'POST') {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));

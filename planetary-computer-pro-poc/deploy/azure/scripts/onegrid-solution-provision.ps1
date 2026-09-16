@@ -163,6 +163,7 @@ $cfg = [ordered]@{
     sampleContainer       = $env:PCP_SAMPLE_CONTAINER
     auroraEndpoint        = $env:PCP_AURORA_ENDPOINT
     auroraDeployed        = $env:PCP_AURORA_DEPLOYED
+    auroraJobName         = $env:PCP_AURORA_JOB_NAME
     shortcutName          = 'pcp_model_outputs'
     connectionId          = $env:FABRIC_CONNECTION_ID
     createConnection      = ($env:PCP_CREATE_CONNECTION -eq 'true')

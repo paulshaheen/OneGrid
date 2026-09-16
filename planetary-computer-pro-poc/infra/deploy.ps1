@@ -1036,6 +1036,13 @@ function Phase-ChatAgent {
   # Aurora weather inference card: point the Explorer at the ARM-provisioned scoring endpoint.
   if ($cfg.pcp -and $cfg.pcp.auroraEndpoint) { $envVars += "AURORA_ENDPOINT=$($cfg.pcp.auroraEndpoint)" }
   if ($cfg.pcp -and $cfg.pcp.auroraDeployed) { $envVars += "AURORA_MODEL_DEPLOYED=$($cfg.pcp.auroraDeployed)" }
+  # Lets the Deployment page's "Run Aurora forecast now" button start the same scheduled
+  # Container Apps Job the cron trigger runs, via the app identity's Container Apps Jobs
+  # Operator grant (main.bicep chatAgentAuroraJobOperator) - no separate credentials needed.
+  if ($cfg.pcp -and $cfg.pcp.auroraJobName) {
+    $envVars += "AURORA_JOB_NAME=$($cfg.pcp.auroraJobName)"
+    $envVars += "AURORA_JOB_RESOURCE_GROUP=$rg"
+  }
   # The report-app server that hosts this web app also serves the live /api data
   # plane; flag it so the ported Explorer personas read real Fabric/Eventhouse/PBI
   # data instead of the in-browser sample set.

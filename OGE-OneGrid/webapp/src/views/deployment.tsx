@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { Boxes, Check, CloudSun, Database, ExternalLink, Shield, Sparkles } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Boxes, Check, CloudSun, Database, ExternalLink, Loader2, PlayCircle, Shield, Sparkles } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
@@ -45,12 +45,36 @@ const SECURITY: string[] = [
 export function DeploymentPage() {
   const base = useOpsBase();
   const cfg = getServiceConfig();
+  const queryClient = useQueryClient();
   const status = useQuery({
     queryKey: [base, "data-plane-status"],
     queryFn: () => getDataPlaneStatus(),
     staleTime: 5 * 60 * 1000,
   });
   const layers = useQuery(layersQuery(base));
+
+  // Manual trigger for the scheduled Aurora forecast job (see aurora.js) — runs the same
+  // detect → forecast → publish cycle the cron does, on demand, from this page.
+  const auroraRunStatus = useQuery({
+    queryKey: [base, "aurora-run-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/aurora/status", { headers: { Accept: "application/json" } });
+      return (await res.json()) as {
+        ok: boolean;
+        configured?: boolean;
+        latest?: { name: string; status?: string; startTime?: string; endTime?: string } | null;
+        message?: string;
+      };
+    },
+    staleTime: 15 * 1000,
+  });
+  const runAurora = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/aurora/run", { method: "POST" });
+      return (await res.json()) as { ok: boolean; message: string };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [base, "aurora-run-status"] }),
+  });
 
   const geoCatalogWired = Boolean(cfg.geoCatalogUrl);
   const foundryWired = Boolean(cfg.foundryEndpoint);
@@ -282,6 +306,57 @@ export function DeploymentPage() {
                 azureml://registries/azureml/models/Aurora/versions/4
               </code>
             </div>
+          </div>
+
+          <div className="panel p-4">
+            <div className="label-xs mb-2 flex items-center gap-1.5">
+              <PlayCircle className="size-3.5 text-primary" /> Aurora forecast job
+            </div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              A scheduled job runs the full forecast cycle four times a day (roughly every 6
+              hours, matching the ECMWF/GFS cadence): it pulls the latest real atmospheric
+              conditions, <strong className="text-foreground">detects</strong> any tropical
+              cyclones already present, runs Aurora, and publishes the results. There is no
+              "type in a storm's coordinates" control — Aurora only forecasts systems it finds in
+              real current conditions, it doesn't simulate a hypothetical one you place on the
+              map. The <strong className="text-foreground">storm selector</strong> elsewhere in
+              this app (Command Center, Events) only switches which already-published storm is
+              displayed — it doesn't start a new forecast.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                disabled={!auroraRunStatus.data?.configured || runAurora.isPending}
+                onClick={() => runAurora.mutate()}
+                className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {runAurora.isPending ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <PlayCircle className="size-3" />
+                )}
+                Run Aurora forecast now
+              </button>
+              {auroraRunStatus.data?.latest && (
+                <span className="text-[11px] text-muted-foreground">
+                  Last run: {auroraRunStatus.data.latest.status ?? "Unknown"}
+                  {auroraRunStatus.data.latest.startTime
+                    ? ` · ${new Date(auroraRunStatus.data.latest.startTime).toLocaleString()}`
+                    : ""}
+                </span>
+              )}
+            </div>
+            {runAurora.data && (
+              <p className={`mt-2 text-[11px] ${runAurora.data.ok ? "text-risk-normal" : "text-risk-high"}`}>
+                {runAurora.data.message}
+              </p>
+            )}
+            {!auroraRunStatus.data?.configured && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Not available: this deployment doesn't have the scheduled Aurora job enabled
+                (select "Aurora scheduled forecast job" in the Azure deployment form to enable
+                it).
+              </p>
+            )}
           </div>
         </div>
 
