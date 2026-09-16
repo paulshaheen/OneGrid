@@ -147,10 +147,13 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/models' && req.method === 'GET') return proxyModels(req, res);
   if (url.pathname === '/api/aurora/run' && req.method === 'POST') {
-    try {
-      const result = await aurora.runAuroraNow();
-      return json(res, result.ok ? 200 : 400, result);
-    } catch (e) { return json(res, 500, { ok: false, message: String(e.message || e) }); }
+    (async () => {
+      try {
+        const result = await aurora.runAuroraNow();
+        json(res, result.ok ? 200 : 400, result);
+      } catch (e) { json(res, 500, { ok: false, message: String(e.message || e) }); }
+    })();
+    return;
   }
   if (url.pathname === '/api/feedback' && req.method === 'POST') {
     const chunks = [];

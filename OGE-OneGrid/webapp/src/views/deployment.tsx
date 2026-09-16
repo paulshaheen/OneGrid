@@ -393,6 +393,11 @@ export function DeploymentPage() {
                 {runAurora.data.message}
               </p>
             )}
+            {runAurora.isError && (
+              <p className="mt-2 text-[11px] text-risk-high">
+                Request failed — could not reach the server to start the job. Try again.
+              </p>
+            )}
             {!auroraRunStatus.data?.configured && (
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Not available: this deployment doesn't have the scheduled Aurora job enabled
