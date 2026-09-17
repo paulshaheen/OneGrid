@@ -1047,6 +1047,13 @@ function Phase-ChatAgent {
   # plane; flag it so the ported Explorer personas read real Fabric/Eventhouse/PBI
   # data instead of the in-browser sample set.
   $envVars += "REPORT_API_ENABLED=1"
+  # webapp/src/lib/services/azure/server.ts calls itself back over HTTP for sites-geo,
+  # weather/events, ontology, etc. (reportApiBase() defaults to :7700 when unset) - but
+  # App Service Linux/Node pins REPORT_PORT=8080 below, so without this every one of those
+  # self-loopback calls connection-refuses, is swallowed by a try/catch, and silently
+  # returns [] - assets never populate after upload and weather always looks empty, even
+  # when the blob write / Aurora publish both succeeded. Must match REPORT_PORT exactly.
+  $envVars += "REPORT_API_URL=http://127.0.0.1:8080"
 
   # ---- Fabric data-plane wiring (KUSTO / Power BI / Data Agent) --------------------
   # These come from the Fabric-building phases' in-memory state. When this chatagent run is

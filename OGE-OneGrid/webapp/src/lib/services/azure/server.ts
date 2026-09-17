@@ -1049,46 +1049,59 @@ function isAssetLike(value: unknown): value is Asset {
   return typeof a["id"] === "string" && isCoordinate(a["lat"], a["lon"]);
 }
 
-/** Load storm objects produced by the Aurora post-processing job. */
+/** Load storm objects produced by the Aurora post-processing job, reading directly from the
+ * model-outputs blob it publishes to. Used as the primary source when the report-app data
+ * plane isn't enabled, and as a FALLBACK when it is enabled but returns nothing (e.g. Fabric
+ * isn't wired in this deployment) - so a live Aurora forecast is never hidden behind a Fabric
+ * dependency that happens to be unavailable. */
+async function listAuroraWeatherEventsFromBlob(): Promise<WeatherEvent[]> {
+  const containerUrl = process.env["UPLOAD_CONTAINER_URL"];
+  if (!containerUrl) return [];
+  const token = await getManagedIdentityToken(STORAGE_RESOURCE);
+  if (!token) return [];
+  try {
+    const res = await fetch(`${containerUrl.replace(/\/$/, "")}/${WEATHER_EVENTS_BLOB_NAME}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "x-ms-version": "2021-08-06",
+      },
+    });
+    if (!res.ok) return [];
+    const payload = (await res.json()) as unknown;
+    const events = Array.isArray(payload)
+      ? payload
+      : payload &&
+          typeof payload === "object" &&
+          Array.isArray((payload as { events?: unknown }).events)
+        ? (payload as { events: unknown[] }).events
+        : [];
+    return events.filter(isWeatherEvent);
+  } catch {
+    return [];
+  }
+}
+
 export const listAuroraWeatherEvents = createServerFn({ method: "GET" }).handler(
   async (): Promise<WeatherEvent[]> => {
-    // Unified model: when the report-app /api data plane is wired, weather events
-    // come from the conformed OneGridModel (dim_weather_event + WeatherForecast),
-    // so the same dim_asset spine carries both twin health and storm exposure.
+    // Unified model: when the report-app /api data plane is wired AND actually has data,
+    // weather events come from the conformed OneGridModel (dim_weather_event + WeatherForecast),
+    // so the same dim_asset spine carries both twin health and storm exposure. But this call is
+    // a same-box HTTP loopback (see reportApiBase()) that fails whenever Fabric isn't wired or
+    // REPORT_API_URL/REPORT_PORT are mismatched - so an empty/failed result falls back to
+    // Aurora's own published blob rather than masking a real forecast as "nothing".
     if (process.env["REPORT_API_ENABLED"] === "1") {
       try {
         const res = await fetch(`${reportApiBase()}/api/weather/events`, { headers: { Accept: "application/json" } });
-        if (!res.ok) return [];
-        const payload = (await res.json()) as unknown;
-        return Array.isArray(payload) ? payload.filter(isWeatherEvent) : [];
+        if (res.ok) {
+          const payload = (await res.json()) as unknown;
+          const events = Array.isArray(payload) ? payload.filter(isWeatherEvent) : [];
+          if (events.length > 0) return events;
+        }
       } catch {
-        return [];
+        // fall through to the blob source below
       }
     }
-    const containerUrl = process.env["UPLOAD_CONTAINER_URL"];
-    if (!containerUrl) return [];
-    const token = await getManagedIdentityToken(STORAGE_RESOURCE);
-    if (!token) return [];
-    try {
-      const res = await fetch(`${containerUrl.replace(/\/$/, "")}/${WEATHER_EVENTS_BLOB_NAME}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "x-ms-version": "2021-08-06",
-        },
-      });
-      if (!res.ok) return [];
-      const payload = (await res.json()) as unknown;
-      const events = Array.isArray(payload)
-        ? payload
-        : payload &&
-            typeof payload === "object" &&
-            Array.isArray((payload as { events?: unknown }).events)
-          ? (payload as { events: unknown[] }).events
-          : [];
-      return events.filter(isWeatherEvent);
-    } catch {
-      return [];
-    }
+    return listAuroraWeatherEventsFromBlob();
   },
 );
 
@@ -1332,55 +1345,72 @@ function parseGeoJsonAssets(text: string): Asset[] {
 }
 
 /**
+ * Read every CSV / GeoJSON the operator uploaded to the sample-assets container and parse
+ * them into the domain Asset shape. Used as the primary source when the report-app data plane
+ * isn't enabled, and as a fallback/supplement when it is enabled but returns nothing - so
+ * assets an operator actually uploaded from this page are never hidden just because Fabric
+ * (the report-app's own data source) isn't wired in this deployment.
+ */
+async function listUploadedAssetsFromBlob(): Promise<Asset[]> {
+  const containerUrl = process.env["SAMPLE_CONTAINER_URL"];
+  if (!containerUrl) return [];
+  const token = await getManagedIdentityToken(STORAGE_RESOURCE);
+  if (!token) return [];
+  const base = containerUrl.replace(/\/$/, "");
+  const authHeaders = { Authorization: `Bearer ${token}`, "x-ms-version": "2021-08-06" };
+  try {
+    const listRes = await fetch(`${base}?restype=container&comp=list`, { headers: authHeaders });
+    if (!listRes.ok) return [];
+    const xml = await listRes.text();
+    const names = Array.from(xml.matchAll(/<Name>([^<]+)<\/Name>/g)).map((m) => m[1]!);
+    const dataFiles = names.filter(
+      // Only asset files — skip the app-config blobs (e.g. threshold rules) that
+      // also live in this container.
+      (n) => /\.(csv|geojson|json)$/i.test(n) && !/(^|\/)app-config\./i.test(n),
+    );
+    const byId = new Map<string, Asset>();
+    for (const name of dataFiles) {
+      const blobPath = name.split("/").map(encodeURIComponent).join("/");
+      const res = await fetch(`${base}/${blobPath}`, { headers: authHeaders });
+      if (!res.ok) continue;
+      const body = await res.text();
+      const parsed = /\.csv$/i.test(name) ? parseCsvAssets(body) : parseGeoJsonAssets(body);
+      for (const a of parsed) byId.set(a.id, a);
+    }
+    return Array.from(byId.values());
+  } catch {
+    return [];
+  }
+}
+
+/**
  * List every CSV / GeoJSON the operator uploaded to the sample-assets container
  * and parse them into the domain Asset shape. This is what turns an upload into a
  * populated map + risk score. Later files (and later rows) win on duplicate id.
  */
 export const listUploadedAssets = createServerFn({ method: "GET" }).handler(
   async (): Promise<Asset[]> => {
-    // Unified model: when the report-app /api data plane is wired, weather assets are the
-    // FACILITIES (dim_site) — the same named sites the Digital Twin shows (Riverton,
-    // Fairview, Thunder Horse…) at their real coordinates — not the per-equipment leaves.
-    // Exposure/posture roll up to the site; the twin drills site→unit→equipment separately.
+    // Unified model: when the report-app /api data plane is wired AND actually has data,
+    // weather assets are the FACILITIES (dim_site) — the same named sites the Digital Twin
+    // shows (Riverton, Fairview, Thunder Horse…) at their real coordinates — not the
+    // per-equipment leaves. Exposure/posture roll up to the site; the twin drills
+    // site→unit→equipment separately. But this call is a same-box HTTP loopback (see
+    // reportApiBase()) that fails whenever Fabric isn't wired or REPORT_API_URL/REPORT_PORT
+    // are mismatched, so an empty/failed result falls back to whatever the operator has
+    // actually uploaded from this page rather than masking it as "nothing".
     if (process.env["REPORT_API_ENABLED"] === "1") {
       try {
         const res = await fetch(`${reportApiBase()}/api/sites-geo`, { headers: { Accept: "application/json" } });
-        if (!res.ok) return [];
-        const payload = (await res.json()) as unknown;
-        return Array.isArray(payload) ? payload.filter(isAssetLike) : [];
+        if (res.ok) {
+          const payload = (await res.json()) as unknown;
+          const assets = Array.isArray(payload) ? payload.filter(isAssetLike) : [];
+          if (assets.length > 0) return assets;
+        }
       } catch {
-        return [];
+        // fall through to the uploaded-files source below
       }
     }
-    const containerUrl = process.env["SAMPLE_CONTAINER_URL"];
-    if (!containerUrl) return [];
-    const token = await getManagedIdentityToken(STORAGE_RESOURCE);
-    if (!token) return [];
-    const base = containerUrl.replace(/\/$/, "");
-    const authHeaders = { Authorization: `Bearer ${token}`, "x-ms-version": "2021-08-06" };
-    try {
-      const listRes = await fetch(`${base}?restype=container&comp=list`, { headers: authHeaders });
-      if (!listRes.ok) return [];
-      const xml = await listRes.text();
-      const names = Array.from(xml.matchAll(/<Name>([^<]+)<\/Name>/g)).map((m) => m[1]!);
-      const dataFiles = names.filter(
-        // Only asset files — skip the app-config blobs (e.g. threshold rules) that
-        // also live in this container.
-        (n) => /\.(csv|geojson|json)$/i.test(n) && !/(^|\/)app-config\./i.test(n),
-      );
-      const byId = new Map<string, Asset>();
-      for (const name of dataFiles) {
-        const blobPath = name.split("/").map(encodeURIComponent).join("/");
-        const res = await fetch(`${base}/${blobPath}`, { headers: authHeaders });
-        if (!res.ok) continue;
-        const body = await res.text();
-        const parsed = /\.csv$/i.test(name) ? parseCsvAssets(body) : parseGeoJsonAssets(body);
-        for (const a of parsed) byId.set(a.id, a);
-      }
-      return Array.from(byId.values());
-    } catch {
-      return [];
-    }
+    return listUploadedAssetsFromBlob();
   },
 );
 
