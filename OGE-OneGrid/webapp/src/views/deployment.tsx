@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Boxes, Check, CloudSun, Database, ExternalLink, HelpCircle, Loader2, PlayCircle, Shield, Sparkles } from "lucide-react";
+import { Boxes, Check, CloudSun, Database, ExternalLink, HelpCircle, History, Loader2, PlayCircle, Shield, Sparkles } from "lucide-react";
+import { useState } from "react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
@@ -43,6 +44,37 @@ const SECURITY: string[] = [
   "Non-secret configuration published at runtime; secrets never reach the browser",
 ];
 
+// One-click historical storms. Each replays from the PUBLIC WeatherBench2 archive
+// (source hres_t0, no credentials, covers 2016–2022), which is why every date sits
+// in that window. The bbox is the genesis-detection search box; numSteps × 6h is the
+// forecast horizon. Sent to /api/aurora/run, which starts the Aurora job with these
+// as per-execution env overrides (ANALYSIS_TIME / DETECTION_BBOX / STORM_NAMES / …).
+type StormPreset = {
+  id: string;
+  label: string;
+  sub: string;
+  analysisTime: string;
+  bbox: string;
+  numSteps: number;
+};
+
+const STORM_PRESETS: StormPreset[] = [
+  { id: "ida", label: "Hurricane Ida", sub: "Aug 2021 · Louisiana", analysisTime: "2021-08-29T00:00", bbox: "-100,15,-70,35", numSteps: 12 },
+  { id: "laura", label: "Hurricane Laura", sub: "Aug 2020 · SW Louisiana", analysisTime: "2020-08-26T12:00", bbox: "-100,15,-70,35", numSteps: 12 },
+  { id: "ian", label: "Hurricane Ian", sub: "Sep 2022 · SW Florida", analysisTime: "2022-09-27T12:00", bbox: "-90,18,-76,32", numSteps: 12 },
+  { id: "michael", label: "Hurricane Michael", sub: "Oct 2018 · FL Panhandle", analysisTime: "2018-10-09T12:00", bbox: "-95,18,-78,32", numSteps: 12 },
+  { id: "harvey", label: "Hurricane Harvey", sub: "Aug 2017 · Texas coast", analysisTime: "2017-08-25T00:00", bbox: "-100,18,-88,32", numSteps: 12 },
+  { id: "irma", label: "Hurricane Irma", sub: "Sep 2017 · Florida", analysisTime: "2017-09-09T00:00", bbox: "-88,18,-74,30", numSteps: 12 },
+];
+
+const CYCLE_HOURS = ["00", "06", "12", "18"] as const;
+const REGION_PRESETS: { label: string; bbox: string }[] = [
+  { label: "Gulf of Mexico + Caribbean", bbox: "-100,15,-70,35" },
+  { label: "Texas coast", bbox: "-100,18,-88,32" },
+  { label: "Louisiana / Mississippi", bbox: "-95,20,-83,32" },
+  { label: "Florida + Straits", bbox: "-88,18,-74,30" },
+];
+
 export function DeploymentPage() {
   const base = useOpsBase();
   const cfg = getServiceConfig();
@@ -70,12 +102,45 @@ export function DeploymentPage() {
     staleTime: 15 * 1000,
   });
   const runAurora = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/aurora/run", { method: "POST" });
+    mutationFn: async (payload?: Record<string, unknown>) => {
+      const res = await fetch("/api/aurora/run", {
+        method: "POST",
+        headers: payload ? { "Content-Type": "application/json" } : undefined,
+        body: payload ? JSON.stringify(payload) : undefined,
+      });
       return (await res.json()) as { ok: boolean; message: string };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [base, "aurora-run-status"] }),
   });
+
+  // Historical-storm replay form state. `selected` is a preset id, "custom", or "".
+  const [selected, setSelected] = useState<string>("");
+  const [customDate, setCustomDate] = useState<string>("");
+  const [customHour, setCustomHour] = useState<string>("12");
+  const [customBbox, setCustomBbox] = useState<string>(REGION_PRESETS[0].bbox);
+  const [customName, setCustomName] = useState<string>("");
+
+  const replayPayload = (): Record<string, unknown> | null => {
+    if (selected === "custom") {
+      if (!customDate) return null;
+      return {
+        analysisTime: `${customDate}T${customHour}:00`,
+        source: "hres_t0",
+        bbox: customBbox,
+        stormName: customName.trim() || undefined,
+        numSteps: 12,
+      };
+    }
+    const preset = STORM_PRESETS.find((p) => p.id === selected);
+    if (!preset) return null;
+    return {
+      analysisTime: preset.analysisTime,
+      source: "hres_t0",
+      bbox: preset.bbox,
+      stormName: preset.label,
+      numSteps: preset.numSteps,
+    };
+  };
 
   const geoCatalogWired = Boolean(cfg.geoCatalogUrl);
   const foundryWired = Boolean(cfg.foundryEndpoint);
@@ -346,10 +411,12 @@ export function DeploymentPage() {
                     </p>
                     <p>
                       <strong className="text-foreground">Changing which storm it finds:</strong>{" "}
-                      there's no "pick a storm" input — Aurora only forecasts a real cyclone it
-                      detects in the data, it can't invent one. The only levers are the
-                      geographic search box and the point in time analyzed, and neither is
-                      exposed here yet — they're fixed values in the deployment template today.
+                      Aurora only forecasts a real cyclone it detects in the data — it can't
+                      invent one. The two levers are the point in time analyzed and the
+                      geographic search box. The <strong className="text-foreground">Replay a
+                      historical storm</strong> panel below exposes exactly those: pick a past
+                      hurricane (or a custom 2016–2022 date + region) and Aurora re-forecasts the
+                      real system from that snapshot.
                     </p>
                   </div>
                 </PopoverContent>
@@ -359,17 +426,17 @@ export function DeploymentPage() {
               A scheduled job runs the full forecast cycle four times a day (roughly every 6
               hours, matching the ECMWF/GFS cadence): it pulls the latest real atmospheric
               conditions, <strong className="text-foreground">detects</strong> any tropical
-              cyclones already present, runs Aurora, and publishes the results. There is no
-              "type in a storm's coordinates" control — Aurora only forecasts systems it finds in
-              real current conditions, it doesn't simulate a hypothetical one you place on the
-              map. The <strong className="text-foreground">storm selector</strong> elsewhere in
-              this app (Command Center, Events) only switches which already-published storm is
-              displayed — it doesn't start a new forecast.
+              cyclones already present, runs Aurora, and publishes the results. Aurora never
+              simulates a hypothetical storm — it only forecasts a cyclone it actually detects.
+              You can point it at <strong className="text-foreground">now</strong> (the button
+              below) or <strong className="text-foreground">replay a past hurricane</strong> from
+              the public archive (the panel below that) — in both cases Aurora finds and tracks
+              the real system in that snapshot.
             </p>
             <div className="mt-3 flex items-center gap-2">
               <button
                 disabled={!auroraRunStatus.data?.configured || runAurora.isPending}
-                onClick={() => runAurora.mutate()}
+                onClick={() => runAurora.mutate(undefined)}
                 className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {runAurora.isPending ? (
@@ -404,6 +471,124 @@ export function DeploymentPage() {
                 (select "Aurora scheduled forecast job" in the Azure deployment form to enable
                 it).
               </p>
+            )}
+
+            {auroraRunStatus.data?.configured && (
+              <div className="mt-4 border-t pt-3">
+                <div className="label-xs mb-1 flex items-center gap-1.5">
+                  <History className="size-3.5 text-primary" /> Replay a historical storm
+                </div>
+                <p className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Re-run Aurora against a past hurricane from the public WeatherBench2 archive
+                  (2016–2022, no credentials). Pick one below and Aurora re-forecasts its track
+                  onto your asset map — the same detect → forecast → publish cycle, just aimed at
+                  a historical date.
+                </p>
+
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                  {STORM_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setSelected(p.id)}
+                      className={`flex flex-col items-start rounded-sm border px-2 py-1.5 text-left transition-colors ${
+                        selected === p.id
+                          ? "border-primary/60 bg-primary/10"
+                          : "border-border hover:bg-accent"
+                      }`}
+                    >
+                      <span className="text-[11px] font-medium text-foreground">{p.label}</span>
+                      <span className="text-[10px] text-muted-foreground">{p.sub}</span>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSelected("custom")}
+                    className={`flex flex-col items-start rounded-sm border px-2 py-1.5 text-left transition-colors ${
+                      selected === "custom"
+                        ? "border-primary/60 bg-primary/10"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    <span className="text-[11px] font-medium text-foreground">Custom date…</span>
+                    <span className="text-[10px] text-muted-foreground">Pick any 2016–2022 storm</span>
+                  </button>
+                </div>
+
+                {selected === "custom" && (
+                  <div className="mt-2.5 grid gap-2 rounded-sm border bg-card p-2.5 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                      Analysis date (UTC)
+                      <input
+                        type="date"
+                        min="2016-01-01"
+                        max="2022-12-31"
+                        value={customDate}
+                        onChange={(e) => setCustomDate(e.target.value)}
+                        className="rounded-sm border bg-background px-2 py-1 text-[11px] text-foreground"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                      Cycle hour (UTC)
+                      <select
+                        value={customHour}
+                        onChange={(e) => setCustomHour(e.target.value)}
+                        className="rounded-sm border bg-background px-2 py-1 text-[11px] text-foreground"
+                      >
+                        {CYCLE_HOURS.map((h) => (
+                          <option key={h} value={h}>{h}:00</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                      Search region
+                      <select
+                        value={customBbox}
+                        onChange={(e) => setCustomBbox(e.target.value)}
+                        className="rounded-sm border bg-background px-2 py-1 text-[11px] text-foreground"
+                      >
+                        {REGION_PRESETS.map((r) => (
+                          <option key={r.bbox} value={r.bbox}>{r.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                      Storm label (optional)
+                      <input
+                        type="text"
+                        value={customName}
+                        placeholder="e.g. Hurricane Delta"
+                        onChange={(e) => setCustomName(e.target.value)}
+                        className="rounded-sm border bg-background px-2 py-1 text-[11px] text-foreground"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    disabled={
+                      runAurora.isPending ||
+                      replayPayload() === null
+                    }
+                    onClick={() => {
+                      const payload = replayPayload();
+                      if (payload) runAurora.mutate(payload);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {runAurora.isPending ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <History className="size-3" />
+                    )}
+                    Replay selected storm
+                  </button>
+                  <span className="text-[10px] text-muted-foreground">
+                    Runs on the GPU endpoint — allow a few minutes.
+                  </span>
+                </div>
+              </div>
             )}
           </div>
         </div>

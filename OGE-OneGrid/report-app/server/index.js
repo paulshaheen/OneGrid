@@ -147,12 +147,17 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname === '/api/models' && req.method === 'GET') return proxyModels(req, res);
   if (url.pathname === '/api/aurora/run' && req.method === 'POST') {
-    (async () => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
       try {
-        const result = await aurora.runAuroraNow();
+        let body = Buffer.concat(chunks).toString('utf8');
+        if (body && body.charCodeAt(0) === 0xFEFF) body = body.slice(1);
+        const overrides = body.trim() ? JSON.parse(body) : undefined;
+        const result = await aurora.runAuroraNow(overrides);
         json(res, result.ok ? 200 : 400, result);
       } catch (e) { json(res, 500, { ok: false, message: String(e.message || e) }); }
-    })();
+    });
     return;
   }
   if (url.pathname === '/api/feedback' && req.method === 'POST') {
