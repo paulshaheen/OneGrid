@@ -124,6 +124,6 @@ export function useSolution(): Solution {
 /** Branding for the active solution: wordmark suffix + accent, product name, domain. */
 export function solutionBrand(s: Solution): { word: string; name: string; domain: string; accent: string } {
   return s === "og"
-    ? { word: "FIELD", name: "OneField", domain: "Oil & Gas", accent: "#f59e0b" }
+    ? { word: "RIG", name: "OneRig", domain: "Oil & Gas", accent: "#f59e0b" }
     : { word: "GRID", name: "OneGrid", domain: "Energy", accent: "#38bdf8" };
 }
