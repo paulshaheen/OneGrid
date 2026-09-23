@@ -286,8 +286,8 @@ function OneGridMark({ className }: { className?: string }) {
   );
 }
 
-/** OneField brand mark: drilling derrick + oil droplet. */
-function OneFieldMark({ className }: { className?: string }) {
+/** OneRig brand mark: drilling derrick + oil droplet. */
+function OneRigMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
       {/* oil droplet cresting the derrick */}
@@ -431,7 +431,7 @@ export function AppShell({
                   : "linear-gradient(135deg, var(--color-primary), oklch(0.5 0.145 251))",
             }}
           >
-            {solution === "og" ? <OneFieldMark className="size-5" /> : <OneGridMark className="size-5" />}
+            {solution === "og" ? <OneRigMark className="size-5" /> : <OneGridMark className="size-5" />}
           </span>
           {!collapsed && (
             <div className="leading-tight">
