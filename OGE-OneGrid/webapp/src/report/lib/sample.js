@@ -2,6 +2,7 @@
 // report-app personas/components run with no backend. Every generator is deterministic
 // (seeded by asset/tag id) and returns the EXACT shape dataApi.js produced, so the
 // original components render unchanged. Field names mirror the DAX/KQL result columns.
+import { getSolution } from "../../lib/solution";
 
 // ── deterministic helpers ────────────────────────────────────────────────
 function hash(s) {
@@ -130,7 +131,122 @@ function canonicalAssets() {
   }
   return out;
 }
-const ASSETS = canonicalAssets();
+// ── Oil & Gas estate (parallel to the electric PLANTS/TRAIN above) ─────────
+// Same asset shape as canonicalAssets(), so every downstream generator (fleet,
+// facility model, health, work orders, anomalies, predictions, twin) produces
+// O&G content unchanged. Each `type` maps to an O&G GLB via equipmentType.js /
+// Equipment.jsx (well, offshore_platform, refinery, lng_terminal, storage, port,
+// pipeline + shared turbine/pump/generator/boiler).
+const OG_FACILITIES = [
+  {
+    plant: "West Delta", unit: "WD-143",
+    equip: [
+      { name: "Fixed Platform WD-143", type: "offshore_platform", category: "Structure", group: "platform",
+        stems: [["STRUCT.VIBR", "Topside vibration", "mm/s"], ["RISER.PRESS", "Riser pressure", "bar"]] },
+      { name: "Wellhead WD-12", type: "well", category: "Wells", group: "wellhead",
+        stems: [["WHP.PRESS", "Wellhead pressure", "bar"], ["WHT.TEMP", "Wellhead temp", "°C"], ["CHOKE.POS", "Choke position", "%"]] },
+      { name: "Wellhead WD-15", type: "well", category: "Wells", group: "wellhead", status: "watch",
+        stems: [["WHP.PRESS", "Wellhead pressure", "bar"], ["WHT.TEMP", "Wellhead temp", "°C"], ["CHOKE.POS", "Choke position", "%"]] },
+      { name: "Gas Turbine GTG-A", type: "turbine", category: "Rotating", group: "turbine",
+        stems: [["GT.VIBR", "Turbine vibration", "mm/s"], ["GT.RPM", "Turbine speed", "rpm"], ["GT.EXH_TEMP", "Exhaust temp", "°C"], ["GT.BRG_TEMP", "Bearing temp", "°C"]] },
+      { name: "Export Pump P-101", type: "pump", category: "Rotating", group: "pump",
+        stems: [["PMP.VIBR", "Pump vibration", "mm/s"], ["PMP.DISCH_PRESS", "Discharge pressure", "bar"], ["PMP.BRG_TEMP", "Bearing temp", "°C"]] },
+      { name: "Power Generator EG-1", type: "generator", category: "Electrical", group: "generator",
+        stems: [["GEN.STATOR_TEMP", "Stator temp", "°C"], ["GEN.LOAD", "Net load", "MW"]] },
+    ],
+  },
+  {
+    plant: "Mars-Ursa", unit: "Mars TLP",
+    equip: [
+      { name: "Fixed Platform Mars-TLP", type: "offshore_platform", category: "Structure", group: "platform",
+        stems: [["STRUCT.VIBR", "Topside vibration", "mm/s"], ["RISER.PRESS", "Riser pressure", "bar"]] },
+      { name: "Wellhead MR-03", type: "well", category: "Wells", group: "wellhead", status: "critical",
+        stems: [["WHP.PRESS", "Wellhead pressure", "bar"], ["WHT.TEMP", "Wellhead temp", "°C"], ["CHOKE.POS", "Choke position", "%"]] },
+      { name: "Compressor Turbine GTC-1", type: "turbine", category: "Rotating", group: "turbine",
+        stems: [["GT.VIBR", "Turbine vibration", "mm/s"], ["GT.RPM", "Turbine speed", "rpm"], ["GT.BRG_TEMP", "Bearing temp", "°C"]] },
+      { name: "Injection Pump P-210", type: "pump", category: "Rotating", group: "pump",
+        stems: [["PMP.VIBR", "Pump vibration", "mm/s"], ["PMP.DISCH_PRESS", "Discharge pressure", "bar"]] },
+    ],
+  },
+  {
+    plant: "Port Arthur", unit: "Crude Unit 2",
+    equip: [
+      { name: "Crude Distillation CDU-2", type: "refinery", category: "Process", group: "refinery",
+        stems: [["CDU.FEED_TEMP", "Feed temp", "°C"], ["CDU.TOP_PRESS", "Column top pressure", "bar"]] },
+      { name: "Fired Heater H-201", type: "boiler", category: "Fired", group: "heater", status: "watch",
+        stems: [["HTR.COIL_TEMP", "Coil temp", "°C"], ["HTR.O2", "Flue-gas O₂", "%"], ["HTR.PRESS", "Pass pressure", "bar"]] },
+      { name: "Charge Pump P-2", type: "pump", category: "Rotating", group: "pump",
+        stems: [["PMP.VIBR", "Pump vibration", "mm/s"], ["PMP.DISCH_PRESS", "Discharge pressure", "bar"]] },
+    ],
+  },
+  {
+    plant: "Sabine Pass", unit: "Train 1",
+    equip: [
+      { name: "LNG Liquefaction Train 1", type: "lng_terminal", category: "Process", group: "lng",
+        stems: [["LNG.COLD_TEMP", "Cold box temp", "°C"], ["LNG.PRESS", "Train pressure", "bar"]] },
+      { name: "Refrigerant Turbine RT-1", type: "turbine", category: "Rotating", group: "turbine",
+        stems: [["GT.VIBR", "Turbine vibration", "mm/s"], ["GT.RPM", "Turbine speed", "rpm"], ["GT.BRG_TEMP", "Bearing temp", "°C"]] },
+      { name: "LNG Storage Tank T-101", type: "storage", category: "Static", group: "storage",
+        stems: [["TK.LEVEL", "Tank level", "%"], ["TK.TEMP", "Tank temp", "°C"]] },
+    ],
+  },
+  {
+    plant: "Clovelly Hub", unit: "Tank Farm",
+    equip: [
+      { name: "Crude Storage Tank T-5", type: "storage", category: "Static", group: "storage",
+        stems: [["TK.LEVEL", "Tank level", "%"], ["TK.TEMP", "Tank temp", "°C"]] },
+      { name: "Crude Storage Tank T-6", type: "storage", category: "Static", group: "storage", status: "watch",
+        stems: [["TK.LEVEL", "Tank level", "%"], ["TK.TEMP", "Tank temp", "°C"]] },
+      { name: "Transfer Pump P-30", type: "pump", category: "Rotating", group: "pump",
+        stems: [["PMP.VIBR", "Pump vibration", "mm/s"], ["PMP.DISCH_PRESS", "Discharge pressure", "bar"]] },
+    ],
+  },
+  {
+    plant: "Louisiana Offshore", unit: "LOOP",
+    equip: [
+      { name: "Export Pipeline PL-1", type: "pipeline", category: "Transport", group: "pipeline",
+        stems: [["PL.PRESS", "Line pressure", "bar"], ["PL.FLOW", "Line flow", "kbbl/d"]] },
+      { name: "Marine Terminal Berth-2", type: "port", category: "Marine", group: "port",
+        stems: [["BERTH.PRESS", "Loading pressure", "bar"], ["BERTH.RATE", "Loading rate", "kbbl/h"]] },
+      { name: "Booster Pump P-40", type: "pump", category: "Rotating", group: "pump",
+        stems: [["PMP.VIBR", "Pump vibration", "mm/s"], ["PMP.DISCH_PRESS", "Discharge pressure", "bar"]] },
+    ],
+  },
+];
+
+function canonicalAssetsOG() {
+  const out = [];
+  for (const f of OG_FACILITIES) {
+    for (const e of f.equip) {
+      const key = `${f.unit}_${e.name}`.replace(/\W+/g, "_");
+      const tags = e.stems.map(([s, desc, units]) => ({ tag: `${key}:${s}`, desc, units, role: "watch" }));
+      out.push({
+        asset_id: key,
+        name: e.name,
+        unit: f.unit,
+        plant: f.plant,
+        category: e.category,
+        group: e.group,
+        type: e.type,
+        running_tag: tags[0].tag,
+        tags,
+        status: e.status || "ok",
+      });
+    }
+  }
+  return out;
+}
+
+// O&G outage seed (mirrors the electric one in outages(), O&G facilities/reasons).
+const OG_OUTAGE_SEED = [
+  { plant: "Mars-Ursa", unit: "Mars TLP", type: "Forced Outage", status: "Active", reason: "Wellhead pressure excursion", mw: 30, active: true },
+  { plant: "Port Arthur", unit: "Crude Unit 2", type: "Planned Maintenance", status: "Active", reason: "Fired heater tube inspection", mw: 15, active: true },
+  { plant: "West Delta", unit: "WD-143", type: "Derate", status: "Active", reason: "Gas compression capacity limit", mw: 20, active: true },
+  { plant: "Clovelly Hub", unit: "Tank Farm", type: "Planned Maintenance", status: "Scheduled", reason: "Tank T-6 API 653 inspection", mw: 0, active: false },
+  { plant: "Sabine Pass", unit: "Train 1", type: "Planned Maintenance", status: "Scheduled", reason: "Refrigerant compressor overhaul", mw: 0, active: false },
+];
+
+const ASSETS = getSolution() === "og" ? canonicalAssetsOG() : canonicalAssets();
 const BY_ID = Object.fromEntries(ASSETS.map((a) => [a.asset_id, a]));
 
 // ── physical baseline per tag ─────────────────────────────────────────────
@@ -618,7 +734,7 @@ export function assetWorkOrders(id, limit = 40) {
 export function outages() {
   const r = rng("outages");
   const rows = [];
-  const seed = [
+  const seed = getSolution() === "og" ? OG_OUTAGE_SEED : [
     {
       plant: "Riverton",
       unit: "RV3",
