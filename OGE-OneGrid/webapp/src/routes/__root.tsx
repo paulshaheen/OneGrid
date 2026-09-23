@@ -157,6 +157,13 @@ function RuntimeConfigScript() {
     // Runtime override to force the synthetic sample estate on a live-built package
     // (no rebuild): set the App Service app setting USE_SAMPLE_DATA=true.
     useSampleData: process.env["USE_SAMPLE_DATA"] === "true",
+    // Which solution this deployment defaults to when the visitor has no ?solution=
+    // param or saved choice. A wired tenant (GeoCatalog + report API) defaults to
+    // Energy; a sample-only / marketing build defaults to Oil & Gas.
+    defaultSolution:
+      process.env["USE_SAMPLE_DATA"] === "true" || !process.env["GEOCATALOG_URI"]
+        ? "og"
+        : "energy",
   };
   const json = JSON.stringify(config).replace(/</g, "\\u003c");
   return <script dangerouslySetInnerHTML={{ __html: `window.__APP_CONFIG__=${json}` }} />;
