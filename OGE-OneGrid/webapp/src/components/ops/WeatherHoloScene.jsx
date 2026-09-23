@@ -330,6 +330,12 @@ function buildConeStrip(pts, y) {
 // HDR sun colour (multiplied past 1 so bloom turns it into a glowing sun).
 const SUN_COLOR = new THREE.Color("#fff3d6").multiplyScalar(5);
 
+// Light/Dark for the 3D scenes (read at render). Day mode uses a light sky + lit terrain;
+// night mode keeps the immersive dark-space look.
+function sceneDark() {
+  return typeof document === "undefined" || document.documentElement.classList.contains("dark");
+}
+
 // ── Star dome ────────────────────────────────────────────────────────────────
 function StarField({ count = 3000, radius = 640, full = false }) {
   const geo = useMemo(() => {
@@ -411,9 +417,10 @@ function buildUSMap(flat = false) {
     cMid = new THREE.Color("#12463a"),
     cHi = new THREE.Color("#3f5238"),
     cPeak = new THREE.Color("#6b6f63");
-  // command view: dark, cool navy palette (no green/earth elevation ramp)
-  const cDarkLo = new THREE.Color("#0a1626"),
-    cDarkHi = new THREE.Color("#122a44");
+  // command view: navy in dark mode, soft blue-grey in light mode (no earth ramp)
+  const _ccDark = typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : true;
+  const cDarkLo = new THREE.Color(_ccDark ? "#0a1626" : "#c6d6ea"),
+    cDarkHi = new THREE.Color(_ccDark ? "#122a44" : "#a7bfd9");
   for (let i = 0; i < p.count; i++) {
     const wx = p.getX(i) + cx,
       wz = p.getZ(i) + cz;
@@ -1018,6 +1025,38 @@ function AssetPin({ asset, level, selected, dimmed = false, hovered, onSelect, o
           </>
         )}
       </group>
+    </group>
+  );
+}
+
+// ── Pipeline: draw the route geometry as a draped line (not a dot) ──────────
+function PipelineRoute({ asset, level, selected, dimmed = false, onSelect, onHover, heightAt, flat = false }) {
+  const color = riskColor(level);
+  const pts = useMemo(() => {
+    const g = Array.isArray(asset.geometry) ? asset.geometry : [];
+    return g.map(([lon, lat]) => {
+      const [x, z] = project(lon, lat);
+      const y = (heightAt ? Math.max(0.05, heightAt(x, z)) : 0) + (flat ? 0.14 : 0.12);
+      return [x, y, z];
+    });
+  }, [asset, heightAt, flat]);
+  if (pts.length < 2) return null;
+  const dd = dimmed ? 0.3 : 1;
+  const lw = selected ? 3.6 : 2.4;
+  return (
+    <group>
+      {/* soft glow underlay */}
+      <Line points={pts} color={color} lineWidth={lw * 2.8} transparent opacity={0.1 * dd} />
+      <Line
+        points={pts}
+        color={color}
+        lineWidth={lw}
+        transparent
+        opacity={0.92 * dd}
+        onPointerOver={(e) => { e.stopPropagation(); onHover?.(asset.id); document.body.style.cursor = "pointer"; }}
+        onPointerOut={() => { onHover?.(null); document.body.style.cursor = "auto"; }}
+        onClick={(e) => { if (e.delta > 4) return; e.stopPropagation(); onSelect?.(asset.id); }}
+      />
     </group>
   );
 }
@@ -1709,12 +1748,12 @@ function GlobeScene({ storms, hour, onEnter, accent = "#3f96ff" }) {
   );
   return (
     <>
-      <color attach="background" args={["#02040a"]} />
-      <fog attach="fog" args={["#02040a", 240, 680]} />
-      <hemisphereLight intensity={0.06} groundColor={"#0a0f18"} color={"#33405a"} />
+      <color attach="background" args={[sceneDark() ? "#02040a" : "#e7edf6"]} />
+      <fog attach="fog" args={[sceneDark() ? "#02040a" : "#e7edf6", 240, 680]} />
+      <hemisphereLight intensity={sceneDark() ? 0.06 : 0.85} groundColor={sceneDark() ? "#0a0f18" : "#d8e2ee"} color={sceneDark() ? "#33405a" : "#eaf1ff"} />
       <directionalLight position={[150, 120, 90]} intensity={0.9} color={"#fff2d6"} />
       <directionalLight position={[40, 120, 60]} intensity={0.28} color={"#5f79b8"} />
-      <StarField full count={2800} radius={560} />
+      {sceneDark() && <StarField full count={2800} radius={560} />}
       {/* the sun — a bright HDR core; bloom turns it into a soft glow */}
       <mesh position={[150, 30, -190]}>
         <sphereGeometry args={[16, 32, 32]} />
@@ -1727,9 +1766,9 @@ function GlobeScene({ storms, hour, onEnter, accent = "#3f96ff" }) {
             <mesh>
               <sphereGeometry args={[R, 48, 48]} />
               <meshStandardMaterial
-                color="#05101d"
-                emissive="#0a1e33"
-                emissiveIntensity={0.5}
+                color={sceneDark() ? "#05101d" : "#bcd0e6"}
+                emissive={sceneDark() ? "#0a1e33" : "#d8e6f4"}
+                emissiveIntensity={sceneDark() ? 0.5 : 0.2}
                 metalness={0.2}
                 roughness={0.9}
               />
@@ -1907,13 +1946,13 @@ function Scene({
 
   return (
     <>
-      {!flat && <color attach="background" args={["#02040a"]} />}
-      {!flat && <fog attach="fog" args={["#02040a", 340, 900]} />}
-      <hemisphereLight intensity={0.12} groundColor={"#0a0f18"} color={"#33405a"} />
+      {!flat && <color attach="background" args={[sceneDark() ? "#02040a" : "#e7edf6"]} />}
+      {!flat && <fog attach="fog" args={[sceneDark() ? "#02040a" : "#e7edf6", 340, 900]} />}
+      <hemisphereLight intensity={sceneDark() ? 0.12 : 0.9} groundColor={sceneDark() ? "#0a0f18" : "#d8e2ee"} color={sceneDark() ? "#33405a" : "#eaf1ff"} />
       {/* warm "sun" keys the topography; cool fill lifts the shadow side */}
       <directionalLight position={[70, 150, 90]} intensity={0.75} color={"#fff2d6"} />
       <directionalLight position={[-90, 120, -40]} intensity={0.25} color={"#5f79b8"} />
-      {!flat && <StarField />}
+      {!flat && sceneDark() && <StarField />}
       {/* Ground plane: opaque deep water for the globe/regional view; an invisible
           click-catcher in the flat command view so the CSS background gradient
           shows through the discarded-sea fragments. */}
@@ -1922,7 +1961,7 @@ function Scene({
         {flat ? (
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         ) : (
-          <meshStandardMaterial color="#04121f" metalness={0.2} roughness={0.95} />
+          <meshStandardMaterial color={sceneDark() ? "#04121f" : "#c9d8ea"} metalness={0.2} roughness={0.95} />
         )}
       </mesh>
       <primitive object={map.terrain} onClick={onGround} />
@@ -1951,6 +1990,21 @@ function Scene({
         })()}
       {showAssets &&
         assets.map((a) => {
+          if (a.type === "pipeline") {
+            return (
+              <PipelineRoute
+                key={a.id}
+                asset={a}
+                level={risks?.get?.(a.id)?.level}
+                selected={selectedId === a.id}
+                dimmed={!!highlightSet && !highlightSet.has(a.id)}
+                onSelect={onSelect}
+                onHover={setHovered}
+                heightAt={map.heightAt}
+                flat={flat}
+              />
+            );
+          }
           const Marker = MAJOR_SET.has(a.type) ? AssetPin : WellMarker;
           return (
             <Marker

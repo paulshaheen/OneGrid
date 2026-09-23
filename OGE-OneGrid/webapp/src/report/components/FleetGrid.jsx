@@ -132,15 +132,15 @@ export function AssetModal({ theme, asset, onClose }) {
     <Modal open={!!asset} onClose={onClose} theme={theme} size="max-w-5xl">
       {asset && (
         <div className="flex flex-col max-h-[90vh]" style={{ background: surface }}>
-          {/* solid dark banner — flows into the 3D viewport, no dashboard bleed-through */}
-          <div className="relative" style={{ background: '#0f1522' }}>
+          {/* solid banner — flows into the 3D viewport, themed light/dark */}
+          <div className="relative" style={{ background: surface }}>
             <div className="absolute top-0 inset-x-0 h-[2px]" style={{ background: s.color }} />
             <div className="p-5 flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 <HealthRing value={(asset.score ?? asset.health) != null ? (asset.score ?? asset.health) : null} color={s.color} />
                 <div>
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <h2 className="text-xl font-bold text-white tracking-tight">{asset.name}</h2>
+                    <h2 className={`text-xl font-bold tracking-tight ${theme.heading}`}>{asset.name}</h2>
                     <span className="eyebrow inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full"
                       style={{ background: `${s.color}14`, color: s.color, border: `1px solid ${s.color}3a` }}>
                       <span className="w-1.5 h-1.5 rounded-full" style={{ background: s.color }} />{s.label}
@@ -153,25 +153,25 @@ export function AssetModal({ theme, asset, onClose }) {
                       </span>
                     )}
                   </div>
-                  <div className="text-[13px] mt-1.5 text-slate-400 flex items-center gap-2 flex-wrap">
-                    <span className="text-slate-300 font-medium">{EQUIP_LABEL[eqType] || 'Equipment'}</span>
-                    <span className="text-slate-600">•</span><span>{asset.plant}</span>
-                    <span className="text-slate-600">•</span><span>Unit {asset.unit}</span>
-                    {asset.max_z != null && (<><span className="text-slate-600">•</span><span>Peak z {fmt(asset.max_z, 0)}</span></>)}
+                  <div className={`text-[13px] mt-1.5 ${theme.sub} flex items-center gap-2 flex-wrap`}>
+                    <span className={`font-medium ${theme.heading}`}>{EQUIP_LABEL[eqType] || 'Equipment'}</span>
+                    <span className="opacity-50">•</span><span>{asset.plant}</span>
+                    <span className="opacity-50">•</span><span>Unit {asset.unit}</span>
+                    {asset.max_z != null && (<><span className="opacity-50">•</span><span>Peak z {fmt(asset.max_z, 0)}</span></>)}
                   </div>
                 </div>
               </div>
-              <button onClick={onClose} className="text-2xl leading-none text-slate-400 hover:text-white transition -mt-1">×</button>
+              <button onClick={onClose} className={`text-2xl leading-none ${theme.sub} hover:opacity-70 transition -mt-1`}>×</button>
             </div>
 
             <div className="px-5 pb-3">
-              <div className="inline-flex flex-wrap gap-1 p-1 rounded-[8px] bg-white/[.03] border border-white/10">
+              <div className={`inline-flex flex-wrap gap-1 p-1 rounded-[8px] border ${theme.mode === 'light' ? 'bg-black/[0.03] border-black/10' : 'bg-white/[.03] border-white/10'}`}>
                 {[['model', '3D Model'], ['root', 'Root Cause'], ['watch', 'Watchlist'], ['anom', 'Anomalies'], ['pred', 'Predictions'], ['sim', 'Simulation'], ['wo', 'Work Orders']].map(([k, l]) => (
                   <button key={k} onClick={() => setTab(k)}
                     className="px-3.5 py-1.5 rounded-[6px] text-sm font-semibold transition"
                     style={tab === k
-                      ? { background: `${theme.accent}22`, color: '#e6eef8', border: `1px solid ${theme.accent}55` }
-                      : { color: '#9fb0c6', border: '1px solid transparent' }}>{l}</button>
+                      ? { background: `${theme.accent}22`, color: theme.accent, border: `1px solid ${theme.accent}55` }
+                      : { color: theme.mode === 'light' ? '#5b6b82' : '#9fb0c6', border: '1px solid transparent' }}>{l}</button>
                 ))}
               </div>
             </div>

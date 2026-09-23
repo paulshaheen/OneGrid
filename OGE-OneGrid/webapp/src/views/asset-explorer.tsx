@@ -12,7 +12,7 @@ import { InlineFacility } from "@/components/ops/InlineFacility";
 import { useOpsBase } from "@/components/ops/ops-nav";
 import { useOpsSnapshot, eventsQuery } from "@/lib/hooks/use-ops-data";
 import type { Asset, AssetRisk } from "@/lib/domain/types";
-import { MODES } from "@/report/lib/themes.js";
+import { useMode } from "@/lib/theme-mode";
 import { getJson } from "@/report/lib/api.js";
 
 // Asset Explorer — a navigator for the estate. Drill the hierarchy:
@@ -67,10 +67,14 @@ const TREE_CSS = `
 .ae-spacer { width:14px; flex-shrink:0; }
 .ae-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:500; white-space:nowrap; }
 .ae-badge svg { width:11px; height:11px; }
-.ae-badge-red { background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.4); color:#fca5a5; box-shadow:0 0 8px rgba(248,113,113,0.2); }
-.ae-badge-red svg { stroke:#fca5a5; }
-.ae-badge-yellow { background:rgba(250,204,21,0.15); border:1px solid rgba(250,204,21,0.4); color:#fef08a; }
-.ae-badge-blue { background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.4); color:#38bdf8; }
+.ae-badge-red { background:rgba(248,113,113,0.15); border:1px solid rgba(248,113,113,0.45); color:#b91c1c; box-shadow:0 0 8px rgba(248,113,113,0.2); }
+.ae-badge-red svg { stroke:#b91c1c; }
+.ae-badge-yellow { background:rgba(250,204,21,0.18); border:1px solid rgba(202,138,4,0.55); color:#a16207; }
+.ae-badge-blue { background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.45); color:#0369a1; }
+.dark .ae-badge-red { color:#fca5a5; }
+.dark .ae-badge-red svg { stroke:#fca5a5; }
+.dark .ae-badge-yellow { color:#fde68a; }
+.dark .ae-badge-blue { color:#38bdf8; }
 .ae-count { font-size:12px; color:#8b949e; min-width:16px; text-align:right; }
 .ae-node-content.ae-selected .ae-count { color:#f0f6fc; font-weight:600; }
 .ae-tree-children { list-style:none; padding-left:22px; margin:0; position:relative; }
@@ -172,6 +176,7 @@ function findNode(nodes: Node[], id: string): Node | null {
 export function AssetExplorerPage() {
   const router = useRouter();
   const base = useOpsBase();
+  const mode = useMode();
   const search = useSearch({ strict: false });
   const snap = useOpsSnapshot(base, 120);
   const { assets, riskMap, event } = snap;
@@ -601,8 +606,7 @@ export function AssetExplorerPage() {
                   showModel
                     ? undefined
                     : {
-                        background:
-                          "radial-gradient(ellipse 80% 70% at 50% 45%, #1b273d 0%, #0f172a 45%, #080d1a 75%, #020617 100%)",
+                        background: "var(--og-map-gradient, radial-gradient(ellipse 80% 70% at 50% 45%, #1b273d 0%, #0f172a 45%, #080d1a 75%, #020617 100%))",
                       }
                 }
               >
@@ -637,7 +641,7 @@ export function AssetExplorerPage() {
       </div>
 
       {AssetModal && (
-        <AssetModal theme={MODES.dark} asset={modalAsset} onClose={() => setModalAsset(null)} />
+        <AssetModal theme={mode} asset={modalAsset} onClose={() => setModalAsset(null)} />
       )}
     </AppShell>
   );

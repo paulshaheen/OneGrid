@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect, Suspense, lazy } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Html, ContactShadows, Environment } from '@react-three/drei';
-import { EquipmentGeometry, anchorsFor, viewFor, equipmentType } from '../three/Equipment.jsx';
+import { EquipmentGeometry, FacilityModel, anchorsFor, viewFor, equipmentType } from '../three/Equipment.jsx';
+import { useModelRes } from '../../lib/model-res';
 import { Feedback } from './Feedback.jsx';
 import { getJson } from '../lib/api.js';
 
@@ -237,6 +238,16 @@ function FailMarker({ pos, color, stress, broken }) {
 
 function TwinRig({ type, target, stress, broken, theme }) {
   const grp = useRef();
+  // High-def shows the photoreal GLB; low-def uses the procedural model that can tint red
+  // under stress. (GLBs can't be recolored, so the stress hue only shows in low-def.)
+  const lowRes = useModelRes() === 'low';
+  // Size the self-fitting GLB to the per-type camera distance so it fills the frame like the
+  // procedural model does (the sim camera is viewFor(type), tuned for the procedural sizes).
+  const glbHeight = useMemo(() => {
+    const v = viewFor(type);
+    const d = Math.hypot(v.position[0], v.position[1], v.position[2]);
+    return Math.max(3, d * 0.42);
+  }, [type]);
   const accent = broken ? '#ff5470' : lerpHex(theme.accent || '#3f96ff', '#ff8c42', stress * 0.9);
   useFrame((st) => {
     if (!grp.current) return;
@@ -249,8 +260,12 @@ function TwinRig({ type, target, stress, broken, theme }) {
   const markerCol = broken ? '#ff5470' : stress > 0.6 ? '#ff8c42' : '#ffcc4d';
   return (
     <group ref={grp}>
-      <EquipmentGeometry type={type} accent={accent} running={!broken} detail />
-      {showMarker && <FailMarker pos={target.anchor.pos} color={markerCol} stress={broken ? 1 : stress} broken={broken} />}
+      {lowRes
+        ? <EquipmentGeometry type={type} accent={accent} running={!broken} detail lowRes />
+        : <FacilityModel type={type} accent={accent} running={!broken} targetHeight={glbHeight} />}
+      {/* Precise 3D failure marker only in low-def (anchors match the procedural model);
+          in high-def the photoreal GLB conveys state via the status chip + trip overlay. */}
+      {showMarker && lowRes && <FailMarker pos={target.anchor.pos} color={markerCol} stress={broken ? 1 : stress} broken={broken} />}
     </group>
   );
 }
@@ -260,7 +275,9 @@ function TwinStage({ theme, sim, target, stress, broken }) {
   const view = viewFor(type);
   const cam = useMemo(() => view.position.map((c) => c * 1.05), [view]);
   return (
-    <div className="relative w-full rounded-xl overflow-hidden" style={{ height: 300, background: 'radial-gradient(120% 90% at 50% 15%, #223247 0%, #141d2b 45%, #0b1119 78%, #060a11 100%)' }}>
+    <div className="relative w-full rounded-xl overflow-hidden" style={{ height: 300, background: theme.mode === 'light'
+      ? 'radial-gradient(120% 90% at 50% 15%, #eef2f8 0%, #e2e8f2 45%, #d6dfec 78%, #cbd6e6 100%)'
+      : 'radial-gradient(120% 90% at 50% 15%, #223247 0%, #141d2b 45%, #0b1119 78%, #060a11 100%)' }}>
       <Canvas dpr={[1, 1.8]} camera={{ position: cam, fov: 42 }} gl={{ antialias: true, alpha: true }}>
         <hemisphereLight intensity={0.85} groundColor={'#141c2b'} color={'#eaf1ff'} />
         <directionalLight position={[9, 15, 8]} intensity={2.0} />

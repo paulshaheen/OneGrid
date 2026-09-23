@@ -11,7 +11,7 @@ import { useOpsBase } from "@/components/ops/ops-nav";
 import { useOpsSnapshot } from "@/lib/hooks/use-ops-data";
 import { ASSET_TYPE_LABEL, RISK_LABEL, RISK_ORDER, riskColorVar } from "@/lib/format";
 import type { RiskLevel } from "@/lib/domain/types";
-import { MODES } from "@/report/lib/themes.js";
+import { useMode } from "@/lib/theme-mode";
 
 // Overview — the OneGrid estate home: a synthesized executive read across BOTH intelligence
 // domains (weather storm-exposure + digital-twin equipment condition) on top of a single,
@@ -156,6 +156,7 @@ const EQUIP_RANK: Record<EquipAsset["status"], number> = { critical: 4, watch: 2
 export function OverviewPage() {
   const router = useRouter();
   const base = useOpsBase();
+  const mode = useMode();
   const { assets, risks, riskMap, event, isLoading, metrics } = useOpsSnapshot(base, 120);
 
   const [view, setView] = useState<"register" | "fleet">("register");
@@ -336,7 +337,7 @@ export function OverviewPage() {
           <div className="min-h-0 flex-1 overflow-y-auto">
             {Exec ? (
               <Exec
-                theme={MODES.dark}
+                theme={mode}
                 onNavigate={(id: string) =>
                   router.navigate({
                     to: `${base}${id === "controlroom" ? "/control-room" : id === "maintenance" ? "/maintenance" : "/"}`,
@@ -645,7 +646,7 @@ export function OverviewPage() {
       </div>
 
       {AssetModal && (
-        <AssetModal theme={MODES.dark} asset={selEquip} onClose={() => setSelEquip(null)} />
+        <AssetModal theme={mode} asset={selEquip} onClose={() => setSelEquip(null)} />
       )}
     </AppShell>
   );

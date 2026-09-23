@@ -34,7 +34,6 @@ import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
 import { CopilotDock } from "@/components/ops/CopilotDock";
 import { GlobalSearch } from "@/components/ops/GlobalSearch";
 import { useAlertFeed } from "@/lib/hooks/use-ops-data";
-import { MODES } from "@/report/lib/themes.js";
 import { getJson } from "@/report/lib/api.js";
 
 // Equipment-manual resolver (Foundry IQ) — loaded on demand from a notification action.
@@ -45,6 +44,8 @@ const ManualResolveModal = lazy(() =>
 );
 import { relativeTime } from "@/lib/format";
 import { useCapacityStatus } from "@/report/lib/api.js";
+import { useModelRes, setModelRes } from "@/lib/model-res";
+import { useIsDark, setDark as setThemeDark, useMode } from "@/lib/theme-mode";
 
 // Header bell: a quick slide-down of the current notifications with a link to the
 // full Alerts page — instead of navigating away on every click.
@@ -153,7 +154,7 @@ function NotificationBell() {
         typeof document !== "undefined" &&
         createPortal(
           <Suspense fallback={null}>
-            <ManualResolveModal theme={MODES.dark} wo={manualWO} onClose={() => setManualWO(null)} />
+            <ManualResolveModal theme={mode} wo={manualWO} onClose={() => setManualWO(null)} />
           </Suspense>,
           document.body,
         )}
@@ -262,21 +263,8 @@ const MOBILE_ROUTES = [
   { to: "/alerts", label: "Alerts" },
 ];
 
-function useTheme() {
-  const [dark, setDark] = useState(true);
-  useEffect(() => {
-    const stored = localStorage.getItem("ops-theme");
-    const isDark = stored ? stored === "dark" : true;
-    setDark(isDark);
-    document.documentElement.classList.toggle("dark", isDark);
-  }, []);
-  const set = (next: boolean) => {
-    setDark(next);
-    document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("ops-theme", next ? "dark" : "light");
-  };
-  return { dark, set };
-}
+// Light/Dark is centralized in @/lib/theme-mode so the whole app (shell + report/twin
+// content) themes together, not just the shadcn shell.
 
 /** OneGrid brand mark: storm cloud + wind + lightning bolt. */
 function OneGridMark({ className }: { className?: string }) {
@@ -306,7 +294,10 @@ export function AppShell({
   fullHeight?: boolean;
 }) {
   const router = useRouter();
-  const { dark, set: setDark } = useTheme();
+  const dark = useIsDark();
+  const setDark = setThemeDark;
+  const mode = useMode();
+  const modelRes = useModelRes();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
   const cap = useCapacityStatus();
@@ -578,6 +569,29 @@ export function AppShell({
                           )}
                         >
                           Light
+                        </button>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
+                      <span>3D model resolution</span>
+                      <span className="inline-flex overflow-hidden rounded-md border">
+                        <button
+                          onClick={() => setModelRes("high")}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-semibold",
+                            modelRes === "high" ? "og-primary-control bg-primary text-primary-foreground" : "text-muted-foreground",
+                          )}
+                        >
+                          High
+                        </button>
+                        <button
+                          onClick={() => setModelRes("low")}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-semibold",
+                            modelRes === "low" ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                          )}
+                        >
+                          Low
                         </button>
                       </span>
                     </div>
