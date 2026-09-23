@@ -802,7 +802,10 @@ function OffshorePlatform({ accent, running = true }) {
 // Photoreal O&G assets from real Sketchfab CAD models (all CC-BY, see MODEL_CREDITS),
 // decimated + textured, exported as GLBs. Used only in the drill-in detail view; the
 // fleet/overview still renders the lightweight procedural builders below.
-function makeGLB(path) {
+function makeGLB(rawPath) {
+  // GLBs live in /public/models, served under the app's base path (e.g. /webapp).
+  // Prefix with BASE_URL so the URL is correct under a sub-path deploy, not just at root.
+  const path = `${import.meta.env.BASE_URL.replace(/\/$/, '')}${rawPath}`;
   function GLB({ onBounds }) {
     const { scene } = useGLTF(path);
     const model = useMemo(() => scene.clone(true), [scene]);
