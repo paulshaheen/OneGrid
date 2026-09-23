@@ -52,8 +52,9 @@ Microsoft's original notebooks and SDK, clone the
 > view it on the map. Aurora is only required for the advanced storm-impact workflow, which
 > needs the **Aurora** model on a Foundry **GPU** endpoint (`Standard_NC24ads_A100_v4`):
 > select the **Aurora weather model** component to provision the Foundry workspace + endpoint,
-> then supply a model asset ID (the official app uses
-> `azureml://registries/azureml/models/Aurora/versions/4`) and have GPU quota + accepted
+> then supply a model asset ID (default: Aurora 1.5,
+> `azureml://registries/azureml-msr/models/Aurora-1.5/versions/2`; the original
+> `azureml://registries/azureml/models/Aurora/versions/4` also works) and have GPU quota + accepted
 > marketplace terms to deploy the model. See
 > [Where Azure AI Foundry fits](#where-azure-ai-foundry-fits).
 

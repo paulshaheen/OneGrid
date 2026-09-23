@@ -25,19 +25,29 @@ SYNOPTIC_HOURS: tuple[int, ...] = (0, 6, 12, 18)
 
 # Public WeatherBench2 archive of IFS HRES T0 at 0.25 degrees (no credentials).
 DEFAULT_WB2_ZARR = "gs://weatherbench2/datasets/hres_t0/2016-2022-6h-1440x721.zarr"
+# Public Google ARCO-ERA5 reanalysis at 0.25 degrees, hourly, 1940 -> ~1 week ago
+# (no credentials). Carries every Aurora 1.5 input, unlike the HRES T0 archive.
+DEFAULT_ARCO_ERA5_ZARR = "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3"
 # Public NOAA GFS 0.25-degree archive on AWS Open Data (anonymous, no credentials).
 # Operational analyses/forecasts, refreshed every 6 h, back to 2021-02-26.
 DEFAULT_GFS_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
 # Aurora's own static variables, hosted on HuggingFace (no credentials).
 DEFAULT_STATIC_REPO = "microsoft/aurora"
 DEFAULT_STATIC_NAME = "aurora-0.25-static.pickle"
+V1P5_STATIC_NAME = "aurora-0.25-v1.5-static.pickle"
 
-# Which checkpoint each initial-condition source is valid for. The fine-tuned
-# model is only accurate on operational analyses (IFS HRES T0 / NOAA GFS); ERA5
-# must use the pretrained model.
+# Aurora 1.5 checkpoints (Foundry "Aurora-1.5" deployment). They need 18 surface
+# variables + insolation and 36 static fields, so only sources that carry the full
+# set (GFS, ARCO-ERA5) can drive them.
+V1P5_MODELS = frozenset({"aurora-0.25-v1.5", "aurora-0.25-v1.5-ensemble"})
+_V1P5_SOURCES = frozenset({"gfs", "era5_arco"})
+
+# Default checkpoint per initial-condition source. hres_t0/hres/era5 only carry the
+# original 4 surface variables and need the original Foundry "Aurora" deployment.
 _MODEL_FOR_SOURCE = {
+    "gfs": "aurora-0.25-v1.5",
+    "era5_arco": "aurora-0.25-v1.5",
     "hres_t0": "aurora-0.25-finetuned",
-    "gfs": "aurora-0.25-finetuned",
     "hres": "aurora-0.25-finetuned",
     "era5": "aurora-0.25-pretrained",
 }
@@ -77,6 +87,7 @@ class Config:
     initial_condition_source: str
     hres_input_dir: str | None
     wb2_zarr_url: str
+    arco_era5_zarr_url: str
     gfs_base_url: str
     static_repo: str
     static_name: str
@@ -93,9 +104,18 @@ class Config:
     output_sas_url: str | None
     output_blob_name: str
 
+    # A replay pins an explicit past ANALYSIS_TIME; scheduled cycles leave it unset.
+    is_replay: bool
+    # How long an empty scheduled cycle leaves a published replay on screen.
+    replay_pin_hours: int
+
     @property
     def horizon_hours(self) -> int:
         return self.num_steps * 6
+
+    @property
+    def is_v1p5(self) -> bool:
+        return self.model_name in V1P5_MODELS
 
 
 def _require(name: str) -> str:
@@ -143,12 +163,12 @@ def _parse_analysis_time(raw: str) -> datetime:
 
 
 def load_config() -> Config:
-    source = os.environ.get("INITIAL_CONDITION_SOURCE", "hres_t0").strip().lower()
+    source = os.environ.get("INITIAL_CONDITION_SOURCE", "gfs").strip().lower()
     if source not in _MODEL_FOR_SOURCE:
         raise SystemExit(
-            "INITIAL_CONDITION_SOURCE must be 'hres_t0' (default, public "
-            "WeatherBench2), 'gfs' (public NOAA GFS, operational/real-time), "
-            "'hres' (local GRIB), or 'era5' (Copernicus CDS)."
+            "INITIAL_CONDITION_SOURCE must be 'gfs' (default, public NOAA GFS, "
+            "2021 -> now), 'era5_arco' (public ARCO-ERA5, 1940 -> ~1 week ago), "
+            "'hres_t0' (public WeatherBench2), 'hres' (local GRIB), or 'era5' (CDS)."
         )
 
     hres_dir = os.environ.get("HRES_INPUT_DIR", "").strip() or None
@@ -173,6 +193,13 @@ def load_config() -> Config:
             "(expected %s); predictions may be degraded.",
             model_name, source, _MODEL_FOR_SOURCE[source],
         )
+    if model_name in V1P5_MODELS and source not in _V1P5_SOURCES:
+        raise SystemExit(
+            f"{model_name} needs Aurora 1.5's 18 surface variables, which source "
+            f"'{source}' does not carry. Use INITIAL_CONDITION_SOURCE=gfs (2021 -> now) "
+            "or era5_arco (1940 -> ~1 week ago)."
+        )
+    default_static = V1P5_STATIC_NAME if model_name in V1P5_MODELS else DEFAULT_STATIC_NAME
 
     output_container = os.environ.get("OUTPUT_CONTAINER_URL", "").strip() or None
     output_sas = os.environ.get("OUTPUT_SAS_URL", "").strip() or None
@@ -202,9 +229,12 @@ def load_config() -> Config:
         initial_condition_source=source,
         hres_input_dir=hres_dir,
         wb2_zarr_url=os.environ.get("AURORA_WB2_ZARR_URL", "").strip() or DEFAULT_WB2_ZARR,
+        arco_era5_zarr_url=(
+            os.environ.get("AURORA_ARCO_ERA5_ZARR_URL", "").strip() or DEFAULT_ARCO_ERA5_ZARR
+        ),
         gfs_base_url=os.environ.get("AURORA_GFS_BASE_URL", "").strip() or DEFAULT_GFS_BASE_URL,
         static_repo=os.environ.get("AURORA_STATIC_REPO", "").strip() or DEFAULT_STATIC_REPO,
-        static_name=os.environ.get("AURORA_STATIC_NAME", "").strip() or DEFAULT_STATIC_NAME,
+        static_name=os.environ.get("AURORA_STATIC_NAME", "").strip() or default_static,
         analysis_time=analysis_time,
         detection_bbox=_parse_bbox(os.environ.get("DETECTION_BBOX", "-100,15,-70,35")),
         storm_names=tuple(
@@ -213,4 +243,6 @@ def load_config() -> Config:
         output_container_url=output_container,
         output_sas_url=output_sas,
         output_blob_name=os.environ.get("OUTPUT_BLOB_NAME", "weather-events.json").strip(),
+        is_replay=bool(analysis_raw),
+        replay_pin_hours=int(os.environ.get("REPLAY_PIN_HOURS", "24")),
     )

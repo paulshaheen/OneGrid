@@ -22,7 +22,7 @@ export function auroraJobConfigured() {
 }
 
 const SYNOPTIC_HOURS = new Set([0, 6, 12, 18]);
-const VALID_SOURCES = new Set(['hres_t0', 'gfs', 'era5']);
+const VALID_SOURCES = new Set(['gfs', 'era5_arco', 'hres_t0', 'era5']);
 
 // Validate a historical-replay request and turn it into per-execution env overrides.
 // Returns { env: [{name,value},…] } — empty when no replay fields were supplied (a

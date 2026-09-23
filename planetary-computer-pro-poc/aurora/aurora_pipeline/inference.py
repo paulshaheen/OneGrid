@@ -93,12 +93,27 @@ def run_and_track(config: Config, initial_condition: Batch, seeds) -> list:
     foundry_client = FoundryClient(endpoint=config.endpoint, token=_endpoint_token(config))
     channel = BlobStorageChannel(resolve_channel_url(config))
 
+    # Aurora 1.5 saves ~90 fields per step by default; keep only what aurora.Tracker
+    # reads (msl, 10u/10v, z@700, lsm) and let the server upload in parallel with inference.
+    v1p5_options = (
+        {
+            "saved_surf_vars": ("msl", "10u", "10v"),
+            "saved_atmos_vars": ("z",),
+            "saved_atmos_levels": (700,),
+            "saved_static_vars": ("lsm",),
+            "async_upload_workers": 4,
+        }
+        if config.is_v1p5
+        else {}
+    )
+
     for prediction in submit(
         batch=initial_condition,
         model_name=config.model_name,
         num_steps=config.num_steps,
         foundry_client=foundry_client,
         channel=channel,
+        **v1p5_options,
     ):
         for i in list(active):
             try:

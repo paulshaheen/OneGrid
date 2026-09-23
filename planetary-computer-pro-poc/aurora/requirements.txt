@@ -1,5 +1,6 @@
-# Aurora Foundry client and initial-condition tooling.
-microsoft-aurora>=1.5.0
+# Aurora Foundry client and initial-condition tooling. 2.x knows the Aurora 1.5
+# model names and the saved_* / async_upload_workers submit options.
+microsoft-aurora>=2.0.1
 torch>=2.2
 numpy>=1.26
 xarray>=2024.3

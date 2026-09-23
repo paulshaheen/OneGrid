@@ -2,20 +2,23 @@
 
 Aurora needs a *history* of two consecutive 6-hourly states (t0-6h and t0) with
 surface variables, static variables, and five atmospheric variables on 13
-pressure levels. Four sources are supported:
+pressure levels. Aurora 1.5 (the default checkpoint) needs 18 surface variables
+plus insolation and 36 static fields; the original checkpoints need 4 and 3.
+Sources:
 
-* ``hres_t0`` (default) — IFS HRES T0 pulled from the **public** WeatherBench2
-  archive on Google Cloud (no credentials) with static variables from Aurora's
-  HuggingFace repository (no credentials). Correct pairing for the fine-tuned
-  checkpoint, but the archive only covers 2016-2022.
-* ``gfs`` — NOAA GFS 0.25-degree operational analysis from the **public** AWS
-  Open Data archive (anonymous, no credentials), refreshed every 6 hours and
-  available for the current date. Two consecutive f000 cycles form the history;
-  static variables come from Aurora's HuggingFace pickle (same 0.25-degree grid).
+* ``gfs`` (default) — NOAA GFS 0.25-degree operational analysis from the **public**
+  AWS Open Data archive (anonymous), 2021 -> now. Carries every Aurora 1.5 input.
+* ``era5_arco`` — ECMWF ERA5 from Google's **public** ARCO-ERA5 archive
+  (anonymous), 1940 -> ~1 week ago. Carries every Aurora 1.5 input; used for
+  historical storm replays.
+* ``hres_t0`` — IFS HRES T0 pulled from the **public** WeatherBench2
+  archive on Google Cloud (no credentials), 2016-2022. Only the original 4 surface
+  variables, so it needs the original Foundry "Aurora" deployment.
 * ``era5`` — downloaded from the Copernicus CDS. Requires a (free) CDS account
   and must be run against the *pretrained* checkpoint, per Aurora's guidance.
 * ``hres`` — read from local ECMWF HRES GRIB files (operational path).
 
+Static variables come from Aurora's HuggingFace pickle for the chosen checkpoint.
 The returned batch is on CPU; the endpoint does the GPU work.
 """
 
@@ -49,6 +52,34 @@ _WB2_ATMOS = {
     "z": "geopotential",
 }
 
+# Aurora 1.5 input surface variables beyond the original four. Insolation is added
+# separately; the 7 output-only variables are zero-padded by the model itself.
+_V1P5_EXTRA_SURFACE = (
+    "2d", "tcwv", "tcc", "100u", "100v", "sp", "lcc",
+    "mcc", "hcc", "skt", "stl1", "swvl1", "ci", "scaled_sd",
+)
+_BASE_SURFACE = ("2t", "10u", "10v", "msl")
+
+# ARCO-ERA5 long names. `scaled_sd` is ERA5 snow depth (m of water equivalent);
+# the model applies its own log-scaling, as in Aurora's ERA5 demo.
+_ARCO_SURFACE = {
+    **_WB2_SURFACE,
+    "2d": "2m_dewpoint_temperature",
+    "tcwv": "total_column_water_vapour",
+    "tcc": "total_cloud_cover",
+    "100u": "100m_u_component_of_wind",
+    "100v": "100m_v_component_of_wind",
+    "sp": "surface_pressure",
+    "lcc": "low_cloud_cover",
+    "mcc": "medium_cloud_cover",
+    "hcc": "high_cloud_cover",
+    "skt": "skin_temperature",
+    "stl1": "soil_temperature_level_1",
+    "swvl1": "volumetric_soil_water_layer_1",
+    "ci": "sea_ice_cover",
+    "scaled_sd": "snow_depth",
+}
+
 # CDS variable names -> the short names xarray exposes in the downloaded NetCDF.
 _ERA5_SURFACE = {
     "2m_temperature": "t2m",
@@ -75,9 +106,93 @@ def build_initial_condition(config: Config) -> Batch:
         return _from_hres_t0_wb2(config)
     if config.initial_condition_source == "gfs":
         return _from_gfs(config)
+    if config.initial_condition_source == "era5_arco":
+        return _from_era5_arco(config)
     if config.initial_condition_source == "era5":
         return _from_era5(config)
     return _from_hres(config)
+
+
+def _surface_names(config: Config) -> tuple[str, ...]:
+    return _BASE_SURFACE + (_V1P5_EXTRA_SURFACE if config.is_v1p5 else ())
+
+
+def _finish_v1p5_surface(
+    surf_vars: dict[str, torch.Tensor],
+    lat: np.ndarray,
+    lon: np.ndarray,
+    times: tuple[datetime, datetime],
+) -> dict[str, torch.Tensor]:
+    """Fill land/sea-masked fields and add the prescribed insolation channel."""
+    from aurora.insolation import insolation
+
+    out = dict(surf_vars)
+    # GFS leaves soil temperature undefined over water; ERA5 carries ~skin temperature.
+    out["stl1"] = torch.where(torch.isnan(out["stl1"]), out["skt"], out["stl1"])
+    # Remaining masked fields (soil water, sea ice, snow) are absent -> 0, as in Aurora's demo.
+    out = {name: torch.nan_to_num(value, nan=0.0) for name, value in out.items()}
+    sol = insolation(
+        list(times),
+        np.asarray(lat, dtype="float32"),
+        np.asarray(lon, dtype="float32"),
+        enforce_2d=True,
+    )
+    out["insolation"] = torch.from_numpy(sol[None].astype("float32"))  # (1, 2, H, W)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# ERA5 via public Google ARCO-ERA5 — historical replays, no credentials
+# ---------------------------------------------------------------------------
+
+
+def _from_era5_arco(config: Config) -> Batch:
+    import fsspec  # lazy: only the zarr paths need gcsfs/fsspec
+
+    t0 = config.analysis_time.replace(tzinfo=None)
+    t_prev = t0 - timedelta(hours=6)
+
+    # Anonymous access skips gcsfs's credential probing, which costs ~12 s per read.
+    mapper = fsspec.get_mapper(config.arco_era5_zarr_url, token="anon")
+    dataset = xr.open_zarr(mapper, chunks=None)
+    try:
+        window = dataset.sel(time=[np.datetime64(t_prev), np.datetime64(t0)])
+    except KeyError as exc:  # noqa: BLE001 - surface a clear, actionable message
+        raise SystemExit(
+            f"ARCO-ERA5 archive has no data for {t_prev}/{t0}. It covers 1940 to about "
+            "one week ago; use INITIAL_CONDITION_SOURCE=gfs for more recent cycles."
+        ) from exc
+
+    lat = window["latitude"].values
+    flip = lat[0] < lat[-1]  # Aurora wants latitudes descending.
+    lat = lat[::-1] if flip else lat
+    lon = window["longitude"].values
+
+    def orient(values: np.ndarray) -> torch.Tensor:
+        values = values[None]
+        if flip:
+            values = values[..., ::-1, :]
+        return torch.from_numpy(values.copy().astype("float32"))
+
+    surf_vars = {name: orient(window[_ARCO_SURFACE[name]].values) for name in _surface_names(config)}
+    atmos_vars = {
+        name: orient(window[_WB2_ATMOS[name]].sel(level=list(ATMOS_LEVELS)).values)
+        for name in _WB2_ATMOS
+    }
+    if config.is_v1p5:
+        surf_vars = _finish_v1p5_surface(surf_vars, lat, lon, (t_prev, t0))
+
+    return Batch(
+        surf_vars=surf_vars,
+        static_vars=_load_static_pickle(config),
+        atmos_vars=atmos_vars,
+        metadata=Metadata(
+            lat=torch.from_numpy(lat.copy().astype("float32")),
+            lon=torch.from_numpy(lon.astype("float32")),
+            time=(t0,),
+            atmos_levels=ATMOS_LEVELS,
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -134,13 +249,14 @@ def _from_hres_t0_wb2(config: Config) -> Batch:
 
 
 def _load_static_pickle(config: Config) -> dict:
-    """Aurora's static variables (z, lsm, slt), pre-regridded, from HuggingFace."""
+    """Aurora's static variables for the chosen checkpoint, pre-regridded, from HuggingFace."""
     from huggingface_hub import hf_hub_download
 
     path = hf_hub_download(repo_id=config.static_repo, filename=config.static_name)
     with open(path, "rb") as handle:
         raw = pickle.load(handle)
-    missing = {"z", "lsm", "slt"} - set(raw)
+    required = {"z", "lsm"} if config.is_v1p5 else {"z", "lsm", "slt"}
+    missing = required - set(raw)
     if missing:
         raise SystemExit(
             f"Static pickle {config.static_name} is missing variables {missing}."
@@ -166,6 +282,27 @@ _GFS_SURFACE_SELECT = {
 # Atmospheric fields to pull at each isobaric level (RH backs up SPFH up high).
 _GFS_ATMOS_VARS = {"TMP", "UGRD", "VGRD", "SPFH", "HGT", "RH"}
 
+# Extra f000 messages for Aurora 1.5. Each is fetched into its own GRIB file so it
+# decodes without depending on eccodes short names for NCEP-local parameters.
+_GFS_V1P5_SURFACE = {
+    ("DPT", "2 m above ground"): "2d",
+    ("PWAT", "entire atmosphere (considered as a single layer)"): "tcwv",
+    ("TCDC", "entire atmosphere"): "tcc",
+    ("UGRD", "100 m above ground"): "100u",
+    ("VGRD", "100 m above ground"): "100v",
+    ("PRES", "surface"): "sp",
+    ("LCDC", "low cloud layer"): "lcc",
+    ("MCDC", "middle cloud layer"): "mcc",
+    ("HCDC", "high cloud layer"): "hcc",
+    ("TMP", "surface"): "skt",
+    ("TSOIL", "0-0.1 m below ground"): "stl1",
+    ("SOILW", "0-0.1 m below ground"): "swvl1",
+    ("ICEC", "surface"): "ci",
+    ("WEASD", "surface"): "scaled_sd",
+}
+# GFS cloud covers are percent; Aurora (ECMWF convention) wants a 0-1 fraction.
+_GFS_PERCENT = ("tcc", "lcc", "mcc", "hcc")
+
 
 def _from_gfs(config: Config) -> Batch:
     t0 = config.analysis_time.replace(tzinfo=None)
@@ -185,9 +322,12 @@ def _from_gfs(config: Config) -> Batch:
         return torch.from_numpy(stacked[None].astype("float32"))  # (1, 2, 13, H, W)
 
     static_vars = _load_static_pickle(config)
+    surf_vars = {name: surf(name) for name in _surface_names(config)}
+    if config.is_v1p5:
+        surf_vars = _finish_v1p5_surface(surf_vars, curr["lat"], curr["lon"], (t_prev, t0))
 
     return Batch(
-        surf_vars={name: surf(name) for name in ("2t", "10u", "10v", "msl")},
+        surf_vars=surf_vars,
         static_vars=static_vars,
         atmos_vars={name: atm(name) for name in ("t", "u", "v", "q", "z")},
         metadata=Metadata(
@@ -201,8 +341,14 @@ def _from_gfs(config: Config) -> Batch:
 
 def _gfs_state(config: Config, cycle: datetime) -> dict:
     """Download and decode one GFS f000 analysis into plain numpy arrays."""
-    grib_path = _download_gfs_subset(config, cycle)
+    url = _gfs_file_url(config, cycle)
+    idx_text = _fetch_text(url + ".idx")
+    grib_path = _download_gfs_subset(url, idx_text, cycle)
+    extra_paths: dict[str, str] = {}
     try:
+        if config.is_v1p5:
+            extra_paths = _download_gfs_messages(url, idx_text, cycle)
+
         h2 = _open_gfs(grib_path, {"typeOfLevel": "heightAboveGround", "level": 2})
         h10 = _open_gfs(grib_path, {"typeOfLevel": "heightAboveGround", "level": 10})
         msl = _open_gfs(grib_path, {"typeOfLevel": "meanSea"})
@@ -238,9 +384,29 @@ def _gfs_state(config: Config, cycle: datetime) -> dict:
             "10v": np.asarray(h10["v10"].values, dtype="float32"),
             "msl": np.asarray(msl["prmsl"].values, dtype="float32"),
         }
+        if extra_paths:
+            extra = {short: _single_field(path) for short, path in extra_paths.items()}
+            for short in _GFS_PERCENT:
+                extra[short] = np.clip(extra[short] / 100.0, 0.0, 1.0)
+            extra["scaled_sd"] = extra["scaled_sd"] / 1000.0  # kg m-2 -> m water equivalent
+            surf.update(extra)
         return {"lat": lat, "lon": lon, "surf": surf, "atmos": atmos}
     finally:
         Path(grib_path).unlink(missing_ok=True)
+        for path in extra_paths.values():
+            Path(path).unlink(missing_ok=True)
+
+
+def _single_field(path: str) -> np.ndarray:
+    """Decode a one-message GRIB file into a (H, W) float32 array (NaN where masked)."""
+    try:
+        dataset = xr.open_dataset(path, engine="cfgrib", backend_kwargs={"indexpath": ""})
+    except Exception as exc:  # noqa: BLE001 - GRIB decoding surfaces many error types
+        raise SystemExit(f"Could not decode GFS GRIB message {path}: {exc}") from exc
+    names = list(dataset.data_vars)
+    if len(names) != 1:
+        raise SystemExit(f"Expected one field in {path}, found {names}.")
+    return np.asarray(dataset[names[0]].values, dtype="float32")
 
 
 def _iso_var(path: str, short: str) -> np.ndarray:
@@ -289,8 +455,7 @@ def _open_gfs(path: str, filter_by_keys: dict) -> xr.Dataset:
         ) from exc
 
 
-def _download_gfs_subset(config: Config, cycle: datetime) -> str:
-    """Byte-range fetch only the messages Aurora needs into a local GRIB file."""
+def _gfs_file_url(config: Config, cycle: datetime) -> str:
     hh = f"{cycle.hour:02d}"
     ymd = cycle.strftime("%Y%m%d")
     fname = f"gfs.t{hh}z.pgrb2.0p25.f000"
@@ -300,9 +465,38 @@ def _download_gfs_subset(config: Config, cycle: datetime) -> str:
         f"{base}/gfs.{ymd}/{hh}/atmos/{fname}",
         f"{base}/gfs.{ymd}/{hh}/{fname}",
     ]
-    url = _first_reachable(candidates, cycle)
-    ranges = _select_gfs_ranges(_fetch_text(url + ".idx"), cycle)
+    return _first_reachable(candidates, cycle)
 
+
+def _download_gfs_subset(url: str, idx_text: str, cycle: datetime) -> str:
+    """Byte-range fetch only the messages Aurora needs into a local GRIB file."""
+    return _write_ranges(url, _select_gfs_ranges(idx_text, cycle))
+
+
+def _download_gfs_messages(url: str, idx_text: str, cycle: datetime) -> dict[str, str]:
+    """Fetch each Aurora 1.5 extra surface message into its own GRIB file."""
+    found: dict[str, tuple[int, int | None]] = {}
+    for start, end, var, level in _parse_idx(idx_text):
+        short = _GFS_V1P5_SURFACE.get((var, level))
+        if short and short not in found:
+            found[short] = (start, end)
+    missing = set(_GFS_V1P5_SURFACE.values()) - set(found)
+    if missing:
+        raise SystemExit(
+            f"GFS cycle {cycle:%Y-%m-%d %H}Z is missing Aurora 1.5 inputs {sorted(missing)}."
+        )
+    paths: dict[str, str] = {}
+    try:
+        for short, byte_range in found.items():
+            paths[short] = _write_ranges(url, [byte_range])
+    except Exception:
+        for path in paths.values():
+            Path(path).unlink(missing_ok=True)
+        raise
+    return paths
+
+
+def _write_ranges(url: str, ranges: list[tuple[int, int | None]]) -> str:
     fd, tmp = tempfile.mkstemp(prefix="aurora-gfs-", suffix=".grib2")
     try:
         with open(fd, "wb") as out:
@@ -314,7 +508,8 @@ def _download_gfs_subset(config: Config, cycle: datetime) -> str:
     return tmp
 
 
-def _select_gfs_ranges(idx_text: str, cycle: datetime) -> list[tuple[int, int | None]]:
+def _parse_idx(idx_text: str) -> list[tuple[int, int | None, str, str]]:
+    """GFS .idx lines -> (start, end, variable, level) byte ranges."""
     parsed: list[tuple[int, str, str]] = []
     for line in idx_text.splitlines():
         if not line.strip():
@@ -323,17 +518,20 @@ def _select_gfs_ranges(idx_text: str, cycle: datetime) -> list[tuple[int, int | 
         if len(fields) < 5:
             continue
         parsed.append((int(fields[1]), fields[3], fields[4]))  # start, var, level
+    return [
+        (start, parsed[i + 1][0] - 1 if i + 1 < len(parsed) else None, var, level)
+        for i, (start, var, level) in enumerate(parsed)
+    ]
 
-    starts = [p[0] for p in parsed]
-    level_labels = {f"{lvl} mb": True for lvl in ATMOS_LEVELS}
-    selected: list[tuple[int, int | None]] = []
-    for i, (start, var, level) in enumerate(parsed):
-        keep = (var, level) in _GFS_SURFACE_SELECT or (
-            var in _GFS_ATMOS_VARS and level in level_labels
-        )
-        if keep:
-            end = starts[i + 1] - 1 if i + 1 < len(starts) else None
-            selected.append((start, end))
+
+def _select_gfs_ranges(idx_text: str, cycle: datetime) -> list[tuple[int, int | None]]:
+    level_labels = {f"{lvl} mb" for lvl in ATMOS_LEVELS}
+    selected = [
+        (start, end)
+        for start, end, var, level in _parse_idx(idx_text)
+        if (var, level) in _GFS_SURFACE_SELECT
+        or (var in _GFS_ATMOS_VARS and level in level_labels)
+    ]
     if not selected:
         raise SystemExit(
             f"GFS index for {cycle:%Y-%m-%d %H}Z matched no required messages; "

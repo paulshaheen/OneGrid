@@ -64,11 +64,14 @@ param deployAuroraModel bool = false
 @description('GPU VM size for the Aurora managed-compute deployment. Aurora requires an A100-class SKU; you must have quota for it in the selected region.')
 param auroraInstanceType string = 'Standard_NC24ads_A100_v4'
 
-@description('Registry model asset ID for the Aurora managed-compute deployment. The official Microsoft storm-impact app uses azureml://registries/azureml/models/Aurora/versions/4. Leave blank to provision the Foundry workspace + endpoint only and deploy the model from the portal (the GPU deployment needs quota + accepted terms).')
+@description('Registry model asset ID for the Aurora managed-compute deployment, e.g. azureml://registries/azureml-msr/models/Aurora-1.5/versions/2 (Aurora 1.5, the default) or azureml://registries/azureml/models/Aurora/versions/4 (original Aurora). Leave blank to provision the Foundry workspace + endpoint only and deploy the model from the portal (the GPU deployment needs quota + accepted terms).')
 param auroraModelAssetId string = ''
 
-@description('Deploy the Aurora model onto the GPU endpoint for me using the official published model asset (azureml://registries/azureml/models/Aurora/versions/4) instead of pasting a model asset ID. Ignored when auroraModelAssetId is supplied. Still requires A100 quota in the region and accepted Azure Marketplace terms for Aurora.')
+@description('Deploy the Aurora model onto the GPU endpoint for me using the official published Aurora-1.5 model asset (azureml://registries/azureml-msr/models/Aurora-1.5/versions/2) instead of pasting a model asset ID. Ignored when auroraModelAssetId is supplied. Still requires A100 quota in the region and accepted Azure Marketplace terms for Aurora.')
 param createAuroraModelDeployment bool = false
+
+@description('Aurora checkpoint the forecast job requests from the endpoint. Must match the deployed Foundry model: "aurora-0.25-v1.5" for Aurora-1.5, "aurora-0.25-finetuned" for the original Aurora. Leave blank to derive it from the model asset ID (or, for a portal-deployed model, use the pipeline default, aurora-0.25-v1.5).')
+param auroraCheckpointName string = ''
 
 @description('Deploy a scheduled Azure Container Apps Job that runs the Aurora forecast pipeline on the ECMWF cycle cadence (00/06/12/18 UTC), publishing weather-events.json to the model-outputs container so the map stays live without manual runs. The template also provisions a dedicated Azure Container Registry for the pipeline image. Requires the Aurora weather model (for the GPU endpoint) and sample storage.')
 param deployAuroraSchedule bool = false
@@ -204,9 +207,14 @@ var azureMLDataScientistRoleId = 'f6c7c914-8db3-469d-8ca1-694a8f32e121'
 // The GPU model deployment only runs when a model asset ID is supplied (it needs GPU
 // quota + accepted marketplace terms); otherwise just the workspace + endpoint deploy.
 // When the caller ticks "deploy it for me" (createAuroraModelDeployment) and hasn't pasted
-// an id, fall back to the official published Aurora model asset.
-var auroraDefaultModelAssetId = 'azureml://registries/azureml/models/Aurora/versions/4'
+// an id, fall back to the official published Aurora-1.5 model asset.
+var auroraDefaultModelAssetId = 'azureml://registries/azureml-msr/models/Aurora-1.5/versions/2'
 var effectiveAuroraModelAssetId = !empty(auroraModelAssetId) ? auroraModelAssetId : (createAuroraModelDeployment ? auroraDefaultModelAssetId : '')
+var auroraIsV1p5 = contains(toLower(effectiveAuroraModelAssetId), 'aurora-1.5')
+// Serving image the Foundry catalog pairs with Aurora-1.5 (mirrors a portal deployment).
+var auroraV1p5EnvironmentId = 'azureml://registries/azureml-msr/environments/aurora-v1p5-env/versions/24'
+// The original Aurora and Aurora-1.5 Foundry models serve different checkpoint names.
+var effectiveAuroraCheckpoint = !empty(auroraCheckpointName) ? auroraCheckpointName : (empty(effectiveAuroraModelAssetId) ? '' : (auroraIsV1p5 ? 'aurora-0.25-v1.5' : 'aurora-0.25-finetuned'))
 var deployAuroraDeployment = deployAuroraModel && !empty(effectiveAuroraModelAssetId)
 
 // Scheduled Aurora forecast job (Azure Container Apps Job). It needs the GPU endpoint
@@ -837,6 +845,19 @@ resource auroraDeployment 'Microsoft.MachineLearningServices/workspaces/onlineEn
     endpointComputeType: 'Managed'
     model: effectiveAuroraModelAssetId
     instanceType: auroraInstanceType
+    environmentId: auroraIsV1p5 ? auroraV1p5EnvironmentId : null
+    // Loading the checkpoint onto the GPU takes minutes; probe too early and it restart-loops.
+    livenessProbe: auroraIsV1p5 ? {
+      initialDelay: 'PT10M'
+      period: 'PT10S'
+      timeout: 'PT2S'
+      failureThreshold: 30
+      successThreshold: 1
+    } : null
+    requestSettings: auroraIsV1p5 ? {
+      maxConcurrentRequestsPerInstance: 1
+      requestTimeout: 'PT1M30S'
+    } : null
   }
 }
 
@@ -1028,6 +1049,10 @@ resource auroraJob 'Microsoft.App/jobs@2024-03-01' = if (deployAuroraJob) {
             {
               name: 'INITIAL_CONDITION_SOURCE'
               value: 'gfs'
+            }
+            {
+              name: 'AURORA_MODEL_NAME'
+              value: effectiveAuroraCheckpoint
             }
             {
               name: 'AURORA_NUM_STEPS'

@@ -138,6 +138,12 @@ export function CommandCenterPage() {
     () => events.find((e) => e.id === selectedStorm) ?? storm,
     [events, selectedStorm, storm],
   );
+  // The Digital Twin tab deliberately hides weather, so open on Weather when a storm
+  // is live — but never override a tab the user picked.
+  const userPickedTab = useRef(false);
+  useEffect(() => {
+    if (storm && !userPickedTab.current) setTab("weather");
+  }, [storm]);
   // Playhead horizon = furthest forecast hour we have data for (min 24 h).
   const horizon = useMemo(() => {
     const hrs = events.map((e) => e.forecast?.[e.forecast.length - 1]?.hour ?? 0);
@@ -558,7 +564,10 @@ export function CommandCenterPage() {
                   ).map(([k, l]) => (
                     <button
                       key={k}
-                      onClick={() => setTab(k)}
+                      onClick={() => {
+                        userPickedTab.current = true;
+                        setTab(k);
+                      }}
                       className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium transition ${tab === k ? "og-primary-control" : ""}`}
                       aria-pressed={tab === k}
                       style={tab === k ? { backgroundColor: C.blue, color: "#fff" } : { color: C.sub }}

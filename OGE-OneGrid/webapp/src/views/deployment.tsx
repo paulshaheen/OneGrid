@@ -45,22 +45,25 @@ const SECURITY: string[] = [
 ];
 
 // Initial-condition sources the Aurora pipeline supports (see aurora_pipeline/
-// initial_conditions.py). HRES = public WeatherBench2 archive (2016–2022, ECMWF);
-// GFS = public NOAA real-time analysis on AWS Open Data (2021 → today). Each drives
-// the same detect → forecast → publish cycle; only the starting snapshot differs.
-type IcSource = "hres_t0" | "gfs";
+// initial_conditions.py). Both carry every Aurora 1.5 input: ERA5 = public Google
+// ARCO-ERA5 reanalysis (1940 → ~1 week ago, ECMWF); GFS = public NOAA real-time
+// analysis on AWS Open Data (2021 → today). Each drives the same detect → forecast
+// → publish cycle; only the starting snapshot differs.
+type IcSource = "era5_arco" | "gfs";
 
 const TODAY = new Date().toISOString().slice(0, 10);
+// ARCO-ERA5 lags real time by about a week.
+const ERA5_LATEST = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString().slice(0, 10);
 const SOURCE_OPTIONS: { id: IcSource; label: string; blurb: string; min: string; max: string }[] = [
-  { id: "hres_t0", label: "ECMWF HRES", blurb: "WeatherBench2 archive · 2016–2022", min: "2016-01-01", max: "2022-12-31" },
+  { id: "era5_arco", label: "ECMWF ERA5", blurb: "Reanalysis archive · 1940–last week", min: "1940-01-01", max: ERA5_LATEST },
   { id: "gfs", label: "NOAA GFS", blurb: "Real-time analysis · 2021–now", min: "2021-02-27", max: TODAY },
 ];
 
 // One-click historical storms. The bbox is the genesis-detection search box; numSteps
 // × 6h is the forecast horizon. Sent to /api/aurora/run, which starts the Aurora job
 // with these as per-execution env overrides (ANALYSIS_TIME / DETECTION_BBOX / …).
-// `source` decides which archive the snapshot comes from — pre-2023 storms use HRES,
-// recent ones use GFS (the only public source that covers them).
+// `source` decides which archive the snapshot comes from — older storms use ERA5,
+// recent ones use GFS.
 type StormPreset = {
   id: string;
   label: string;
@@ -72,12 +75,12 @@ type StormPreset = {
 };
 
 const STORM_PRESETS: StormPreset[] = [
-  { id: "ida", label: "Hurricane Ida", sub: "Aug 2021 · Louisiana", source: "hres_t0", analysisTime: "2021-08-29T00:00", bbox: "-100,15,-70,35", numSteps: 12 },
-  { id: "laura", label: "Hurricane Laura", sub: "Aug 2020 · SW Louisiana", source: "hres_t0", analysisTime: "2020-08-26T12:00", bbox: "-100,15,-70,35", numSteps: 12 },
-  { id: "ian", label: "Hurricane Ian", sub: "Sep 2022 · SW Florida", source: "hres_t0", analysisTime: "2022-09-27T12:00", bbox: "-90,18,-76,32", numSteps: 12 },
-  { id: "michael", label: "Hurricane Michael", sub: "Oct 2018 · FL Panhandle", source: "hres_t0", analysisTime: "2018-10-09T12:00", bbox: "-95,18,-78,32", numSteps: 12 },
-  { id: "harvey", label: "Hurricane Harvey", sub: "Aug 2017 · Texas coast", source: "hres_t0", analysisTime: "2017-08-25T00:00", bbox: "-100,18,-88,32", numSteps: 12 },
-  { id: "irma", label: "Hurricane Irma", sub: "Sep 2017 · Florida", source: "hres_t0", analysisTime: "2017-09-09T00:00", bbox: "-88,18,-74,30", numSteps: 12 },
+  { id: "ida", label: "Hurricane Ida", sub: "Aug 2021 · Louisiana", source: "era5_arco", analysisTime: "2021-08-29T00:00", bbox: "-100,15,-70,35", numSteps: 12 },
+  { id: "laura", label: "Hurricane Laura", sub: "Aug 2020 · SW Louisiana", source: "era5_arco", analysisTime: "2020-08-26T12:00", bbox: "-100,15,-70,35", numSteps: 12 },
+  { id: "ian", label: "Hurricane Ian", sub: "Sep 2022 · SW Florida", source: "era5_arco", analysisTime: "2022-09-27T12:00", bbox: "-90,18,-76,32", numSteps: 12 },
+  { id: "michael", label: "Hurricane Michael", sub: "Oct 2018 · FL Panhandle", source: "era5_arco", analysisTime: "2018-10-09T12:00", bbox: "-95,18,-78,32", numSteps: 12 },
+  { id: "harvey", label: "Hurricane Harvey", sub: "Aug 2017 · Texas coast", source: "era5_arco", analysisTime: "2017-08-25T00:00", bbox: "-100,18,-88,32", numSteps: 12 },
+  { id: "irma", label: "Hurricane Irma", sub: "Sep 2017 · Florida", source: "era5_arco", analysisTime: "2017-09-09T00:00", bbox: "-88,18,-74,30", numSteps: 12 },
   { id: "otis", label: "Hurricane Otis", sub: "Oct 2023 · Acapulco", source: "gfs", analysisTime: "2023-10-24T12:00", bbox: "-105,12,-95,22", numSteps: 12 },
   { id: "beryl", label: "Hurricane Beryl", sub: "Jul 2024 · Caribbean", source: "gfs", analysisTime: "2024-07-01T00:00", bbox: "-78,10,-58,22", numSteps: 12 },
   { id: "helene", label: "Hurricane Helene", sub: "Sep 2024 · FL Big Bend", source: "gfs", analysisTime: "2024-09-25T12:00", bbox: "-90,20,-78,32", numSteps: 12 },
@@ -138,7 +141,7 @@ export function DeploymentPage() {
 
   // Historical-storm replay form state. `sourceMode` picks the initial-condition
   // archive; `selected` is a preset id, "custom", or "".
-  const [sourceMode, setSourceMode] = useState<IcSource>("hres_t0");
+  const [sourceMode, setSourceMode] = useState<IcSource>("era5_arco");
   const [selected, setSelected] = useState<string>("");
   const [customDate, setCustomDate] = useState<string>("");
   const [customHour, setCustomHour] = useState<string>("12");
@@ -404,7 +407,7 @@ export function DeploymentPage() {
             <div className="mt-2 rounded-sm border bg-card px-3 py-2 text-[10px] text-muted-foreground">
               Model asset example:{" "}
               <code className="text-foreground">
-                azureml://registries/azureml/models/Aurora/versions/4
+                azureml://registries/azureml-msr/models/Aurora-1.5/versions/2
               </code>
             </div>
           </div>
@@ -450,7 +453,7 @@ export function DeploymentPage() {
                       invent one. The two levers are the point in time analyzed and the
                       geographic search box. The <strong className="text-foreground">Replay a
                       historical storm</strong> panel below exposes exactly those: choose a data
-                      source (ECMWF HRES for 2016–2022, NOAA GFS for 2021–now), pick a past
+                      source (ECMWF ERA5 for 1940–last week, NOAA GFS for 2021–now), pick a past
                       hurricane (or a custom date + region), and Aurora re-forecasts the real
                       system from that snapshot.
                     </p>
