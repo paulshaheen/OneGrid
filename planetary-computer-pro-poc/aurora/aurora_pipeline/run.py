@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import sys
 
+from .best_track import apply_observed_intensity
 from .config import load_config
 from .inference import detect_seeds, run_and_track
 from .initial_conditions import build_initial_condition
@@ -49,6 +50,9 @@ def main() -> int:
     log.info("Submitting to Aurora endpoint %s and tracking…", config.endpoint)
     tracks = run_and_track(config, initial_condition, seeds)
     log.info("Produced %d qualifying track(s).", len(tracks))
+
+    if config.is_replay and config.replay_intensity == "observed":
+        tracks = apply_observed_intensity(config, tracks)
 
     events = tracks_to_events(config, tracks)
 

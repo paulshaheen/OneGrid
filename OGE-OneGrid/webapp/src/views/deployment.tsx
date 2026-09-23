@@ -76,13 +76,14 @@ type StormPreset = {
 
 const STORM_PRESETS: StormPreset[] = [
   { id: "ida", label: "Hurricane Ida", sub: "Aug 2021 · Louisiana", source: "era5_arco", analysisTime: "2021-08-29T00:00", bbox: "-100,15,-70,35", numSteps: 12 },
-  { id: "laura", label: "Hurricane Laura", sub: "Aug 2020 · SW Louisiana", source: "era5_arco", analysisTime: "2020-08-26T12:00", bbox: "-100,15,-70,35", numSteps: 12 },
+  { id: "laura", label: "Hurricane Laura", sub: "Aug 2020 · Cameron LA · Cat 4", source: "era5_arco", analysisTime: "2020-08-25T12:00", bbox: "-95,18,-80,30", numSteps: 12 },
+  { id: "sally", label: "Hurricane Sally", sub: "Sep 2020 · Gulf Shores AL", source: "era5_arco", analysisTime: "2020-09-14T12:00", bbox: "-95,20,-80,31", numSteps: 12 },
   { id: "ian", label: "Hurricane Ian", sub: "Sep 2022 · SW Florida", source: "era5_arco", analysisTime: "2022-09-27T12:00", bbox: "-90,18,-76,32", numSteps: 12 },
   { id: "michael", label: "Hurricane Michael", sub: "Oct 2018 · FL Panhandle", source: "era5_arco", analysisTime: "2018-10-09T12:00", bbox: "-95,18,-78,32", numSteps: 12 },
   { id: "harvey", label: "Hurricane Harvey", sub: "Aug 2017 · Texas coast", source: "era5_arco", analysisTime: "2017-08-25T00:00", bbox: "-100,18,-88,32", numSteps: 12 },
   { id: "irma", label: "Hurricane Irma", sub: "Sep 2017 · Florida", source: "era5_arco", analysisTime: "2017-09-09T00:00", bbox: "-88,18,-74,30", numSteps: 12 },
   { id: "otis", label: "Hurricane Otis", sub: "Oct 2023 · Acapulco", source: "gfs", analysisTime: "2023-10-24T12:00", bbox: "-105,12,-95,22", numSteps: 12 },
-  { id: "beryl", label: "Hurricane Beryl", sub: "Jul 2024 · Caribbean", source: "gfs", analysisTime: "2024-07-01T00:00", bbox: "-78,10,-58,22", numSteps: 12 },
+  { id: "beryl", label: "Hurricane Beryl", sub: "Jul 2024 · Matagorda / Houston", source: "gfs", analysisTime: "2024-07-06T12:00", bbox: "-98,18,-85,30", numSteps: 12 },
   { id: "helene", label: "Hurricane Helene", sub: "Sep 2024 · FL Big Bend", source: "gfs", analysisTime: "2024-09-25T12:00", bbox: "-90,20,-78,32", numSteps: 12 },
   { id: "milton", label: "Hurricane Milton", sub: "Oct 2024 · FL Gulf coast", source: "gfs", analysisTime: "2024-10-09T00:00", bbox: "-95,18,-80,30", numSteps: 12 },
 ];

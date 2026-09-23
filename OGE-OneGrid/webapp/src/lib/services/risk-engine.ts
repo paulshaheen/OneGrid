@@ -135,6 +135,14 @@ const TYPE_SENSITIVITY: Record<Asset["type"], { points: number; note: string }> 
     note: "Port/logistics base — staging capacity is critical during evacuations",
   },
   well: { points: 2, note: "Wellhead — limited manned exposure" },
+  power_plant: {
+    points: 6,
+    note: "Power plant — switchyard/intake flooding and unit safe-shutdown lead time",
+  },
+  substation: {
+    points: 5,
+    note: "Substation — flood-sensitive switchgear; outage cascades to customers",
+  },
 };
 
 const CRITICALITY: Record<Asset["criticality"], { points: number; label: string }> = {
@@ -265,6 +273,20 @@ function recommend(
   }
   if (asset.type === "port") {
     out.push("Confirm evacuation staging capacity and vessel berth allocation priority.");
+  }
+  if (asset.type === "power_plant") {
+    out.push(
+      wind >= 74
+        ? "Plan controlled unit ramp-down and secure switchyard; stage storm crews and fuel."
+        : "Confirm cooling-water intake and switchyard flood defences against forecast onset.",
+    );
+  }
+  if (asset.type === "substation") {
+    out.push(
+      rain >= 6
+        ? "Deploy flood barriers around switchgear; pre-plan load transfer to adjacent substations."
+        : "Pre-position mobile transformers and line crews for restoration.",
+    );
   }
   if (asset.type === "well") {
     out.push(

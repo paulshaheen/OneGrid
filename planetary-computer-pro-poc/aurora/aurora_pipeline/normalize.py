@@ -42,6 +42,13 @@ def _to_event(config: Config, track: Track, index: int) -> dict:
         if index - 1 < len(config.storm_names)
         else f"Aurora system {index}"
     )
+    observed = any(c.intensity_source == "observed" for c in track)
+    source = (
+        f"Aurora {config.model_name} track (Azure ML) · NHC best-track intensity (IBTrACS) · "
+        f"{config.initial_condition_source.upper()} IC"
+        if observed
+        else f"Aurora {config.model_name} (Azure ML) · {config.initial_condition_source.upper()} IC"
+    )
 
     return {
         "id": event_id,
@@ -58,7 +65,8 @@ def _to_event(config: Config, track: Track, index: int) -> dict:
         "lat": round(current.lat, 3),
         "lon": round(current.lon, 3),
         "confidence": _confidence(track),
-        "modelSource": f"Aurora {config.model_name} (Azure ML) · {config.initial_condition_source.upper()} IC",
+        "modelSource": source,
+        "intensitySource": "observed" if observed else "model",
         "updatedAtIso": stamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "expectedLandfall": "Under evaluation — see forecast track",
         "cycleId": f"{stamp:%HZ %a}",

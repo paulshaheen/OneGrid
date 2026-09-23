@@ -31,6 +31,8 @@ const ALL_TYPES: AssetType[] = [
   "lng_terminal",
   "storage",
   "port",
+  "power_plant",
+  "substation",
 ];
 
 const METRICS: ThresholdMetric[] = ["wind", "rain", "eta", "score", "distance"];

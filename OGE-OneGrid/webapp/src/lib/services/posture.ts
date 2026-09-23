@@ -68,13 +68,14 @@ export function gateStateLabel(state: GateState): string {
 }
 
 /** Facilities that carry people and therefore run the full gate sequence. */
-const MANNED = new Set(["offshore_platform", "port", "refinery", "lng_terminal"]);
+const MANNED = new Set(["offshore_platform", "port", "refinery", "lng_terminal", "power_plant"]);
 
 const NORMAL_POB: Record<string, number> = {
   offshore_platform: 128,
   refinery: 410,
   lng_terminal: 240,
   port: 180,
+  power_plant: 120,
 };
 
 const OWNER: Record<string, string> = {
@@ -85,6 +86,8 @@ const OWNER: Record<string, string> = {
   lng_terminal: "LNG Terminal Duty Manager",
   storage: "Terminals Operations Lead",
   port: "Logistics Control",
+  power_plant: "Plant Shift Supervisor",
+  substation: "Transmission Operations Center",
 };
 
 /** Gate state purely from lead time: a gate is worked in the 12 h before its T-mark. */

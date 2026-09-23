@@ -38,9 +38,14 @@ function readAsBase64(file: File): Promise<string> {
 // Downloadable examples matching SCHEMA exactly, so a user can see the expected shape
 // before uploading (same idea as Azure Migrate's downloadable assessment templates).
 // Served as static files from public/samples/ so no server round-trip is needed.
-const SAMPLE_FILES: Record<string, { file: string; label: string }> = {
-  csv: { file: "sample-assets.csv", label: "Download sample CSV" },
-  geojson: { file: "sample-assets.geojson", label: "Download sample GeoJSON" },
+const SAMPLE_FILES: Record<string, { file: string; label: string }[]> = {
+  csv: [
+    { file: "sample-assets.csv", label: "Download sample CSV" },
+    // Approximate public locations of ExxonMobil + Southern Company facilities, placed so
+    // every storm preset on the Deployment page crosses real named assets.
+    { file: "sample-assets-hurricane-coast.csv", label: "Hurricane-coast sample (XOM + Southern Co.)" },
+  ],
+  geojson: [{ file: "sample-assets.geojson", label: "Download sample GeoJSON" }],
 };
 
 function sampleHref(file: string): string {
@@ -113,7 +118,7 @@ const CONNECTORS = [
 const SCHEMA = [
   ["id", "string", "Unique asset identifier", "Required"],
   ["name", "string", "Operator-facing asset name", "Required"],
-  ["type", "enum", "platform, pipeline, well, refinery, lng_terminal, storage, port", "Required"],
+  ["type", "enum", "platform, pipeline, well, refinery, lng_terminal, storage, port, power_plant, substation", "Required"],
   ["latitude", "number", "Decimal degrees", "Required for point assets"],
   ["longitude", "number", "Decimal degrees", "Required for point assets"],
   ["geometry", "geojson", "Line or polygon geometry for corridors and areas", "Optional"],
@@ -205,7 +210,7 @@ export function AssetsPage() {
           <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
             {CONNECTORS.map((c) => {
               const isUpload = c.status === "Available";
-              const sample = SAMPLE_FILES[c.id];
+              const samples = SAMPLE_FILES[c.id] ?? [];
               const help = CONNECTOR_HELP[c.id];
               return (
                 <div key={c.id} className="bg-card p-4">
@@ -246,8 +251,9 @@ export function AssetsPage() {
                         Configure at deploy time
                       </span>
                     )}
-                    {sample && (
+                    {samples.map((sample) => (
                       <a
+                        key={sample.file}
                         href={sampleHref(sample.file)}
                         download
                         className="inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
@@ -255,7 +261,7 @@ export function AssetsPage() {
                         <Download className="size-3" />
                         {sample.label}
                       </a>
-                    )}
+                    ))}
                   </div>
                 </div>
               );
@@ -322,7 +328,7 @@ export function AssetsPage() {
               <div className="flex items-center justify-between border-b px-4 py-2.5">
                 <span className="label-xs">Asset schema</span>
                 <a
-                  href={sampleHref(SAMPLE_FILES.csv.file)}
+                  href={sampleHref(SAMPLE_FILES.csv![0]!.file)}
                   download
                   className="inline-flex items-center gap-1.5 text-[11px] text-primary hover:underline"
                 >

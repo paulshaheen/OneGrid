@@ -39,6 +39,8 @@ class Centre:
     lon: float  # -180..180
     pressure_hpa: float
     wind_ms: float
+    # "model" = Aurora's own field; "observed" = NHC best track (replays only).
+    intensity_source: str = "model"
 
 
 Track = list[Centre]

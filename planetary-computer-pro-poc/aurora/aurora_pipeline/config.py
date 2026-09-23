@@ -35,6 +35,11 @@ DEFAULT_GFS_BASE_URL = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
 DEFAULT_STATIC_REPO = "microsoft/aurora"
 DEFAULT_STATIC_NAME = "aurora-0.25-static.pickle"
 V1P5_STATIC_NAME = "aurora-0.25-v1.5-static.pickle"
+# NOAA IBTrACS per-basin CSVs (NHC best track for NA/EP), refreshed weekly, no credentials.
+DEFAULT_BEST_TRACK_URL_TEMPLATE = (
+    "https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/"
+    "v04r01/access/csv/ibtracs.{basin}.list.v04r01.csv"
+)
 
 # Aurora 1.5 checkpoints (Foundry "Aurora-1.5" deployment). They need 18 surface
 # variables + insolation and 36 static fields, so only sources that carry the full
@@ -108,6 +113,12 @@ class Config:
     is_replay: bool
     # How long an empty scheduled cycle leaves a published replay on screen.
     replay_pin_hours: int
+
+    # Replays take wind/pressure from the observed best track ("observed") or keep
+    # Aurora's under-resolved 0.25-degree intensity ("model").
+    replay_intensity: str
+    best_track_url_template: str
+    best_track_basins: tuple[str, ...]
 
     @property
     def horizon_hours(self) -> int:
@@ -245,4 +256,21 @@ def load_config() -> Config:
         output_blob_name=os.environ.get("OUTPUT_BLOB_NAME", "weather-events.json").strip(),
         is_replay=bool(analysis_raw),
         replay_pin_hours=int(os.environ.get("REPLAY_PIN_HOURS", "24")),
+        replay_intensity=_parse_replay_intensity(os.environ.get("REPLAY_INTENSITY", "observed")),
+        best_track_url_template=(
+            os.environ.get("AURORA_BEST_TRACK_URL_TEMPLATE", "").strip()
+            or DEFAULT_BEST_TRACK_URL_TEMPLATE
+        ),
+        best_track_basins=tuple(
+            b.strip().upper()
+            for b in os.environ.get("AURORA_BEST_TRACK_BASINS", "NA,EP").split(",")
+            if b.strip()
+        ),
     )
+
+
+def _parse_replay_intensity(raw: str) -> str:
+    value = raw.strip().lower()
+    if value not in ("observed", "model"):
+        raise SystemExit("REPLAY_INTENSITY must be 'observed' or 'model'.")
+    return value

@@ -1,0 +1,34 @@
+id,name,type,latitude,longitude,operator,region,business_unit,operating_status,criticality
+XOM-BAY-REF,Baytown Refinery,refinery,29.750,-95.010,ExxonMobil,Texas Gulf Coast,Refining & Chemicals,producing,business_critical
+XOM-BAY-CHM,Baytown Chemical Plant,refinery,29.765,-94.995,ExxonMobil,Texas Gulf Coast,Refining & Chemicals,producing,business_critical
+XOM-BAY-MT,Baytown Marine Terminal,port,29.730,-95.020,ExxonMobil,Texas Gulf Coast,Logistics,producing,important
+XOM-BMT-REF,Beaumont Refinery,refinery,30.060,-94.070,ExxonMobil,Texas Gulf Coast,Refining & Chemicals,producing,business_critical
+XOM-BMT-MT,Beaumont Marine Terminal,port,30.030,-94.030,ExxonMobil,Texas Gulf Coast,Logistics,producing,important
+XOM-GCGV,Gulf Coast Growth Ventures (Corpus Christi),refinery,27.930,-97.290,ExxonMobil / SABIC,South Texas Coast,Refining & Chemicals,producing,important
+XOM-GP-LNG,Golden Pass LNG,lng_terminal,29.765,-93.900,Golden Pass LNG (QatarEnergy / ExxonMobil),Texas-Louisiana Border,LNG,producing,business_critical
+XOM-BR-REF,Baton Rouge Refinery,refinery,30.490,-91.180,ExxonMobil,Louisiana,Refining & Chemicals,producing,business_critical
+XOM-BR-CHM,Baton Rouge Chemical Plant,refinery,30.505,-91.170,ExxonMobil,Louisiana,Refining & Chemicals,producing,important
+SO-BARRY,Plant Barry,power_plant,31.006,-88.010,Alabama Power (Southern Company),Alabama Coast,Generation,producing,business_critical
+SO-FARLEY,Plant Farley (Nuclear),power_plant,31.223,-85.112,Alabama Power (Southern Company),Southeast Alabama,Generation,producing,business_critical
+SO-GASTON,Plant Gaston,power_plant,33.240,-86.460,Alabama Power (Southern Company),Central Alabama,Generation,producing,important
+SO-DANIEL,Plant Daniel,power_plant,30.531,-88.557,Mississippi Power (Southern Company),Mississippi Coast,Generation,producing,business_critical
+SO-WATSON,Plant Watson,power_plant,30.441,-89.026,Mississippi Power (Southern Company),Mississippi Coast,Generation,producing,important
+SO-MCINTOSH,Plant McIntosh,power_plant,32.358,-81.167,Georgia Power (Southern Company),Coastal Georgia,Generation,producing,important
+SO-VOGTLE,Plant Vogtle (Nuclear),power_plant,33.142,-81.762,Georgia Power (Southern Company),East Georgia,Generation,producing,business_critical
+SO-HATCH,Plant Hatch (Nuclear),power_plant,31.934,-82.344,Georgia Power (Southern Company),Southeast Georgia,Generation,producing,business_critical
+SO-SCHERER,Plant Scherer,power_plant,33.062,-83.807,Georgia Power (Southern Company),Central Georgia,Generation,producing,important
+SO-BOWEN,Plant Bowen,power_plant,34.126,-84.920,Georgia Power (Southern Company),Northwest Georgia,Generation,producing,important
+SO-OLEANDER,Plant Oleander,power_plant,28.360,-80.800,Southern Power (Southern Company),Central Florida,Generation,producing,important
+SO-STANTON,Stanton A Generating Station,power_plant,28.490,-81.170,Southern Power (Southern Company),Central Florida,Generation,producing,important
+SO-SUB-GSH,Gulf Shores Transmission Substation,substation,30.270,-87.700,Alabama Power (Southern Company),Alabama Coast,Transmission,producing,important
+SO-SUB-MOB,Mobile Transmission Substation,substation,30.690,-88.100,Alabama Power (Southern Company),Alabama Coast,Transmission,producing,business_critical
+SO-SUB-DOT,Dothan Transmission Substation,substation,31.220,-85.390,Alabama Power (Southern Company),Southeast Alabama,Transmission,producing,standard
+SO-SUB-BLX,Biloxi Transmission Substation,substation,30.400,-88.900,Mississippi Power (Southern Company),Mississippi Coast,Transmission,producing,important
+SO-SUB-PAS,Pascagoula Transmission Substation,substation,30.370,-88.550,Mississippi Power (Southern Company),Mississippi Coast,Transmission,producing,important
+SO-SUB-HAT,Hattiesburg Transmission Substation,substation,31.330,-89.290,Mississippi Power (Southern Company),South Mississippi,Transmission,producing,standard
+SO-SUB-ALB,Albany Transmission Substation,substation,31.580,-84.160,Georgia Power (Southern Company),Southwest Georgia,Transmission,producing,important
+SO-SUB-VLD,Valdosta Transmission Substation,substation,30.830,-83.280,Georgia Power (Southern Company),South Georgia,Transmission,producing,standard
+SO-SUB-BRN,Brunswick Transmission Substation,substation,31.150,-81.490,Georgia Power (Southern Company),Coastal Georgia,Transmission,producing,important
+SO-SUB-SAV,Savannah Transmission Substation,substation,32.080,-81.100,Georgia Power (Southern Company),Coastal Georgia,Transmission,producing,business_critical
+SO-SUB-MAC,Macon Transmission Substation,substation,32.840,-83.630,Georgia Power (Southern Company),Central Georgia,Transmission,producing,standard
+SO-SUB-AUG,Augusta Transmission Substation,substation,33.470,-81.970,Georgia Power (Southern Company),East Georgia,Transmission,producing,important

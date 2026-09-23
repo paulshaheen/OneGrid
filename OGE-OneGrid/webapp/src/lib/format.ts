@@ -8,6 +8,8 @@ export const ASSET_TYPE_LABEL: Record<AssetType, string> = {
   lng_terminal: "LNG terminal",
   storage: "Storage facility",
   port: "Port / logistics base",
+  power_plant: "Power plant",
+  substation: "Substation",
 };
 
 export const STATUS_LABEL: Record<OperatingStatus, string> = {

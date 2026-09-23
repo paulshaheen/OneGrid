@@ -146,7 +146,7 @@ const RISK_RANK: Record<string, number> = {
   critical: 4,
 };
 
-const MAJOR_TYPES = new Set(["refinery", "lng_terminal", "port", "storage", "offshore_platform"]);
+const MAJOR_TYPES = new Set(["refinery", "lng_terminal", "port", "storage", "offshore_platform", "power_plant"]);
 
 export default function GeoMap({
   assets,

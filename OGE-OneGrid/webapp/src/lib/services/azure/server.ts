@@ -1173,6 +1173,8 @@ const ASSET_TYPES = new Set<AssetType>([
   "lng_terminal",
   "storage",
   "port",
+  "power_plant",
+  "substation",
 ]);
 const OPERATING_STATUSES = new Set<OperatingStatus>([
   "producing",
