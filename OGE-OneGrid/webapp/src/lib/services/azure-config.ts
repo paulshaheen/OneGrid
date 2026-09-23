@@ -10,6 +10,8 @@
 // Only non-secret identifiers live here. Tokens are never in the browser — the
 // server functions acquire Managed Identity tokens server-side.
 
+import { getSolution } from "@/lib/solution";
+
 export type ServiceConfig = {
   /** Planetary Computer Pro GeoCatalog data-plane URL, e.g. https://<name>.<region>.geocatalog.spatio.azure.com */
   geoCatalogUrl: string;
@@ -81,6 +83,12 @@ export function isAzureConfigured(): boolean {
  *      public demo), matching the tenant-vs-sample contract documented above.
  */
 export function useSampleData(): boolean {
+  // The active solution wins: Oil & Gas always uses the synthetic sample estate;
+  // Energy uses the live Azure providers when a tenant is wired up. (On the server
+  // getSolution() is the default 'energy', so SSR keeps the env-driven behavior.)
+  const solution = getSolution();
+  if (solution === "og") return true;
+  if (solution === "energy" && isAzureConfigured()) return false;
   if ((import.meta.env as Record<string, string | undefined>)["VITE_USE_SAMPLE_DATA"] === "true") {
     return true;
   }

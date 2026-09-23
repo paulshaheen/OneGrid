@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
 import * as sample from "./sample.js";
 import ontology from "./ontology.json";
 import { governanceRoute } from "./governance-sample.js";
+import { getSolution } from "../../lib/solution";
 
 function parse(path) {
   const [p, qs] = String(path).split("?");
@@ -17,6 +18,14 @@ function parse(path) {
 // every persona reads live Fabric/Eventhouse/PBI data through the same-origin
 // /api. Standalone / marketing builds leave it unset and use the sample provider.
 function backendEnabled() {
+  // Oil & Gas always renders the deterministic sample estate, even on a live deploy.
+  if (typeof window !== "undefined") {
+    try {
+      if (getSolution() === "og") return false;
+    } catch {
+      /* ignore */
+    }
+  }
   return typeof window !== "undefined" && !!window.__APP_CONFIG__ && !!window.__APP_CONFIG__.reportApiEnabled;
 }
 

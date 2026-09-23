@@ -46,6 +46,7 @@ import { relativeTime } from "@/lib/format";
 import { useCapacityStatus } from "@/report/lib/api.js";
 import { useModelRes, setModelRes } from "@/lib/model-res";
 import { useIsDark, setDark as setThemeDark, useMode } from "@/lib/theme-mode";
+import { useSolution, switchSolution } from "@/lib/solution";
 
 // Header bell: a quick slide-down of the current notifications with a link to the
 // full Alerts page — instead of navigating away on every click.
@@ -298,6 +299,7 @@ export function AppShell({
   const setDark = setThemeDark;
   const mode = useMode();
   const modelRes = useModelRes();
+  const solution = useSolution();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
   const cap = useCapacityStatus();
@@ -414,6 +416,9 @@ export function AppShell({
             <div className="leading-tight">
               <div className="text-[13px] font-semibold tracking-tight">
                 ONE<span style={{ color: "#38bdf8" }}>GRID</span>
+                <span className="ml-1.5 rounded bg-primary/15 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-primary align-middle">
+                  {solution === "og" ? "Oil & Gas" : "Energy"}
+                </span>
               </div>
               <div className="text-[10px] text-muted-foreground">
                 Asset &amp; weather intelligence
@@ -548,6 +553,29 @@ export function AppShell({
                     <div className="my-1 border-t" />
                     <div className="px-2 pb-1 pt-1.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
                       My preferences
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
+                      <span>Solution</span>
+                      <span className="inline-flex overflow-hidden rounded-md border">
+                        <button
+                          onClick={() => switchSolution("energy")}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-semibold",
+                            solution === "energy" ? "og-primary-control bg-primary text-primary-foreground" : "text-muted-foreground",
+                          )}
+                        >
+                          Energy
+                        </button>
+                        <button
+                          onClick={() => switchSolution("og")}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-semibold",
+                            solution === "og" ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                          )}
+                        >
+                          Oil &amp; Gas
+                        </button>
+                      </span>
                     </div>
                     <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
                       <span>Theme</span>
