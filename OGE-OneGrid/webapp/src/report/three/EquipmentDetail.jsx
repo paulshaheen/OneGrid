@@ -1,11 +1,12 @@
-import { useMemo, useState, useRef, useEffect, Suspense, Component } from 'react';
+import { useMemo, useState, useRef, useEffect, useCallback, Suspense, Component } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, ContactShadows, Html, Environment, Line } from '@react-three/drei';
 import { EffectComposer, Bloom, N8AO } from '@react-three/postprocessing';
 import { AnimatePresence, motion } from 'framer-motion';
-import { EquipmentGeometry, anchorsFor, equipmentType, viewFor } from './Equipment.jsx';
+import { EquipmentGeometry, anchorsFor, equipmentType, viewFor, GLB_ANCHORS } from './Equipment.jsx';
 import { statusOf, fmt } from '../lib/format.js';
+import { useModelRes } from '../../lib/model-res';
 import { POSTFX_ENABLED } from '../../lib/postfx.js';
 import { getJson } from '../lib/api.js';
 import { ManualResolveModal } from '../components/Manuals.jsx';
@@ -90,6 +91,77 @@ function matchAnchor(anchors, text) {
     if (sc > score) { score = sc; best = a; }
   }
   return best;
+}
+
+// Place anchors on the model. High-res with a hand-authored GLB_ANCHORS table → tie each
+// anchor to its real feature (fraction of the model box). High-res without a table →
+// proportional bbox remap. Low-res (no box) → the authored procedural positions.
+function placeAnchors(anchors, type, box) {
+  if (!box) return anchors;
+  const table = GLB_ANCHORS[type];
+  if (!table) return fitAnchorsToBox(anchors, box);
+  const sx = box.max.x - box.min.x, sy = box.max.y - box.min.y, sz = box.max.z - box.min.z;
+  return anchors.map((a) => {
+    const f = table[a.id];
+    if (!f) return a;
+    return { ...a, pos: [box.min.x + f[0] * sx, box.min.y + f[1] * sy, box.min.z + f[2] * sz] };
+  });
+}
+
+// Remap the hardcoded anchor cloud into the actual loaded model's bounding box so the
+// sensor hotspots sit ON the geometry — the GLBs are normalized to ~4.5m, unlike the
+// larger procedural models that anchorsFor()/viewFor() were authored for.
+function fitAnchorsToBox(anchors, box) {
+  if (!box || !anchors.length) return anchors;
+  const xs = anchors.map((a) => a.pos[0]), ys = anchors.map((a) => a.pos[1]), zs = anchors.map((a) => a.pos[2]);
+  const aMin = [Math.min(...xs), Math.min(...ys), Math.min(...zs)];
+  const aMax = [Math.max(...xs), Math.max(...ys), Math.max(...zs)];
+  const gMin = [box.min.x, box.min.y, box.min.z], gMax = [box.max.x, box.max.y, box.max.z];
+  const map = (v, i) => {
+    const ad = aMax[i] - aMin[i], gd = gMax[i] - gMin[i];
+    if (ad < 1e-4 || gd < 1e-4) return (gMin[i] + gMax[i]) / 2;
+    return gMin[i] + ((v - aMin[i]) / ad) * gd;
+  };
+  return anchors.map((a) => ({ ...a, pos: [map(a.pos[0], 0), map(a.pos[1], 1), map(a.pos[2], 2)] }));
+}
+
+// Frame the camera to the loaded model's bounds (keeps viewFor's angle as the direction),
+// so the normalized GLBs aren't tiny/far on load. In low-res (no bounds) it restores the
+// original viewFor framing the procedural models were authored for.
+function FitCamera({ box, controls, dir, fallback }) {
+  const { camera } = useThree();
+  useEffect(() => {
+    const c = controls?.current;
+    if (!c) return;
+    if (box) {
+      const center = new THREE.Vector3(); box.getCenter(center);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const radius = 0.5 * Math.hypot(size.x, size.y, size.z) || 2;
+      const fov = ((camera.fov || 40) * Math.PI) / 180;
+      const dist = Math.max((radius / Math.sin(fov / 2)) * 1.5, radius * 1.8);
+      const d = new THREE.Vector3(dir?.[0] ?? 1, dir?.[1] ?? 0.7, dir?.[2] ?? 1.2);
+      if (d.lengthSq() < 1e-6) d.set(1, 0.7, 1.2);
+      d.normalize();
+      camera.position.copy(center).addScaledVector(d, dist);
+      camera.near = Math.max(0.01, dist / 200);
+      camera.far = dist * 20;
+      camera.updateProjectionMatrix();
+      c.target.copy(center);
+      c.minDistance = dist * 0.4;
+      c.maxDistance = dist * 3.2;
+      c.update();
+    } else if (fallback) {
+      camera.position.set(...fallback.position);
+      camera.near = 0.1;
+      camera.far = 1000;
+      camera.updateProjectionMatrix();
+      c.target.set(...fallback.target);
+      c.minDistance = fallback.minD;
+      c.maxDistance = fallback.maxD;
+      c.update();
+    }
+  }, [box, controls, camera, dir, fallback]);
+  return null;
 }
 
 // Assign each anchor a tag + an alert level from root_cause (critical, readable) + anomalies.
@@ -179,7 +251,7 @@ function Hotspot({ anchor, theme, value, active, hideLabel = false, labelPos, on
   );
 }
 
-function Model({ asset, theme, anchors, active, onPick, snapshot }) {
+function Model({ asset, theme, anchors, active, onPick, snapshot, onBounds, lowRes }) {
   const g = useRef();
   const type = equipmentType(asset);
   const s = statusOf(asset?.status);
@@ -188,25 +260,27 @@ function Model({ asset, theme, anchors, active, onPick, snapshot }) {
   // each connects back to its component with a leader line. Classic exploded-callout look.
   const labelPos = useMemo(() => {
     const xs = anchors.map((a) => a.pos[0]), ys = anchors.map((a) => a.pos[1]), zs = anchors.map((a) => a.pos[2]);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), topY = Math.max(...ys), frontZ = Math.max(...zs, 0);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), topY = Math.max(...ys), minY = Math.min(...ys), frontZ = Math.max(...zs, 0);
+    // Gap scales with the model so labels hug small (normalized) GLBs instead of flying off.
+    const gap = Math.max(1.5, (topY - minY) * 0.6);
     const out = {};
     const sortedByX = [...anchors].sort((p, q) => p.pos[0] - q.pos[0]);
     const mid = Math.ceil(sortedByX.length / 2);
     const cols = [
-      { list: sortedByX.slice(0, mid), x: minX - 3.4 },   // left column (lower-X components)
-      { list: sortedByX.slice(mid), x: maxX + 3.4 },      // right column
+      { list: sortedByX.slice(0, mid), x: minX - gap },   // left column (lower-X components)
+      { list: sortedByX.slice(mid), x: maxX + gap },      // right column
     ];
-    const yHi = topY + 1.4, yLo = 0.8;
+    const yHi = topY + gap * 0.35, yLo = minY + 0.2;
     for (const col of cols) {
       const m = col.list.length;
       const byY = [...col.list].sort((p, q) => q.pos[1] - p.pos[1]); // high -> low, reduces line crossing
-      byY.forEach((a, k) => { const t = m > 1 ? k / (m - 1) : 0.5; out[a.id] = [col.x, yHi - (yHi - yLo) * t, frontZ + 0.8]; });
+      byY.forEach((a, k) => { const t = m > 1 ? k / (m - 1) : 0.5; out[a.id] = [col.x, yHi - (yHi - yLo) * t, frontZ + Math.max(0.6, gap * 0.3)]; });
     }
     return out;
   }, [anchors]);
   return (
     <group ref={g}>
-      <EquipmentGeometry type={type} accent={s.color} running detail />
+      <EquipmentGeometry type={type} accent={s.color} running detail lowRes={lowRes} onBounds={onBounds} />
       {anchors.map((a) => {
         const t = a.tag?.tag; const v = t ? snapshot[t]?.value : null;
         return <Hotspot key={a.id} anchor={a} theme={theme} value={v} active={active === a.id} labelPos={labelPos[a.id]}
@@ -229,19 +303,35 @@ export function EquipmentDetail({ asset, theme, snapshot = {}, anomalies = [], r
   // While intelligence is still loading, show neutral (grey) markers instead of
   // defaulting every zone to green — otherwise it misleadingly reads "all healthy".
   const anchors = loading ? rawAnchors.map((a) => ({ ...a, level: 'pending' })) : rawAnchors;
+  // Fit the camera + sensor anchors to the actual loaded GLB (normalized ~4.5m) rather than
+  // the larger procedural model that viewFor()/anchorsFor() were authored for.
+  const controlsRef = useRef(null);
+  const lowRes = useModelRes() === 'low';
+  const [box, setBox] = useState(null);
+  const onBounds = useCallback((b) => setBox((prev) => prev || b), []);
+  // Reset the fitted bounds when the asset changes or when switching to low-res (procedural
+  // models report no bounds, so the original viewFor camera + raw anchors are used).
+  useEffect(() => { setBox(null); }, [asset?.asset_id, lowRes]);
+  const fittedAnchors = useMemo(() => placeAnchors(anchors, type, box), [anchors, type, box]);
   const t = theme.three;
-  const view = viewFor(type);
+  const view = useMemo(() => viewFor(type), [type]);
   // pull the camera back a touch so the side-column labels + leader lines fit in frame
   const camPos = useMemo(() => view.position.map((c) => c * 1.16), [view]);
+  const camFallback = useMemo(
+    () => ({ position: camPos, target: view.target, minD: view.minD, maxD: view.maxD }),
+    [camPos, view],
+  );
   const s = statusOf(asset?.status);
-  const sel = anchors.find((a) => a.id === active);
-  const critCount = anchors.filter((a) => a.level === 'critical').length;
-  const watchCount = anchors.filter((a) => a.level === 'watch').length;
-  const okCount = anchors.filter((a) => a.level === 'ok').length;
+  const sel = fittedAnchors.find((a) => a.id === active);
+  const critCount = fittedAnchors.filter((a) => a.level === 'critical').length;
+  const watchCount = fittedAnchors.filter((a) => a.level === 'watch').length;
+  const okCount = fittedAnchors.filter((a) => a.level === 'ok').length;
 
   return (
     <div className="relative w-full h-full overflow-hidden"
-      style={{ background: 'radial-gradient(120% 90% at 50% 18%, #243347 0%, #16202f 42%, #0c1420 72%, #070b12 100%)' }}>
+      style={{ background: theme?.mode === 'light'
+        ? 'radial-gradient(120% 90% at 50% 18%, #eef2f8 0%, #e2e8f2 42%, #d3dced 72%, #c4d0e4 100%)'
+        : 'radial-gradient(120% 90% at 50% 18%, #243347 0%, #16202f 42%, #0c1420 72%, #070b12 100%)' }}>
       {/* subtle grid floor vibe */}
       <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(60% 40% at 50% 92%, rgba(120,150,200,.10), transparent 70%)' }} />
       <Canvas shadows dpr={[1, 2]} camera={{ position: camPos, fov: 40 }}
@@ -254,11 +344,12 @@ export function EquipmentDetail({ asset, theme, snapshot = {}, anomalies = [], r
         <spotLight position={[-6, 9, 10]} angle={0.6} penumbra={0.8} intensity={1.4} color={s.color} distance={44} />
         <pointLight position={[8, 3, -8]} intensity={0.7} color={'#3f96ff'} />
         <SafeB><Suspense fallback={null}><Environment preset={'sunset'} environmentIntensity={1.1} /></Suspense></SafeB>
-        <Model asset={asset} theme={theme} anchors={anchors} active={active} snapshot={snapshot}
+        <Model asset={asset} theme={theme} anchors={fittedAnchors} active={active} snapshot={snapshot} onBounds={onBounds} lowRes={lowRes}
           onPick={(a) => setActive((cur) => (cur === a.id ? null : a.id))} />
         <ContactShadows position={[0, 0.02, 0]} opacity={0.7} scale={30} blur={2.6} far={16} color={'#020509'} />
-        <OrbitControls target={view.target} enablePan={false} minDistance={view.minD} maxDistance={view.maxD}
+        <OrbitControls ref={controlsRef} target={view.target} enablePan={false} minDistance={view.minD} maxDistance={view.maxD}
           maxPolarAngle={Math.PI / 2.05} enableDamping dampingFactor={0.08} />
+        <FitCamera box={box} controls={controlsRef} dir={view.position} fallback={camFallback} />
         {POSTFX_ENABLED && (
           <EffectComposer disableNormalPass>
             <N8AO halfRes aoRadius={1.6} intensity={2.4} distanceFalloff={1.0} color="#05070c" />

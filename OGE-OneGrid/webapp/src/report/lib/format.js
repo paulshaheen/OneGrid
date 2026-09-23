@@ -6,7 +6,14 @@ export const STATUS = {
   watch: { label: 'Watch', color: '#ffcc4d', glow: 'rgba(255,204,77,.5)', ring: 'ring-amber-400/40', shape: 'triangle' },
   critical: { label: 'Critical', color: '#ff5470', glow: 'rgba(255,84,112,.55)', ring: 'ring-rose-400/40', shape: 'octagon' },
 };
-export const statusOf = (s) => STATUS[s] || STATUS.ok;
+export const statusOf = (s) => {
+  const base = STATUS[s] || STATUS.ok;
+  // The watch yellow (#ffcc4d) is unreadable as text on a light background; use a darker
+  // amber in light mode. Glows/rings keep the base tint (they read fine either way).
+  const dark = typeof document === 'undefined' || document.documentElement.classList.contains('dark');
+  if (s === 'watch' && !dark) return { ...base, color: '#b8860b' };
+  return base;
+};
 
 export const fmt = (v, d = 1) =>
   v === null || v === undefined || Number.isNaN(Number(v)) ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: d });

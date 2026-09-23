@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import type { ComponentType } from "react";
 
-import { MODES } from "@/report/lib/themes.js";
+import { useMode } from "@/lib/theme-mode";
 import { cn } from "@/lib/utils";
 
 // The Control-Room 3D equipment train (Facility) statically imports three.js + R3F, so we
@@ -29,6 +29,7 @@ export function InlineFacility({
   className?: string;
 }) {
   const [mounted, setMounted] = useState(false);
+  const mode = useMode();
   useEffect(() => setMounted(true), []);
 
   const fallback = (
@@ -44,7 +45,7 @@ export function InlineFacility({
       <Suspense fallback={fallback}>
         <Facility
           model={model}
-          theme={MODES.dark}
+          theme={mode}
           activePlant={activePlant}
           selected={selectedAssetId}
           onSelect={onSelect}

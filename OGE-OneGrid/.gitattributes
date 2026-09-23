@@ -3,7 +3,7 @@
 *.parquet filter=lfs diff=lfs merge=lfs -text
 *.parquet.gz filter=lfs diff=lfs merge=lfs -text
 data/** filter=lfs diff=lfs merge=lfs -text
-
 # Keep text files (README placeholders, manifests) out of LFS.
 data/**/README.txt !filter !diff !merge text
 data/**/_manifest.json !filter !diff !merge text
+webapp/public/models/*.glb filter=lfs diff=lfs merge=lfs -text

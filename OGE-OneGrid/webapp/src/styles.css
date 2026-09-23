@@ -160,6 +160,30 @@
   --sidebar-accent-foreground: oklch(0.25 0.02 250);
   --sidebar-border: oklch(0.89 0.008 245);
   --sidebar-ring: oklch(0.6 0.13 250);
+
+  /* Light-mode values for the OG skin/panel vars that some views (command-center) apply
+     inline via var(); the dark values live in .dark below. Without these, light mode fell
+     back to the dark inline fallbacks and the landing content stayed dark. */
+  --og-skin-gradient:
+    radial-gradient(ellipse at 25% 0%, oklch(0.9 0.03 258 / 0.35), transparent 60%),
+    linear-gradient(155deg, oklch(0.975 0.004 260), oklch(0.95 0.006 255) 65%, oklch(0.97 0.005 260));
+  --og-panel-background:
+    linear-gradient(145deg, oklch(1 0 0), oklch(0.985 0.003 250) 74%, oklch(0.995 0.001 250));
+  --og-panel-border: oklch(0.86 0.01 255 / 0.9);
+  --og-panel-shadow: inset 0 1px 0 oklch(1 0 0 / 0.6), 0 4px 16px oklch(0.5 0.02 250 / 0.08);
+  /* Light-mode holo-map palette (flat command view). */
+  --og-map-gradient:
+    radial-gradient(ellipse 80% 70% at 50% 45%, oklch(0.95 0.01 245) 0%, oklch(0.92 0.015 248) 45%, oklch(0.88 0.02 250) 75%, oklch(0.85 0.025 252) 100%);
+  --ocean: oklch(0.9 0.02 240);
+  --ocean-deep: oklch(0.86 0.025 245);
+  --land: oklch(0.83 0.02 150);
+  --shelf: oklch(0.8 0.03 235);
+  --shelf-line: oklch(0.62 0.05 230);
+  --shoreline: oklch(0.6 0.03 150);
+  --grid-label: oklch(0.5 0.02 245);
+  --place: oklch(0.42 0.015 245);
+  --water-label: oklch(0.5 0.04 235);
+  --region-label: oklch(0.48 0.03 145);
 }
 
 .dark {
@@ -344,6 +368,14 @@
 
 .dark .og-header-skin {
   background-image: var(--og-header-gradient);
+}
+
+/* Base panel skin uses the flipping vars, so og-panel cards get a light surface in light
+   mode and the dark gradient in dark mode. */
+.og-panel {
+  background-image: var(--og-panel-background);
+  border-color: var(--og-panel-border);
+  box-shadow: var(--og-panel-shadow);
 }
 
 .dark .og-panel,

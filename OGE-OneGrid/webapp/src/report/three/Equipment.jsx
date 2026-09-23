@@ -1,6 +1,7 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
 import { STEEL_TEX, PLATES_TEX, DARK_TEX, PAINTED_TEX, CONCRETE_TEX, HAS_TEX, STEAM_TEX } from './textures.js';
 
 // Map an asset to an equipment archetype. Prefer the NAME (the group is a unit label
@@ -35,15 +36,83 @@ const MAT = {
 
 // Each model returns { anchors: [{id,label,pos,hint}], node } via a component that
 // renders the geometry and exposes anchor points for tag hotspots.
-export function EquipmentGeometry({ type, accent = '#3f96ff', running = true, detail = false }) {
+export function EquipmentGeometry({ type, accent = '#3f96ff', running = true, detail = false, onBounds, lowRes = false }) {
+  // High-res detail uses the photoreal GLBs; low-res (or fleet/overview) uses the
+  // lightweight procedural builders. Toggled via the profile menu → model-res store.
+  const glb = detail && !lowRes;
   switch (type) {
-    case 'turbine': return <Turbine accent={accent} running={running} detail={detail} />;
-    case 'boiler': return <Boiler accent={accent} running={running} detail={detail} />;
-    case 'pump': return <Pump accent={accent} running={running} detail={detail} />;
-    case 'generator': return <Generator accent={accent} running={running} detail={detail} />;
+    case 'turbine': return glb
+      ? <TurbineGLB onBounds={onBounds} />
+      : <Turbine accent={accent} running={running} detail={detail} />;
+    case 'boiler': return glb
+      ? <BoilerGLB onBounds={onBounds} />
+      : <Boiler accent={accent} running={running} detail={detail} />;
+    case 'pump': return glb
+      ? <PumpGLB onBounds={onBounds} />
+      : <Pump accent={accent} running={running} detail={detail} />;
+    case 'generator': return glb
+      ? <GeneratorGLB onBounds={onBounds} />
+      : <Generator accent={accent} running={running} detail={detail} />;
+    case 'offshore_platform': return glb
+      ? <PlatformGLB onBounds={onBounds} />
+      : <OffshorePlatform accent={accent} running={running} detail={detail} />;
+    case 'well': return glb
+      ? <WellheadGLB onBounds={onBounds} />
+      : <Wellhead accent={accent} running={running} detail={detail} />;
+    case 'storage': return glb
+      ? <StorageGLB onBounds={onBounds} />
+      : <StorageTank accent={accent} running={running} detail={detail} />;
+    case 'lng_terminal': return glb
+      ? <LngGLB onBounds={onBounds} />
+      : <LngTerminal accent={accent} running={running} detail={detail} />;
+    case 'refinery': return glb
+      ? <RefineryGLB onBounds={onBounds} />
+      : <Refinery accent={accent} running={running} detail={detail} />;
+    case 'port': return glb
+      ? <PortGLB onBounds={onBounds} />
+      : <Port accent={accent} running={running} detail={detail} />;
+    case 'pipeline': return glb
+      ? <PipelineGLB onBounds={onBounds} />
+      : <Pipeline accent={accent} running={running} detail={detail} />;
     default: return <Skid accent={accent} running={running} detail={detail} />;
   }
 }
+
+// Self-normalizing GLB for the facility drill-in: measures its own bounds and scales to a
+// common target height so the photoreal models drop into the equipment-train slots at the
+// same size the procedural glyphs used. Gated behind the High model-resolution setting.
+export function FacilityModel({ type, accent = '#3f96ff', running = true, targetHeight = 8 }) {
+  const [fit, setFit] = useState({ s: targetHeight / 4.5, pos: [0, 0, 0] });
+  const onBounds = useCallback((box) => {
+    const sy = Math.max(box.max.y - box.min.y, 1e-3);
+    const s = targetHeight / sy;
+    const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+    setFit({ s, pos: [-cx * s, -box.min.y * s, -cz * s] });
+  }, [targetHeight]);
+  return (
+    <group position={fit.pos} scale={fit.s}>
+      <EquipmentGeometry type={type} accent={accent} running={running} detail onBounds={onBounds} />
+    </group>
+  );
+}
+
+// Hand-placed anchor positions on the actual photoreal GLB features, as fractions
+// [fx, fy, fz] of the loaded model's bounding box (fx=width, fy=height, fz=depth; the
+// GLBs are normalized + seated at y=0). Keyed by the same anchor ids as anchorsFor().
+// Used only in High-res; Low-res keeps the procedural anchorsFor() positions.
+export const GLB_ANCHORS = {
+  offshore_platform: { deck: [0.50, 0.42, 0.55], sep: [0.28, 0.44, 0.62], flare: [0.86, 0.55, 0.50], derrick: [0.51, 0.76, 0.50], heli: [0.14, 0.55, 0.64] },
+  well: { tree: [0.50, 0.74, 0.50], whp: [0.50, 0.48, 0.55], flow: [0.72, 0.22, 0.50] },
+  storage: { shell: [0.28, 0.50, 0.55], roof: [0.28, 0.90, 0.50] },
+  lng_terminal: { sphere: [0.50, 0.55, 0.40], rack: [0.58, 0.12, 0.90] },
+  refinery: { cdu: [0.46, 0.72, 0.50], rack: [0.60, 0.33, 0.60], flare: [0.72, 0.78, 0.50] },
+  port: { crane: [0.50, 0.88, 0.50], berth: [0.35, 0.08, 0.60] },
+  pipeline: { valve: [0.12, 0.78, 0.50], pig: [0.48, 0.50, 0.55], press: [0.82, 0.45, 0.50] },
+  turbine: { hp: [0.52, 0.55, 0.50], ip: [0.62, 0.60, 0.50], lp: [0.72, 0.52, 0.50], fbrg: [0.16, 0.45, 0.50], rbrg: [0.88, 0.45, 0.50], shaft: [0.62, 0.85, 0.50] },
+  boiler: { drum: [0.47, 0.90, 0.50], furn: [0.51, 0.45, 0.60], sh: [0.62, 0.66, 0.50], econ: [0.40, 0.20, 0.55], aph: [0.80, 0.28, 0.50] },
+  pump: { motor: [0.26, 0.44, 0.75], mbrg: [0.30, 0.46, 0.62], seal: [0.44, 0.42, 0.46], volute: [0.42, 0.48, 0.52], suction: [0.30, 0.10, 0.06], pbrg: [0.40, 0.55, 0.44] },
+  generator: { stator: [0.50, 0.55, 0.40], exc: [0.58, 0.60, 0.10], brg: [0.50, 0.48, 0.90] },
+};
 
 // Camera framing per archetype so the whole model is centered & fully visible
 // (a tall boiler needs a very different frame than a long turbine).
@@ -53,6 +122,13 @@ export function viewFor(type) {
     case 'boiler':    return { position: [12, 8.5, 16], target: [0, 3.8, 0], minD: 10, maxD: 34 };
     case 'pump':      return { position: [8, 5, 11], target: [0, 1.7, 0], minD: 6, maxD: 24 };
     case 'generator': return { position: [9.5, 5.5, 12.5], target: [0, 1.9, 0], minD: 7, maxD: 26 };
+    case 'offshore_platform': return { position: [14, 10, 17], target: [0, 3.6, 0], minD: 11, maxD: 44 };
+    case 'well':              return { position: [6, 4.5, 8], target: [0, 1.8, 0], minD: 4, maxD: 20 };
+    case 'storage':           return { position: [11, 8, 14], target: [0, 3.0, 0], minD: 9, maxD: 34 };
+    case 'lng_terminal':      return { position: [12, 7, 15], target: [0, 2.4, 0], minD: 9, maxD: 34 };
+    case 'refinery':          return { position: [14, 10, 17], target: [0, 4.2, 0], minD: 11, maxD: 42 };
+    case 'port':              return { position: [15, 9, 17], target: [0, 2.4, 0], minD: 11, maxD: 44 };
+    case 'pipeline':          return { position: [11, 5.5, 12], target: [0, 1.1, 0], minD: 7, maxD: 30 };
     default:          return { position: [7.5, 5, 10.5], target: [0, 1.6, 0], minD: 6, maxD: 22 };
   }
 }
@@ -86,6 +162,40 @@ export function anchorsFor(type) {
       { id: 'stator', label: 'Stator', pos: [0, 2.6, 0], hint: 'stator|voltage|volt' },
       { id: 'exc', label: 'Exciter', pos: [3.2, 1.6, 0], hint: 'exciter|field|reactive' },
       { id: 'brg', label: 'Bearing', pos: [-3.2, 1.4, 0], hint: 'bearing|brg|h2|hydrogen' },
+    ];
+    case 'offshore_platform': return [
+      { id: 'deck', label: 'Process Deck', pos: [0, 3.7, 0], hint: 'process|deck|topside' },
+      { id: 'sep', label: 'Separator', pos: [1.6, 4.2, -1.8], hint: 'separator|sep|pressure' },
+      { id: 'flare', label: 'Flare', pos: [4.4, 4.2, 0], hint: 'flare|gas|burn' },
+      { id: 'derrick', label: 'Derrick', pos: [-1.8, 8.2, 1.6], hint: 'derrick|drill|well' },
+      { id: 'heli', label: 'Helideck', pos: [2.0, 3.9, 2.2], hint: 'helideck|heli' },
+    ];
+    case 'well': return [
+      { id: 'tree', label: 'Xmas Tree', pos: [0, 3.4, 0], hint: 'tree|valve|choke' },
+      { id: 'whp', label: 'Wellhead', pos: [0, 1.0, 0], hint: 'wellhead|casing|pressure|pip' },
+      { id: 'flow', label: 'Flowline', pos: [1.9, 0.6, 0], hint: 'flow|line|rate|amps' },
+    ];
+    case 'storage': return [
+      { id: 'shell', label: 'Shell', pos: [0, 3.0, 2.6], hint: 'shell|level|temp' },
+      { id: 'roof', label: 'Roof', pos: [0, 5.6, 0], hint: 'roof|vapor|pressure' },
+    ];
+    case 'lng_terminal': return [
+      { id: 'sphere', label: 'LNG Sphere', pos: [0, 3.6, 0], hint: 'sphere|lng|level|temp' },
+      { id: 'rack', label: 'Loading', pos: [2.6, 1.6, 2.0], hint: 'loading|jetty|flow' },
+    ];
+    case 'refinery': return [
+      { id: 'cdu', label: 'Crude Column', pos: [0.2, 6.2, 0], hint: 'column|cdu|distill|temp' },
+      { id: 'rack', label: 'Pipe Rack', pos: [1.6, 2.0, 2.2], hint: 'rack|pipe|flow' },
+      { id: 'flare', label: 'Flare', pos: [3.4, 6.4, -1.5], hint: 'flare|gas' },
+    ];
+    case 'port': return [
+      { id: 'crane', label: 'Gantry Crane', pos: [-1.2, 6.2, 1.8], hint: 'crane|load' },
+      { id: 'berth', label: 'Berth', pos: [1.8, 0.9, 1.8], hint: 'berth|vessel|dock' },
+    ];
+    case 'pipeline': return [
+      { id: 'valve', label: 'Block Valve', pos: [0, 1.9, 0], hint: 'valve|block|isolation' },
+      { id: 'pig', label: 'Pig Launcher', pos: [-3.0, 1.0, 0], hint: 'pig|launcher|flow' },
+      { id: 'press', label: 'Pressure', pos: [2.2, 1.2, 0], hint: 'pressure|flow|leak|imbalance' },
     ];
     default: return [
       { id: 'a', label: 'Point A', pos: [-1.5, 1.6, 0], hint: '' },
@@ -624,6 +734,253 @@ function Skid({ accent, running = true, detail = false }) {
       <mesh position={[-1.6, 1.5, -1.0]} castShadow><boxGeometry args={[0.7, 1.4, 0.5]} /><meshStandardMaterial {...MAT.painted} /></mesh>
       <Gauge pos={[1.0, 2.9, 1.0]} />
       <Greeble type="skid" />
+    </group>
+  );
+}
+
+// ======================= Oil & Gas models =======================
+// A live gas flare — emissive flame + drifting smoke, used by the platform & refinery.
+function Flame({ position = [0, 0, 0], scale = 1, run = true }) {
+  const ref = useRef();
+  useFrame((s) => { if (ref.current && run) ref.current.scale.setScalar(scale * (1 + 0.12 * Math.sin(s.clock.elapsedTime * 9))); });
+  return (
+    <group position={position}>
+      <group ref={ref}>
+        <mesh><coneGeometry args={[0.5 * scale, 2.2 * scale, 14]} /><meshStandardMaterial color="#ff7a2c" emissive="#ff5a1a" emissiveIntensity={2.2} toneMapped={false} /></mesh>
+        <mesh position={[0, 0.5 * scale, 0]}><coneGeometry args={[0.28 * scale, 1.3 * scale, 14]} /><meshStandardMaterial color="#ffd27a" emissive="#ffbd52" emissiveIntensity={3} toneMapped={false} /></mesh>
+      </group>
+      <Steam position={[0, 1.7 * scale, 0]} count={10} spread={0.4} rise={3} size={1.3} color="#3b3b3b" opacity={0.26} run={run} />
+    </group>
+  );
+}
+
+function OffshorePlatform({ accent, running = true }) {
+  const legs = [[-1.9, -1.9], [1.9, -1.9], [-1.9, 1.9], [1.9, 1.9]];
+  return (
+    <group>
+      {/* jacket legs down to the seabed + cross bracing */}
+      {legs.map(([x, z], i) => (
+        <mesh key={i} position={[x, -1.4, z]} castShadow><cylinderGeometry args={[0.26, 0.34, 7.2, 12]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+      ))}
+      <Seg a={[-1.9, -3.2, -1.9]} b={[1.9, -0.4, 1.9]} r={0.08} mat={MAT.darksteel} />
+      <Seg a={[1.9, -3.2, -1.9]} b={[-1.9, -0.4, 1.9]} r={0.08} mat={MAT.darksteel} />
+      <Seg a={[-1.9, -3.2, 1.9]} b={[1.9, -0.4, -1.9]} r={0.08} mat={MAT.darksteel} />
+      {/* main deck */}
+      <mesh position={[0, 3.2, 0]} castShadow receiveShadow><boxGeometry args={[6.8, 0.5, 6.4]} /><meshStandardMaterial {...MAT.painted} /></mesh>
+      <Handrail w={6.8} d={6.4} y0={3.45} h={1.0} />
+      {/* topside process modules + separators */}
+      <mesh position={[-1.7, 4.5, -1.2]} castShadow><boxGeometry args={[2.2, 2.1, 2.2]} /><meshStandardMaterial {...MAT.casing} /></mesh>
+      <mesh position={[1.5, 4.2, 1.1]} castShadow><boxGeometry args={[2.6, 1.6, 2.4]} /><meshStandardMaterial {...MAT.painted} /></mesh>
+      <mesh position={[1.6, 4.0, -1.8]} rotation={[Math.PI / 2, 0, 0]} castShadow><cylinderGeometry args={[0.6, 0.6, 2.2, 20]} /><meshStandardMaterial {...MAT.steel} /></mesh>
+      {/* drilling derrick — tapered lattice */}
+      <group position={[-1.7, 3.45, 1.6]}>
+        {[0, 1, 2, 3].map((i) => {
+          const s = 1 - i * 0.17;
+          return (
+            <group key={i} position={[0, i * 1.4, 0]}>
+              {[[-0.55 * s, -0.55 * s], [0.55 * s, -0.55 * s], [-0.55 * s, 0.55 * s], [0.55 * s, 0.55 * s]].map(([x, z], j) => (
+                <mesh key={j} position={[x, 0.7, z]} castShadow><cylinderGeometry args={[0.05, 0.05, 1.4, 6]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+              ))}
+            </group>
+          );
+        })}
+        <mesh position={[0, 5.7, 0]} castShadow><boxGeometry args={[0.4, 0.4, 0.4]} /><meshStandardMaterial color={accent} /></mesh>
+      </group>
+      {/* flare boom + flame */}
+      <group position={[3.4, 3.6, 0]} rotation={[0, 0, -0.5]}>
+        <mesh position={[1.7, 0, 0]} rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.14, 0.14, 3.8, 10]} /><meshStandardMaterial {...MAT.pipe} /></mesh>
+        <Flame position={[3.4, 0.5, 0]} scale={0.9} run={running} />
+      </group>
+      {/* helideck */}
+      <mesh position={[2.0, 3.55, 2.3]} castShadow><cylinderGeometry args={[1.4, 1.4, 0.12, 24]} /><meshStandardMaterial color="#2a3547" metalness={0.3} roughness={0.85} /></mesh>
+      <mesh position={[2.0, 3.63, 2.3]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.7, 0.9, 32]} /><meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.35} side={THREE.DoubleSide} /></mesh>
+      <Gauge pos={[0, 4.0, 2.7]} />
+    </group>
+  );
+}
+
+// Photoreal O&G assets from real Sketchfab CAD models (all CC-BY, see MODEL_CREDITS),
+// decimated + textured, exported as GLBs. Used only in the drill-in detail view; the
+// fleet/overview still renders the lightweight procedural builders below.
+function makeGLB(path) {
+  function GLB({ onBounds }) {
+    const { scene } = useGLTF(path);
+    const model = useMemo(() => scene.clone(true), [scene]);
+    // Report the model's local-space bounding box (rotation-independent) so the detail
+    // view can frame the camera and lay the sensor anchors onto the actual geometry —
+    // the GLBs are all normalized to ~4.5m, unlike the larger procedural models the
+    // hardcoded anchors/cameras were authored for.
+    useEffect(() => {
+      if (!onBounds) return;
+      model.updateWorldMatrix(true, true);
+      const inv = model.matrixWorld.clone().invert();
+      const box = new THREE.Box3();
+      const tmp = new THREE.Box3();
+      const m = new THREE.Matrix4();
+      model.traverse((o) => {
+        if (o.isMesh && o.geometry) {
+          o.updateWorldMatrix(true, false);
+          if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+          m.multiplyMatrices(inv, o.matrixWorld);
+          tmp.copy(o.geometry.boundingBox).applyMatrix4(m);
+          box.union(tmp);
+        }
+      });
+      if (!box.isEmpty()) onBounds(box);
+    }, [model, onBounds]);
+    return <primitive object={model} />;
+  }
+  useGLTF.preload(path);
+  return GLB;
+}
+const WellheadGLB = makeGLB('/models/wellhead.glb');
+const PlatformGLB = makeGLB('/models/platform.glb');
+const StorageGLB = makeGLB('/models/storage.glb');
+const RefineryGLB = makeGLB('/models/refinery.glb');
+const LngGLB = makeGLB('/models/lng.glb');
+const PortGLB = makeGLB('/models/port.glb');
+const PipelineGLB = makeGLB('/models/pipeline.glb');
+const TurbineGLB = makeGLB('/models/turbine.glb');
+const BoilerGLB = makeGLB('/models/boiler.glb');
+const PumpGLB = makeGLB('/models/pump.glb');
+const GeneratorGLB = makeGLB('/models/generator.glb');
+
+// Attribution for shipped Sketchfab models (CC-BY requires credit).
+export const MODEL_CREDITS = [
+  { type: 'well', title: 'Oil Wellhead Assembly', author: 'vivek.b.khandelwal' },
+  { type: 'offshore_platform', title: 'Offshore Oil Rig', author: 'Juoda' },
+  { type: 'storage', title: 'Industrial Storage Tanks', author: 'duanesmind' },
+  { type: 'refinery', title: 'Refinery Complex', author: 'Chenzoss' },
+  { type: 'lng_terminal', title: 'Gas Storage Sphere', author: 'burnedhrum' },
+  { type: 'port', title: 'Harbour Crane (Skipskranen)', author: 'Tidvis' },
+  { type: 'pipeline', title: 'Old Rusty Pipeline', author: 'SamuelLee' },
+  { type: 'turbine', title: 'Turbine Generator', author: 'shevchukmaks' },
+  { type: 'boiler', title: 'Industrial Boiler System', author: '0xDegenPicasso' },
+  { type: 'pump', title: 'Industrial Water Pump', author: 'visthetique' },
+  { type: 'generator', title: 'Diesel Generator', author: 'orphanrtg' },
+];
+
+function Wellhead({ accent }) {
+  return (
+    <group>
+      <Base w={4} d={4} />
+      <mesh position={[0, 0.7, 0]} castShadow><cylinderGeometry args={[0.6, 0.72, 1.4, 20]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+      {/* stacked valve blocks (christmas tree) */}
+      {[0, 1, 2].map((i) => (<mesh key={i} position={[0, 1.6 + i * 0.7, 0]} castShadow><boxGeometry args={[0.9, 0.6, 0.9]} /><meshStandardMaterial {...MAT.painted} /></mesh>))}
+      <mesh position={[0, 3.5, 0]} castShadow><cylinderGeometry args={[0.35, 0.46, 0.5, 16]} /><meshStandardMaterial color={accent} metalness={0.6} roughness={0.4} /></mesh>
+      {/* wing valves + handwheels */}
+      {[-1, 1].map((s) => (
+        <group key={s} position={[s * 0.9, 2.0, 0]}>
+          <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.22, 0.22, 0.9, 14]} /><meshStandardMaterial {...MAT.steel} /></mesh>
+          <mesh position={[s * 0.6, 0, 0]} rotation={[0, 0, Math.PI / 2]}><torusGeometry args={[0.32, 0.06, 8, 20]} /><meshStandardMaterial color={accent} /></mesh>
+        </group>
+      ))}
+      <mesh position={[1.5, 0.55, 0]} rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.18, 0.18, 1.8, 16]} /><meshStandardMaterial {...MAT.pipe} /></mesh>
+      <Valve pos={[2.2, 0.55, 0]} />
+      <Gauge pos={[0.8, 3.0, 0.7]} />
+    </group>
+  );
+}
+
+function StorageTank({ accent }) {
+  return (
+    <group>
+      <Base w={7} d={7} />
+      <mesh position={[0, 2.6, 0]} castShadow receiveShadow><cylinderGeometry args={[2.6, 2.6, 5.0, 40]} /><meshStandardMaterial {...MAT.painted} /></mesh>
+      <mesh position={[0, 5.1, 0]} castShadow><sphereGeometry args={[2.6, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial {...MAT.casing} /></mesh>
+      {[1.4, 2.8, 4.2].map((y, i) => (<mesh key={i} position={[0, y, 0]}><torusGeometry args={[2.61, 0.04, 8, 48]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>))}
+      {/* spiral stair */}
+      {Array.from({ length: 11 }).map((_, i) => { const a = i * 0.55; return (<mesh key={i} position={[Math.cos(a) * 2.78, 0.5 + i * 0.46, Math.sin(a) * 2.78]} castShadow><boxGeometry args={[0.5, 0.06, 0.28]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>); })}
+      <mesh position={[2.9, 3.4, 0]} rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.16, 0.16, 0.9, 12]} /><meshStandardMaterial color={accent} /></mesh>
+      <Gauge pos={[0, 5.7, 0]} />
+    </group>
+  );
+}
+
+function LngTerminal({ accent }) {
+  return (
+    <group>
+      <Base w={8} d={5} />
+      {[-2.2, 0, 2.2].map((x, i) => (
+        <group key={i} position={[x, 2.7, 0]}>
+          <mesh position={[0, -1.6, 0]} castShadow><cylinderGeometry args={[0.9, 1.0, 1.7, 20]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+          <mesh castShadow><sphereGeometry args={[1.3, 32, 24]} /><meshStandardMaterial color="#eef2f7" metalness={0.7} roughness={0.35} envMapIntensity={1.5} /></mesh>
+          <mesh><torusGeometry args={[1.31, 0.03, 8, 40]} /><meshStandardMaterial color={accent} /></mesh>
+        </group>
+      ))}
+      {/* pipe rack */}
+      <mesh position={[0, 1.2, 2.0]} castShadow><boxGeometry args={[6.6, 0.16, 0.3]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+      {[-2.7, 0, 2.7].map((x, i) => (<mesh key={i} position={[x, 0.6, 2.0]} castShadow><boxGeometry args={[0.16, 1.2, 0.16]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>))}
+      <Seg a={[-3.1, 1.3, 2.0]} b={[3.1, 1.3, 2.0]} r={0.08} mat={MAT.pipe} />
+      <Gauge pos={[0, 4.3, 0]} />
+    </group>
+  );
+}
+
+function Refinery({ accent, running = true }) {
+  const cols = [[-1.8, 3.0], [0.2, 3.9], [1.9, 2.5]];
+  return (
+    <group>
+      <Base w={9} d={6} />
+      {cols.map(([x, h], i) => (
+        <group key={i} position={[x, 0, 0]}>
+          <mesh position={[0, h, 0]} castShadow><cylinderGeometry args={[0.55, 0.62, h * 2, 24]} /><meshStandardMaterial {...MAT.painted} /></mesh>
+          {[0.3, 0.6, 0.85].map((f, j) => (<mesh key={j} position={[0, h * 2 * f, 0]}><torusGeometry args={[0.6, 0.05, 8, 24]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>))}
+          <mesh position={[0, h * 2 + 0.2, 0]} castShadow><cylinderGeometry args={[0.3, 0.55, 0.5, 20]} /><meshStandardMaterial {...MAT.steel} /></mesh>
+        </group>
+      ))}
+      {/* pipe rack */}
+      <mesh position={[0, 1.4, 2.2]} castShadow><boxGeometry args={[7, 0.16, 0.4]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+      {[-3, -1, 1, 3].map((x, i) => (<mesh key={i} position={[x, 0.7, 2.2]} castShadow><boxGeometry args={[0.16, 1.4, 0.16]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>))}
+      <Seg a={[-3.4, 1.5, 2.2]} b={[3.4, 1.5, 2.2]} r={0.07} mat={MAT.pipe} />
+      <Seg a={[-3.4, 1.2, 2.2]} b={[3.4, 1.2, 2.2]} r={0.06} mat={MAT.copper} />
+      {/* flare stack */}
+      <group position={[3.4, 0, -1.5]}>
+        <mesh position={[0, 3.0, 0]} castShadow><cylinderGeometry args={[0.16, 0.2, 6, 14]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+        <Flame position={[0, 6.3, 0]} scale={0.8} run={running} />
+      </group>
+      <Gauge pos={[0.2, 8.0, 0]} />
+    </group>
+  );
+}
+
+function Port({ accent, running = true }) {
+  const trolley = useRef();
+  useFrame((s) => { if (trolley.current && running) trolley.current.position.x = -1.2 + Math.sin(s.clock.elapsedTime * 0.5) * 2.2; });
+  const boxes = [['#c0492f', -3.4, 0.7, -0.6], ['#2f6ec0', -3.4, 1.35, -0.6], ['#2f9e6e', -2.0, 0.7, -0.6], ['#c98a12', 3.2, 0.7, -0.4], ['#7c5cf0', 3.2, 1.35, -0.4]];
+  return (
+    <group>
+      <Base w={10} d={6} />
+      {/* quay */}
+      <mesh position={[0, 0.4, 1.8]} castShadow receiveShadow><boxGeometry args={[9, 0.8, 2.2]} /><meshStandardMaterial {...MAT.base} /></mesh>
+      {/* gantry crane portal */}
+      {[[-1.2, 1.0], [-1.2, 2.6]].map(([x, z], i) => (<mesh key={i} position={[x, 3.2, z]} castShadow><boxGeometry args={[0.2, 5.6, 0.2]} /><meshStandardMaterial color={accent} /></mesh>))}
+      <mesh position={[-1.2, 6.0, 1.8]} castShadow><boxGeometry args={[0.3, 0.3, 3.4]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+      <mesh position={[1.6, 6.0, 1.8]} castShadow><boxGeometry args={[5.8, 0.3, 0.3]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+      <mesh ref={trolley} position={[-1.2, 5.7, 1.8]} castShadow><boxGeometry args={[0.6, 0.4, 0.6]} /><meshStandardMaterial {...MAT.painted} /></mesh>
+      {/* stacked containers */}
+      {boxes.map(([c, x, y, z], i) => (<mesh key={i} position={[x, y, z]} castShadow><boxGeometry args={[1.4, 0.6, 0.7]} /><meshStandardMaterial color={c} metalness={0.2} roughness={0.7} /></mesh>))}
+      <Gauge pos={[1.8, 1.4, 1.8]} />
+    </group>
+  );
+}
+
+function Pipeline({ accent }) {
+  return (
+    <group>
+      <Base w={9} d={3} />
+      <mesh position={[0, 0.9, 0]} rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.4, 0.4, 8, 24]} /><meshStandardMaterial {...MAT.pipe} /></mesh>
+      {[-3.2, -1.1, 1.1, 3.2].map((x, i) => (<mesh key={i} position={[x, 0.4, 0]} castShadow><boxGeometry args={[0.3, 0.7, 0.8]} /><meshStandardMaterial {...MAT.base} /></mesh>))}
+      {/* block valve + actuator */}
+      <mesh position={[0, 0.9, 0]} castShadow><boxGeometry args={[0.7, 0.9, 0.9]} /><meshStandardMaterial {...MAT.painted} /></mesh>
+      <mesh position={[0, 1.7, 0]} castShadow><cylinderGeometry args={[0.28, 0.28, 0.7, 16]} /><meshStandardMaterial color={accent} /></mesh>
+      {/* pig launcher */}
+      <group position={[-3.0, 0.9, 0]}>
+        <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.5, 0.5, 1.4, 20]} /><meshStandardMaterial {...MAT.steel} /></mesh>
+        <mesh position={[-0.85, 0, 0]} rotation={[0, 0, -Math.PI / 2]} castShadow><sphereGeometry args={[0.5, 20, 16, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial {...MAT.darksteel} /></mesh>
+      </group>
+      <Valve pos={[1.7, 1.4, 0]} />
+      <Gauge pos={[2.3, 1.4, 0.5]} />
     </group>
   );
 }

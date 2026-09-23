@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ComponentType } from "react";
 
 import { AppShell } from "@/components/ops/AppShell";
-import { MODES } from "@/report/lib/themes.js";
+import { useMode } from "@/lib/theme-mode";
 
 type Asset = { asset_id: string; name: string; plant: string; unit: string; status: string };
 
@@ -40,29 +40,29 @@ export function SimulationPage() {
     setDetail(sampleRef.current.assetDetail(selId) as Record<string, unknown>);
   }, [selId]);
 
-  const theme = MODES.dark;
+  const theme = useMode();
   const sel = assets.find((a) => a.asset_id === selId) || null;
 
   return (
     <AppShell fullHeight>
-      <div className="h-full min-h-[calc(100vh-3.5rem)] overflow-y-auto bg-[#0a0f1a] px-5 py-5 text-[#aeb9cd]">
+      <div className={`h-full min-h-[calc(100vh-3.5rem)] overflow-y-auto px-5 py-5 ${theme.app}`} style={theme.appStyle}>
         <div className="mx-auto max-w-[1200px]">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-lg font-bold text-[#f5f8fd]">
+              <h1 className="text-lg font-bold text-foreground">
                 Failure Simulation — Predictive Digital Twin
               </h1>
-              <div className="text-xs text-[#7d89a1]">
+              <div className="text-xs text-muted-foreground">
                 Forward what-if from the live stop model + survival curve. Also available inside
                 each asset&apos;s modal (Simulation tab).
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <span className="text-[#7d89a1]">Asset</span>
+              <span className="text-muted-foreground">Asset</span>
               <select
                 value={selId ?? ""}
                 onChange={(e) => setSelId(e.target.value)}
-                className="rounded-lg border border-[rgba(120,160,255,0.2)] bg-[#0f1522] px-3 py-1.5 text-sm text-[#f5f8fd] outline-none"
+                className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none"
               >
                 {assets.map((a) => (
                   <option key={a.asset_id} value={a.asset_id}>
@@ -76,7 +76,7 @@ export function SimulationPage() {
           {Sim && sel && detail ? (
             <Sim theme={theme} asset={sel} detail={detail} />
           ) : (
-            <div className="grid h-[60vh] place-items-center text-sm text-slate-400">
+            <div className="grid h-[60vh] place-items-center text-sm text-muted-foreground">
               Loading simulation…
             </div>
           )}

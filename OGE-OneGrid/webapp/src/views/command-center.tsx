@@ -47,7 +47,7 @@ const C = {
   ink: "#0a0f1e",
   panel: "var(--og-panel-background, rgba(255,255,255,0.035))",
   border: "var(--og-panel-border, rgba(255,255,255,0.08))",
-  sub: "#93a4bf",
+  sub: "var(--color-muted-foreground)",
 };
 
 const num = (v: unknown): number => (typeof v === "number" ? v : Number(v) || 0);
@@ -485,7 +485,7 @@ export function CommandCenterPage() {
 
   return (
     <AppShell fullHeight>
-      <div className="og-command-skin min-h-full" style={{ background: `var(--og-skin-gradient, radial-gradient(1200px 600px at 60% -10%, #101a33 0%, ${C.ink} 55%))`, color: "#e6eef8" }}>
+      <div className="og-command-skin min-h-full" style={{ background: `var(--og-skin-gradient, radial-gradient(1200px 600px at 60% -10%, #101a33 0%, ${C.ink} 55%))`, color: "var(--color-foreground)" }}>
         <style>{`
           @keyframes ccFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
           @keyframes ccFlash { from { opacity: 0.6; } to { opacity: 0; } }
@@ -515,7 +515,7 @@ export function CommandCenterPage() {
                 <div className="mt-1 text-[13px] font-semibold" style={{ color: healthColor(gridHealth) }}>
                   {gridHealth >= 85 ? "Excellent" : gridHealth >= 70 ? "Healthy" : gridHealth >= 55 ? "Watch" : "Degraded"}
                 </div>
-                <div className="text-[11px] text-slate-400">Fleet condition is {gridHealth >= 85 ? "optimal" : "stable"}</div>
+                <div className="text-[11px] text-muted-foreground">Fleet condition is {gridHealth >= 85 ? "optimal" : "stable"}</div>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                 <MiniStat label="System Reliability" value={`${reliability.toFixed(2)}%`} />
@@ -544,7 +544,7 @@ export function CommandCenterPage() {
               className={`relative flex flex-col overflow-hidden rounded-xl border ${isFs ? "h-screen" : "min-h-0 flex-1"}`}
               style={{
                 borderColor: C.border,
-                background: "#020617",
+                background: "var(--og-map-gradient, #020617)",
               }}
             >
               {/* map header */}
@@ -575,22 +575,22 @@ export function CommandCenterPage() {
                       value={selectedStorm ?? ""}
                       onChange={(e) => setSelectedStorm(e.target.value || null)}
                       className="appearance-none rounded-md border py-1.5 pr-7 pl-3 text-[12px] font-medium outline-none"
-                      style={{ borderColor: C.border, background: "#0d1526", color: "#e6eef8" }}
+                      style={{ borderColor: C.border, background: "var(--color-card)", color: "var(--color-foreground)" }}
                     >
-                      <option value="" style={{ background: "#0d1526", color: "#e6eef8" }}>
+                      <option value="" style={{ background: "var(--color-card)", color: "var(--color-foreground)" }}>
                         All storms · centered
                       </option>
                       {events.map((e) => (
-                        <option key={e.id} value={e.id} style={{ background: "#0d1526", color: "#e6eef8" }}>
+                        <option key={e.id} value={e.id} style={{ background: "var(--color-card)", color: "var(--color-foreground)" }}>
                           {e.name}
                         </option>
                       ))}
                     </select>
-                    <ChevronDown className="pointer-events-none absolute top-2 right-2 size-3.5 text-slate-400" />
+                    <ChevronDown className="pointer-events-none absolute top-2 right-2 size-3.5 text-muted-foreground" />
                   </div>
                 )}
 
-                <div className="relative ml-auto flex items-center gap-1.5 text-slate-400">
+                <div className="relative ml-auto flex items-center gap-1.5 text-muted-foreground">
                   <IconBtn active={layersOpen} onClick={() => setLayersOpen((o) => !o)}>
                     <Layers className="size-4" />
                   </IconBtn>
@@ -605,7 +605,7 @@ export function CommandCenterPage() {
                         className="absolute right-0 top-10 z-40 w-52 rounded-lg border p-2 shadow-2xl backdrop-blur"
                         style={{ borderColor: C.border, background: "rgba(10,15,30,0.94)" }}
                       >
-                        <div className="mb-1.5 px-1 text-[10px] font-semibold tracking-wider text-slate-400">
+                        <div className="mb-1.5 px-1 text-[10px] font-semibold tracking-wider text-muted-foreground">
                           {tab === "weather" ? "WEATHER LAYERS" : "GRID LAYERS"}
                         </div>
                         {(tab === "weather"
@@ -626,7 +626,7 @@ export function CommandCenterPage() {
                             onClick={() => setLayers((s) => ({ ...s, [k]: !s[k] }))}
                             className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[12px] hover:bg-white/[0.06]"
                           >
-                            <span className={layers[k] ? "text-slate-100" : "text-slate-400"}>{l}</span>
+                            <span className={layers[k] ? "text-foreground" : "text-muted-foreground"}>{l}</span>
                             <span
                               className="grid h-4 w-7 place-items-center rounded-full px-0.5 transition"
                               style={{
@@ -671,8 +671,8 @@ export function CommandCenterPage() {
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                     <Loader2 className="size-7 animate-spin" style={{ color: C.cyan }} />
-                    <div className="text-[13px] font-medium text-slate-300">Rendering holographic map…</div>
-                    <div className="text-[11px] text-slate-500">Dashboard is ready — the 3D map is building</div>
+                    <div className="text-[13px] font-medium text-muted-foreground">Rendering holographic map…</div>
+                    <div className="text-[11px] text-muted-foreground">Dashboard is ready — the 3D map is building</div>
                   </div>
                 )}
                 {/* Site drill-in flyout: on selecting a site, a menu slides in over
@@ -705,8 +705,8 @@ export function CommandCenterPage() {
             {tab === "weather" ? (
               <Panel>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[13px] font-semibold tracking-wide text-slate-200">STORM SIMULATION</span>
-                  <span className="text-[12px] text-slate-400">{activeStorm?.name ?? "No active event"}</span>
+                  <span className="text-[13px] font-semibold tracking-wide text-foreground">STORM SIMULATION</span>
+                  <span className="text-[12px] text-muted-foreground">{activeStorm?.name ?? "No active event"}</span>
                   {activeStorm && (
                     <span className="rounded-md px-2 py-0.5 text-[11px] font-semibold" style={{ background: `${C.purple}22`, color: "#d8b4fe" }}>
                       {activeStorm.kind === "hurricane" ? `Category ${Math.max(1, num(activeStorm.currentCategory))}` : (activeStorm.hazardKind ?? activeStorm.kind)?.replace(/_/g, " ")}
@@ -730,7 +730,7 @@ export function CommandCenterPage() {
                   <BigStat label="Open Work Orders" value={String(weatherSim.woNow)} tone={C.cyan} />
                   <BigStat label="System Resilience" value={`${weatherSim.resilienceNow}%`} tone={C.ok} />
                   <div className="rounded-lg border p-3" style={{ borderColor: C.border, background: C.panel }}>
-                    <div className="mb-1 text-[10px] tracking-wider text-slate-400">IMPACT OVER TIME</div>
+                    <div className="mb-1 text-[10px] tracking-wider text-muted-foreground">IMPACT OVER TIME</div>
                     <ImpactChart forecast={activeStorm?.forecast ?? []} exposure={exp} hour={simHour} max={horizon} />
                   </div>
                 </div>
@@ -738,8 +738,8 @@ export function CommandCenterPage() {
             ) : (
               <Panel>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span className="text-[13px] font-semibold tracking-wide text-slate-200">TWIN SIMULATION</span>
-                  <span className="text-[12px] text-slate-400">Equipment failure projection</span>
+                  <span className="text-[13px] font-semibold tracking-wide text-foreground">TWIN SIMULATION</span>
+                  <span className="text-[12px] text-muted-foreground">Equipment failure projection</span>
                   <span className="rounded-md px-2 py-0.5 text-[11px] font-semibold" style={{ background: `${C.cyan}22`, color: "#bae6fd" }}>
                     {`+${Math.round(simHour)}d horizon`}
                   </span>
@@ -761,7 +761,7 @@ export function CommandCenterPage() {
                   <BigStat label="Availability" value={`${twinSim.availNow}%`} tone={C.ok} />
                   <BigStat label="Downtime (hrs)" value={String(twinSim.downtimeNow)} tone={C.purple} />
                   <div className="rounded-lg border p-3" style={{ borderColor: C.border, background: C.panel }}>
-                    <div className="mb-1 text-[10px] tracking-wider text-slate-400">FAILURES OVER TIME</div>
+                    <div className="mb-1 text-[10px] tracking-wider text-muted-foreground">FAILURES OVER TIME</div>
                     <FailureChart hour={simHour} max={120} peak={twinSim.failedNow} />
                   </div>
                 </div>
@@ -914,8 +914,8 @@ function DetailModal({ data, onClose }: { data: ModalData; onClose: () => void }
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-[15px] font-bold text-slate-100">{data.title}</div>
-            {data.subtitle && <div className="truncate text-[12px] text-slate-400">{data.subtitle}</div>}
+            <div className="truncate text-[15px] font-bold text-foreground">{data.title}</div>
+            {data.subtitle && <div className="truncate text-[12px] text-muted-foreground">{data.subtitle}</div>}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {data.badge && (
@@ -928,7 +928,7 @@ function DetailModal({ data, onClose }: { data: ModalData; onClose: () => void }
             )}
             <button
               onClick={onClose}
-              className="grid size-7 place-items-center rounded-md text-slate-400 hover:bg-white/10"
+              className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-white/10"
               aria-label="Close"
             >
               <X className="size-4" />
@@ -938,22 +938,22 @@ function DetailModal({ data, onClose }: { data: ModalData; onClose: () => void }
         <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: C.border, background: C.panel }}>
           {data.fields.map((f) => (
             <div key={f.label} className="flex items-start justify-between gap-4 text-[12.5px]">
-              <span className="shrink-0 text-slate-400">{f.label}</span>
-              <span className="text-right font-medium text-slate-200">{f.value}</span>
+              <span className="shrink-0 text-muted-foreground">{f.label}</span>
+              <span className="text-right font-medium text-foreground">{f.value}</span>
             </div>
           ))}
         </div>
         {data.list && data.list.length > 0 && (
           <div className="mt-2 rounded-lg border p-3" style={{ borderColor: C.border, background: C.panel }}>
             {data.listTitle && (
-              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {data.listTitle}
               </div>
             )}
             <div className="space-y-1.5">
               {data.list.map((r, i) => (
                 <div key={i} className="flex items-center justify-between gap-3 text-[12.5px]">
-                  <span className="min-w-0 flex-1 truncate text-slate-300">{r.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{r.label}</span>
                   <span className="shrink-0 font-semibold tabular-nums" style={{ color: r.color ?? "#dbe6f5" }}>
                     {r.value}
                   </span>
@@ -1041,12 +1041,12 @@ function SiteFlyout({
       >
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-[14px] font-bold text-slate-100">{name}</div>
-            <div className="text-[11px] text-slate-400">{(type ?? "site").replace(/_/g, " ")}</div>
+            <div className="truncate text-[14px] font-bold text-foreground">{name}</div>
+            <div className="text-[11px] text-muted-foreground">{(type ?? "site").replace(/_/g, " ")}</div>
           </div>
           <button
             onClick={onClose}
-            className="grid size-6 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-white/10"
+            className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-white/10"
             aria-label="Close"
           >
             <X className="size-3.5" />
@@ -1059,7 +1059,7 @@ function SiteFlyout({
           >
             {level.toUpperCase()}
           </span>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-muted-foreground">
             Health <span className="font-semibold" style={{ color }}>{health}%</span>
           </span>
         </div>
@@ -1070,14 +1070,14 @@ function SiteFlyout({
         >
           <primary.Icon className="size-5 shrink-0" style={{ color }} />
           <div className="min-w-0 flex-1">
-            <div className="text-[12.5px] font-semibold text-slate-100">{primary.label}</div>
-            <div className="truncate text-[10.5px] text-slate-400">{primary.sub}</div>
+            <div className="text-[12.5px] font-semibold text-foreground">{primary.label}</div>
+            <div className="truncate text-[10.5px] text-muted-foreground">{primary.sub}</div>
           </div>
           <ArrowUpRight className="size-4 shrink-0" style={{ color }} />
         </button>
         <button
           onClick={onDetails}
-          className="mt-1.5 block w-full rounded-lg px-3 py-1.5 text-center text-[11px] font-medium text-slate-300 transition hover:bg-white/[0.06]"
+          className="mt-1.5 block w-full rounded-lg px-3 py-1.5 text-center text-[11px] font-medium text-muted-foreground transition hover:bg-white/[0.06]"
         >
           View site details
         </button>
@@ -1117,10 +1117,10 @@ function SelectedSitePanel({
       style={{ borderColor: `${C.blue}55`, background: `linear-gradient(160deg, ${C.blue}18, ${C.panel})` }}
     >
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-300">SELECTED SITE</div>
+        <div className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground">SELECTED SITE</div>
         <button
           onClick={onClear}
-          className="grid size-6 place-items-center rounded-md text-slate-400 hover:bg-white/10"
+          className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-white/10"
           aria-label="Clear selection"
         >
           <X className="size-3.5" />
@@ -1129,8 +1129,8 @@ function SelectedSitePanel({
       <button onClick={onOpen} className="flex w-full items-center gap-2 text-left transition hover:opacity-90">
         <ArcGauge value={health} color={color} />
         <div className="min-w-0">
-          <div className="truncate text-[15px] font-bold text-slate-100">{name}</div>
-          <div className="text-[11px] text-slate-400">{(type ?? "site").replace(/_/g, " ")}</div>
+          <div className="truncate text-[15px] font-bold text-foreground">{name}</div>
+          <div className="text-[11px] text-muted-foreground">{(type ?? "site").replace(/_/g, " ")}</div>
           <span
             className="mt-1 inline-block rounded-md px-2 py-0.5 text-[10.5px] font-semibold"
             style={{ background: `${color}22`, color }}
@@ -1179,7 +1179,7 @@ function Panel({
     >
       {title && (
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-[11px] font-semibold tracking-[0.14em] text-slate-400">{title}</div>
+          <div className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground">{title}</div>
           {action &&
             (actionTo ? (
               <OpsLink
@@ -1218,8 +1218,8 @@ function IconBtn({ children, onClick, active }: { children: React.ReactNode; onC
 function MiniStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div>
-      <div className="text-[15px] font-bold tabular-nums" style={{ color: tone ?? "#dbe6f5" }}>{value}</div>
-      <div className="mt-0.5 text-[9.5px] leading-tight text-slate-500">{label}</div>
+      <div className="text-[15px] font-bold tabular-nums" style={{ color: tone ?? "var(--color-foreground)" }}>{value}</div>
+      <div className="mt-0.5 text-[9.5px] leading-tight text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -1227,7 +1227,7 @@ function BigStat({ label, value, tone }: { label: string; value: string; tone: s
   return (
     <div className="rounded-lg border p-3" style={{ borderColor: `${tone}44`, background: `linear-gradient(160deg, ${tone}1c, transparent)` }}>
       <div className="text-[22px] font-bold tabular-nums" style={{ color: tone }}>{value}</div>
-      <div className="mt-0.5 text-[10px] text-slate-400">{label}</div>
+      <div className="mt-0.5 text-[10px] text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -1235,8 +1235,8 @@ function LegendRow({ color, label, value }: { color: string; label: string; valu
   return (
     <div className="flex items-center gap-2">
       <span className="size-2 rounded-full" style={{ background: color }} />
-      <span className="text-slate-300">{label}</span>
-      <span className="ml-auto font-semibold tabular-nums text-slate-200">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="ml-auto font-semibold tabular-nums text-foreground">{value}</span>
     </div>
   );
 }
@@ -1266,10 +1266,10 @@ function AlertRow({
     >
       <Icon className="mt-0.5 size-4 shrink-0" style={{ color: tone }} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[12.5px] font-medium text-slate-100">{title}</div>
-        <div className="truncate text-[11px] text-slate-400">{sub}</div>
+        <div className="truncate text-[12.5px] font-medium text-foreground">{title}</div>
+        <div className="truncate text-[11px] text-muted-foreground">{sub}</div>
       </div>
-      <div className="shrink-0 text-[10px] text-slate-500">{ago}</div>
+      <div className="shrink-0 text-[10px] text-muted-foreground">{ago}</div>
     </button>
   );
 }
@@ -1285,8 +1285,8 @@ function ScheduleRow({ wo, onOpen }: { wo: WorkOrder; onOpen: () => void }) {
         <Icon className="size-4" style={{ color: status.color }} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[12.5px] font-medium text-slate-100">{wo.problem_descr || wo.entity_descr}</div>
-        <div className="truncate text-[11px] text-slate-400">
+        <div className="truncate text-[12.5px] font-medium text-foreground">{wo.problem_descr || wo.entity_descr}</div>
+        <div className="truncate text-[11px] text-muted-foreground">
           {[wo.entity_descr, wo.location].filter(Boolean).join(" · ")}
         </div>
       </div>
@@ -1309,8 +1309,8 @@ function HBar({ label, pct, onOpen }: { label: string; pct: number; onOpen: () =
       className="block w-full rounded-md p-1 text-left transition hover:bg-white/[0.05]"
     >
       <div className="mb-1 flex items-center justify-between text-[12px]">
-        <span className="text-slate-300">{label}</span>
-        <span className="font-semibold tabular-nums text-slate-200">{pct}%</span>
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-semibold tabular-nums text-foreground">{pct}%</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}, ${color}bb)` }} />
@@ -1342,7 +1342,7 @@ function ArcGauge({ value, color: colorOverride }: { value: number; color?: stri
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
         <div className="text-[34px] font-bold leading-none tabular-nums">{value}</div>
-        <div className="text-[10px] text-slate-500">/100</div>
+        <div className="text-[10px] text-muted-foreground">/100</div>
       </div>
     </div>
   );
@@ -1362,7 +1362,7 @@ function Donut({ pct }: { pct: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <div className="text-[20px] font-bold tabular-nums">{pct}%</div>
-        <div className="text-[9px] text-slate-500">On-Time</div>
+        <div className="text-[9px] text-muted-foreground">On-Time</div>
       </div>
     </div>
   );
@@ -1407,7 +1407,7 @@ function SimTimeline({
           className="w-full"
           style={{ accentColor: C.blue }}
         />
-        <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+        <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
           {ticks.map((h, i) => (
             <span key={i} style={{ color: h <= hour ? C.cyan : undefined }}>+{h}{unit}</span>
           ))}
@@ -1484,28 +1484,28 @@ function FailureChart({ hour, max, peak }: { hour: number; max: number; peak: nu
   );
 }
 function WeatherCard({ event }: { event: { name?: string; region?: string; currentWindMph?: number; gustMph?: number; pressureMb?: number; hazardKind?: string; forecast?: Array<{ hour: number; windMph?: number }> } | undefined }) {
-  if (!event) return <div className="text-[12px] text-slate-400">No active weather system.</div>;
+  if (!event) return <div className="text-[12px] text-muted-foreground">No active weather system.</div>;
   const rain = /rain|hurricane|convective/i.test(event.hazardKind ?? "");
   return (
     <div>
-      <div className="text-[12px] font-medium text-slate-300">{event.region?.replace(/_/g, " ") ?? "Region"}</div>
+      <div className="text-[12px] font-medium text-muted-foreground">{event.region?.replace(/_/g, " ") ?? "Region"}</div>
       <div className="mt-2 flex items-start gap-3">
         {rain ? <CloudRain className="size-9" style={{ color: C.cyan }} /> : <CloudLightning className="size-9" style={{ color: C.amber }} />}
         <div>
-          <div className="text-[26px] font-bold leading-none">{num(event.currentWindMph)}<span className="text-[14px] font-medium text-slate-400"> mph</span></div>
-          <div className="text-[11px] text-slate-400">{(event.hazardKind ?? "wind").replace(/_/g, " ")}</div>
+          <div className="text-[26px] font-bold leading-none">{num(event.currentWindMph)}<span className="text-[14px] font-medium text-muted-foreground"> mph</span></div>
+          <div className="text-[11px] text-muted-foreground">{(event.hazardKind ?? "wind").replace(/_/g, " ")}</div>
         </div>
-        <div className="ml-auto space-y-0.5 text-right text-[11px] text-slate-400">
-          <div>Gust <span className="font-semibold text-slate-200">{num(event.gustMph)} mph</span></div>
-          <div>Pressure <span className="font-semibold text-slate-200">{num(event.pressureMb)} mb</span></div>
+        <div className="ml-auto space-y-0.5 text-right text-[11px] text-muted-foreground">
+          <div>Gust <span className="font-semibold text-foreground">{num(event.gustMph)} mph</span></div>
+          <div>Pressure <span className="font-semibold text-foreground">{num(event.pressureMb)} mb</span></div>
         </div>
       </div>
       <div className="mt-3 flex justify-between border-t pt-2.5" style={{ borderColor: C.border }}>
         {(event.forecast ?? []).slice(0, 5).map((f) => (
           <div key={f.hour} className="flex flex-col items-center gap-1">
-            <div className="text-[10px] text-slate-500">+{f.hour}h</div>
-            <CloudRain className="size-4 text-slate-400" />
-            <div className="text-[10px] font-medium text-slate-300">{num(f.windMph)}</div>
+            <div className="text-[10px] text-muted-foreground">+{f.hour}h</div>
+            <CloudRain className="size-4 text-muted-foreground" />
+            <div className="text-[10px] font-medium text-muted-foreground">{num(f.windMph)}</div>
           </div>
         ))}
       </div>

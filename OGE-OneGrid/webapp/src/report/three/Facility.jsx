@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { statusOf } from '../lib/format.js';
 import { POSTFX_ENABLED } from '../../lib/postfx.js';
-import { EquipmentGeometry, equipmentType } from './Equipment.jsx';
+import { EquipmentGeometry, FacilityModel, equipmentType } from './Equipment.jsx';
+import { useModelRes } from '../../lib/model-res';
 import { NATION, STATES } from './usaGeo.js';
 import { WORLD } from './worldGeo.js';
 
@@ -24,6 +25,10 @@ function SafeEnvironment({ preset, intensity = 1 }) {
 
 // ── Geographic placement of each plant on the US map (lon/lat) ──────────────
 const PLANT_GEO = {
+  // Oil & Gas estate — Gulf of Mexico (offshore) + Gulf Coast (onshore).
+  'Central Gulf': { lon: -90.35, lat: 27.62, city: 'GoM' },
+  'Green Canyon': { lon: -90.9, lat: 27.35, city: 'GoM' },
+  'Gulf Coast': { lon: -93.93, lat: 29.9, city: 'TX' },
   Ashford: { lon: -122.0, lat: 46.9, city: 'WA' },
   Riverton: { lon: -108.4, lat: 43.0, city: 'WY' },
   Fairview: { lon: -96.6, lat: 33.1, city: 'TX' },
@@ -122,7 +127,7 @@ function Transmission({ mw, live, accent }) {
   );
 }
 
-function InteriorAsset({ node, theme, selected, hovered, onSelect, onHover, values }) {
+function InteriorAsset({ node, theme, selected, hovered, onSelect, onHover, values, hires }) {
   const ref = useRef();
   const ghost = node.ghost;
   const s = ghost ? { color: GHOST, glow: GHOST } : statusOf(node.status);
@@ -148,7 +153,13 @@ function InteriorAsset({ node, theme, selected, hovered, onSelect, onHover, valu
         onClick={(e) => { if (!clickable) return; e.stopPropagation(); onSelect(node); }}>
         <boxGeometry args={[7, 5, 5]} />
       </mesh>
-      <group ref={ref} scale={baseScale}><EquipmentGeometry type={type} accent={s.color} running={!ghost} detail={false} /></group>
+      <group ref={ref} scale={baseScale}>
+        {hires && !ghost
+          ? <Suspense fallback={<EquipmentGeometry type={type} accent={s.color} running={!ghost} detail={false} />}>
+              <FacilityModel type={type} accent={s.color} running={!ghost} />
+            </Suspense>
+          : <EquipmentGeometry type={type} accent={s.color} running={!ghost} detail={false} />}
+      </group>
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.05, 0]}><ringGeometry args={[3.6, 4.0, 48]} /><meshBasicMaterial color={s.color} transparent opacity={ghost ? 0.22 : isHot ? 0.8 : 0.4} toneMapped={false} /></mesh>
       {isHot && <mesh position={[0, 5.4, 0]}><sphereGeometry args={[0.22, 16, 16]} /><meshBasicMaterial color={s.color} toneMapped={false} /></mesh>}
       {node.isGen && <group position={[0, -(node.pos?.[1] || 0), 0]}><Transmission mw={mw} live={liveMw != null} accent={theme.accent} /></group>}
@@ -171,34 +182,25 @@ function interiorLayout(plant) {
   const units = plant?.unitList || [];
   const rows = [], connectors = [], labels = [], pads = [], structures = [];
   const rowGap = 30;
-  const onDeck = (t) => t === 'turbine' || t === 'generator';
   units.forEach((u, ui) => {
     const z = (ui - (units.length - 1) / 2) * rowGap;
-    const byType = {};
-    (u.assets || []).forEach((a) => { byType[equipmentType(a)] = a; });
-    const nodes = TRAIN.map((type) => {
-      const a = byType[type];
-      if (a) return { kind: 'asset', id: a.asset_id, asset_id: a.asset_id, name: a.name, plant: plant.name, unit: u.name, status: a.status, health: a.health, category: a.category, tags: a.tags || [], running_tag: a.running_tag, asset: a, type, real: true };
-      const isGen = type === 'generator';
-      return { kind: 'ghost', ghost: true, isGen, id: `${u.name}_${type}`, name: `${u.name} ${GHOST_NAME[type]}`, plant: plant.name, unit: u.name, status: 'modeled', type, mwTag: isGen ? deriveMwTag(u.name) : null };
-    });
-    const gap = 12, n = nodes.length;
-    nodes.forEach((nd, i) => { nd.pos = [(i - (n - 1) / 2) * gap, onDeck(nd.type) ? DECK_Y : 0, z]; });
+    // Lay out the unit's ACTUAL assets in a row — each renders its own archetype
+    // model (offshore platform, well, pipeline, tank, refinery, LNG, port). No
+    // forced equipment train / ghost boiler-turbine-generator stack.
+    const assets = u.assets || [];
+    const gap = 14, n = Math.max(1, assets.length);
+    const nodes = assets.map((a, i) => ({
+      kind: 'asset', id: a.asset_id, asset_id: a.asset_id, name: a.name,
+      plant: plant.name, unit: u.name, status: a.status, health: a.health,
+      category: a.category, tags: a.tags || [], running_tag: a.running_tag,
+      asset: a, type: a.type || equipmentType(a), real: true,
+      pos: [(i - (n - 1) / 2) * gap, 0, z],
+    }));
     rows.push(...nodes);
-    const cy = (nd) => (onDeck(nd.type) ? DECK_Y + 0.4 : 1.6);
-    for (let i = 0; i < nodes.length - 1; i++) {
-      const k = `${nodes[i].type}-${nodes[i + 1].type}`;
-      const ghost = nodes[i].ghost || nodes[i + 1].ghost;
-      connectors.push({ from: [nodes[i].pos[0] + 2.4, cy(nodes[i]), z], to: [nodes[i + 1].pos[0] - 2.4, cy(nodes[i + 1]), z], kind: k, id: `${u.name}-c${i}`, ghost });
-      const lbl = CONNECT_LABEL[k];
-      if (lbl) labels.push({ id: `${u.name}-l${i}`, pos: [(nodes[i].pos[0] + nodes[i + 1].pos[0]) / 2, Math.max(cy(nodes[i]), cy(nodes[i + 1])) + 1.4, z], text: lbl, ghost });
-    }
-    const xs = nodes.map((nd) => nd.pos[0]);
+    const xs = nodes.length ? nodes.map((nd) => nd.pos[0]) : [0];
     const minX = Math.min(...xs), maxX = Math.max(...xs);
-    pads.push({ id: u.name, z, x0: minX - 7, x1: maxX + 34, status: u.status });
-    labels.push({ id: `${u.name}-unit`, pos: [minX - 8.5, 0.4, z], text: u.name, unit: true, status: u.status });
-    const xOf = (t) => nodes.find((nd) => nd.type === t)?.pos[0];
-    structures.push({ unit: u.name, z, status: u.status, pumpX: xOf('pump') ?? minX, boilerX: xOf('boiler') ?? minX, turbineX: xOf('turbine') ?? 0, generatorX: xOf('generator') ?? maxX });
+    pads.push({ id: u.name, z, x0: minX - 8, x1: maxX + 8, status: u.status });
+    labels.push({ id: `${u.name}-unit`, pos: [minX - 9, 0.4, z], text: u.name, unit: true, status: u.status });
   });
   return { rows, connectors, labels, pads, structures };
 }
@@ -513,7 +515,7 @@ function SceneMap({ plants, theme, hovered, onHover, onEnter }) {
   }, []);
 
   const sites = useMemo(() => plants.map((p) => {
-    const geo = geoFor(p.name); const [x, z] = project(geo.lon, geo.lat);
+    const geo = p.geo || geoFor(p.name); const [x, z] = project(geo.lon, geo.lat);
     return { name: p.name, city: geo.city, status: worstOf(p.unitList), pos: [x, map.heightAt(x, z), z],
       assetCount: (p.unitList || []).reduce((s, u) => s + (u.assets || []).length, 0),
       critical: (p.unitList || []).reduce((s, u) => s + (u.assets || []).filter((a) => a.status === 'critical').length, 0) };
@@ -546,7 +548,7 @@ function SceneMap({ plants, theme, hovered, onHover, onEnter }) {
 
   return (
     <>
-      <color attach="background" args={['#02040a']} />
+      <color attach="background" args={[(theme?.three?.bg) || '#02040a']} />
       <fog attach="fog" args={['#02040a', 240, 680]} />
       <hemisphereLight intensity={0.05} groundColor={'#0a0f18'} color={'#33405a'} />
       <directionalLight position={[40, 120, 60]} intensity={0.28} color={'#5f79b8'} />
@@ -746,7 +748,7 @@ function makeAsphaltTexture() {
   return tex;
 }
 
-function SceneInterior({ plant, theme, selected, onSelect, values }) {
+function SceneInterior({ plant, theme, selected, onSelect, values, hires }) {
   const t = theme.three;
   const { rows, connectors, labels, pads, structures } = useMemo(() => interiorLayout(plant), [plant]);
   const asphalt = useMemo(() => makeAsphaltTexture(), []);
@@ -763,7 +765,7 @@ function SceneInterior({ plant, theme, selected, onSelect, values }) {
   ), []);
   return (
     <>
-      <color attach="background" args={['#0a1120']} />
+      <color attach="background" args={[(t?.bg) || '#0a1120']} />
       <fog attach="fog" args={['#0e1524', 110, 520]} />
       <ambientLight intensity={0.5} color={'#dfeaff'} />
       <hemisphereLight intensity={0.7} color={'#cfe0ff'} groundColor={'#141b26'} />
@@ -810,7 +812,7 @@ function SceneInterior({ plant, theme, selected, onSelect, values }) {
             : <div className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: 'rgba(8,12,20,.7)', color: l.ghost ? '#6b7789' : '#8ea3bd', border: '1px solid rgba(255,255,255,.08)', opacity: l.ghost ? 0.7 : 1 }}>{l.text}</div>}
         </Html>
       ))}
-      {rows.map((n) => <InteriorAsset key={n.id} node={n} theme={theme} selected={selected} hovered={hovered} onSelect={onSelect} onHover={setHovered} values={values} />)}
+      {rows.map((n) => <InteriorAsset key={n.id} node={n} theme={theme} selected={selected} hovered={hovered} onSelect={onSelect} onHover={setHovered} values={values} hires={hires} />)}
 
       <ContactShadows position={[0, 0.05, 0]} opacity={0.5} scale={220} blur={2.4} far={36} />
       <CameraRig mode="interior" focus={focus} />
@@ -825,13 +827,14 @@ function SceneInterior({ plant, theme, selected, onSelect, values }) {
 // holographic glow now comes from emissive/additive materials instead. ?fx=1 re-enables it.
 export function Facility({ model, theme, selected, onSelect, activePlant, onEnterPlant, values }) {
   const [hovered, setHovered] = useState(null);
+  const hires = useModelRes() === 'high';
   const plant = useMemo(() => (model?.plants || []).find((p) => p.name === activePlant) || null, [model, activePlant]);
   return (
     <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 150, 118], fov: 40 }}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => { gl.toneMapping = THREE.AgXToneMapping; gl.toneMappingExposure = 1.0; }}>
       {plant
-        ? <SceneInterior plant={plant} theme={theme} selected={selected} onSelect={onSelect} values={values} />
+        ? <SceneInterior plant={plant} theme={theme} selected={selected} onSelect={onSelect} values={values} hires={hires} />
         : <SceneMap plants={model?.plants || []} theme={theme} hovered={hovered} onHover={setHovered} onEnter={onEnterPlant} />}
     </Canvas>
   );
