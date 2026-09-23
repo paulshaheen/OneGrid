@@ -128,17 +128,22 @@ export async function runAuroraNow(overrides) {
     const merged = containers.map((c) => {
       const existing = Array.isArray(c.env) ? c.env : [];
       const kept = existing.filter((e) => !overrideNames.has(e.name));
+      // A start override sends JobExecutionContainer objects: name, image, command,
+      // args, env, resources only. volumeMounts/probes aren't part of that type and
+      // resources takes just cpu + memory (ephemeralStorage is platform-derived and
+      // read-only) — sending anything else fails validation with HTTP 400.
       const out = { name: c.name, image: c.image, env: [...kept, ...env] };
       if (c.command) out.command = c.command;
       if (c.args) out.args = c.args;
-      if (c.resources) out.resources = c.resources;
-      if (c.volumeMounts) out.volumeMounts = c.volumeMounts;
+      if (c.resources) out.resources = { cpu: c.resources.cpu, memory: c.resources.memory };
       return out;
     });
+    // The /start action body is a JobExecutionTemplate — containers sit at the top
+    // level (no `template` wrapper, which the API rejects as an unknown property).
     startInit = {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template: { containers: merged } }),
+      body: JSON.stringify({ containers: merged }),
     };
   }
 

@@ -18,6 +18,17 @@ import * as gov from './governance.js';
 import * as manuals from './manuals.js';
 import * as aurora from './aurora.js';
 
+// This process supervises the webapp SSR + chat-agent children and forwards their
+// stdio. A broken stdout pipe (EPIPE) or an unawaited child promise must not take
+// the whole site down — log and keep serving instead of crashing the container.
+process.on('uncaughtException', (e) => {
+  if (e && e.code === 'EPIPE') return;
+  console.error('[guard] uncaughtException:', e && e.stack ? e.stack : e);
+});
+process.on('unhandledRejection', (e) => {
+  console.error('[guard] unhandledRejection:', e && e.stack ? e.stack : e);
+});
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.REPORT_PORT || 7700;
 const ONTOLOGY_FILE = path.resolve(__dirname, 'ontology.json');

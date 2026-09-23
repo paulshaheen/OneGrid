@@ -44,28 +44,48 @@ const SECURITY: string[] = [
   "Non-secret configuration published at runtime; secrets never reach the browser",
 ];
 
-// One-click historical storms. Each replays from the PUBLIC WeatherBench2 archive
-// (source hres_t0, no credentials, covers 2016–2022), which is why every date sits
-// in that window. The bbox is the genesis-detection search box; numSteps × 6h is the
-// forecast horizon. Sent to /api/aurora/run, which starts the Aurora job with these
-// as per-execution env overrides (ANALYSIS_TIME / DETECTION_BBOX / STORM_NAMES / …).
+// Initial-condition sources the Aurora pipeline supports (see aurora_pipeline/
+// initial_conditions.py). HRES = public WeatherBench2 archive (2016–2022, ECMWF);
+// GFS = public NOAA real-time analysis on AWS Open Data (2021 → today). Each drives
+// the same detect → forecast → publish cycle; only the starting snapshot differs.
+type IcSource = "hres_t0" | "gfs";
+
+const TODAY = new Date().toISOString().slice(0, 10);
+const SOURCE_OPTIONS: { id: IcSource; label: string; blurb: string; min: string; max: string }[] = [
+  { id: "hres_t0", label: "ECMWF HRES", blurb: "WeatherBench2 archive · 2016–2022", min: "2016-01-01", max: "2022-12-31" },
+  { id: "gfs", label: "NOAA GFS", blurb: "Real-time analysis · 2021–now", min: "2021-02-27", max: TODAY },
+];
+
+// One-click historical storms. The bbox is the genesis-detection search box; numSteps
+// × 6h is the forecast horizon. Sent to /api/aurora/run, which starts the Aurora job
+// with these as per-execution env overrides (ANALYSIS_TIME / DETECTION_BBOX / …).
+// `source` decides which archive the snapshot comes from — pre-2023 storms use HRES,
+// recent ones use GFS (the only public source that covers them).
 type StormPreset = {
   id: string;
   label: string;
   sub: string;
+  source: IcSource;
   analysisTime: string;
   bbox: string;
   numSteps: number;
 };
 
 const STORM_PRESETS: StormPreset[] = [
-  { id: "ida", label: "Hurricane Ida", sub: "Aug 2021 · Louisiana", analysisTime: "2021-08-29T00:00", bbox: "-100,15,-70,35", numSteps: 12 },
-  { id: "laura", label: "Hurricane Laura", sub: "Aug 2020 · SW Louisiana", analysisTime: "2020-08-26T12:00", bbox: "-100,15,-70,35", numSteps: 12 },
-  { id: "ian", label: "Hurricane Ian", sub: "Sep 2022 · SW Florida", analysisTime: "2022-09-27T12:00", bbox: "-90,18,-76,32", numSteps: 12 },
-  { id: "michael", label: "Hurricane Michael", sub: "Oct 2018 · FL Panhandle", analysisTime: "2018-10-09T12:00", bbox: "-95,18,-78,32", numSteps: 12 },
-  { id: "harvey", label: "Hurricane Harvey", sub: "Aug 2017 · Texas coast", analysisTime: "2017-08-25T00:00", bbox: "-100,18,-88,32", numSteps: 12 },
-  { id: "irma", label: "Hurricane Irma", sub: "Sep 2017 · Florida", analysisTime: "2017-09-09T00:00", bbox: "-88,18,-74,30", numSteps: 12 },
+  { id: "ida", label: "Hurricane Ida", sub: "Aug 2021 · Louisiana", source: "hres_t0", analysisTime: "2021-08-29T00:00", bbox: "-100,15,-70,35", numSteps: 12 },
+  { id: "laura", label: "Hurricane Laura", sub: "Aug 2020 · SW Louisiana", source: "hres_t0", analysisTime: "2020-08-26T12:00", bbox: "-100,15,-70,35", numSteps: 12 },
+  { id: "ian", label: "Hurricane Ian", sub: "Sep 2022 · SW Florida", source: "hres_t0", analysisTime: "2022-09-27T12:00", bbox: "-90,18,-76,32", numSteps: 12 },
+  { id: "michael", label: "Hurricane Michael", sub: "Oct 2018 · FL Panhandle", source: "hres_t0", analysisTime: "2018-10-09T12:00", bbox: "-95,18,-78,32", numSteps: 12 },
+  { id: "harvey", label: "Hurricane Harvey", sub: "Aug 2017 · Texas coast", source: "hres_t0", analysisTime: "2017-08-25T00:00", bbox: "-100,18,-88,32", numSteps: 12 },
+  { id: "irma", label: "Hurricane Irma", sub: "Sep 2017 · Florida", source: "hres_t0", analysisTime: "2017-09-09T00:00", bbox: "-88,18,-74,30", numSteps: 12 },
+  { id: "otis", label: "Hurricane Otis", sub: "Oct 2023 · Acapulco", source: "gfs", analysisTime: "2023-10-24T12:00", bbox: "-105,12,-95,22", numSteps: 12 },
+  { id: "beryl", label: "Hurricane Beryl", sub: "Jul 2024 · Caribbean", source: "gfs", analysisTime: "2024-07-01T00:00", bbox: "-78,10,-58,22", numSteps: 12 },
+  { id: "helene", label: "Hurricane Helene", sub: "Sep 2024 · FL Big Bend", source: "gfs", analysisTime: "2024-09-25T12:00", bbox: "-90,20,-78,32", numSteps: 12 },
+  { id: "milton", label: "Hurricane Milton", sub: "Oct 2024 · FL Gulf coast", source: "gfs", analysisTime: "2024-10-09T00:00", bbox: "-95,18,-80,30", numSteps: 12 },
 ];
+
+// A run is still in flight — the job hasn't reported a terminal status yet.
+const ACTIVE_RUN_STATUSES = new Set(["Running", "Pending", "InProgress"]);
 
 const CYCLE_HOURS = ["00", "06", "12", "18"] as const;
 const REGION_PRESETS: { label: string; bbox: string }[] = [
@@ -100,6 +120,9 @@ export function DeploymentPage() {
       };
     },
     staleTime: 15 * 1000,
+    // Poll fast while a run is in flight so "Last run" reflects reality instead of
+    // going stale the moment the trigger POST resolves; back off once it's terminal.
+    refetchInterval: (query) => (ACTIVE_RUN_STATUSES.has(query.state.data?.latest?.status ?? "") ? 4 * 1000 : false),
   });
   const runAurora = useMutation({
     mutationFn: async (payload?: Record<string, unknown>) => {
@@ -113,29 +136,41 @@ export function DeploymentPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [base, "aurora-run-status"] }),
   });
 
-  // Historical-storm replay form state. `selected` is a preset id, "custom", or "".
+  // Historical-storm replay form state. `sourceMode` picks the initial-condition
+  // archive; `selected` is a preset id, "custom", or "".
+  const [sourceMode, setSourceMode] = useState<IcSource>("hres_t0");
   const [selected, setSelected] = useState<string>("");
   const [customDate, setCustomDate] = useState<string>("");
   const [customHour, setCustomHour] = useState<string>("12");
   const [customBbox, setCustomBbox] = useState<string>(REGION_PRESETS[0].bbox);
   const [customName, setCustomName] = useState<string>("");
 
+  const sourceOption = SOURCE_OPTIONS.find((s) => s.id === sourceMode)!;
+  const storms = STORM_PRESETS.filter((p) => p.source === sourceMode);
+
+  // Switching source clears any storm/date chosen for the other archive.
+  const pickSource = (id: IcSource) => {
+    setSourceMode(id);
+    setSelected("");
+    setCustomDate("");
+  };
+
   const replayPayload = (): Record<string, unknown> | null => {
     if (selected === "custom") {
       if (!customDate) return null;
       return {
         analysisTime: `${customDate}T${customHour}:00`,
-        source: "hres_t0",
+        source: sourceMode,
         bbox: customBbox,
         stormName: customName.trim() || undefined,
         numSteps: 12,
       };
     }
-    const preset = STORM_PRESETS.find((p) => p.id === selected);
+    const preset = storms.find((p) => p.id === selected);
     if (!preset) return null;
     return {
       analysisTime: preset.analysisTime,
-      source: "hres_t0",
+      source: preset.source,
       bbox: preset.bbox,
       stormName: preset.label,
       numSteps: preset.numSteps,
@@ -414,9 +449,10 @@ export function DeploymentPage() {
                       Aurora only forecasts a real cyclone it detects in the data — it can't
                       invent one. The two levers are the point in time analyzed and the
                       geographic search box. The <strong className="text-foreground">Replay a
-                      historical storm</strong> panel below exposes exactly those: pick a past
-                      hurricane (or a custom 2016–2022 date + region) and Aurora re-forecasts the
-                      real system from that snapshot.
+                      historical storm</strong> panel below exposes exactly those: choose a data
+                      source (ECMWF HRES for 2016–2022, NOAA GFS for 2021–now), pick a past
+                      hurricane (or a custom date + region), and Aurora re-forecasts the real
+                      system from that snapshot.
                     </p>
                   </div>
                 </PopoverContent>
@@ -446,14 +482,19 @@ export function DeploymentPage() {
                 )}
                 Run Aurora forecast now
               </button>
-              {auroraRunStatus.data?.latest && (
-                <span className="text-[11px] text-muted-foreground">
-                  Last run: {auroraRunStatus.data.latest.status ?? "Unknown"}
-                  {auroraRunStatus.data.latest.startTime
-                    ? ` · ${new Date(auroraRunStatus.data.latest.startTime).toLocaleString()}`
-                    : ""}
-                </span>
-              )}
+              {auroraRunStatus.data?.latest && (() => {
+                const latest = auroraRunStatus.data.latest;
+                const active = ACTIVE_RUN_STATUSES.has(latest.status ?? "");
+                return (
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[11px] ${active ? "text-primary" : "text-muted-foreground"}`}
+                  >
+                    {active && <Loader2 className="size-3 animate-spin" />}
+                    {active ? "Running" : `Last run: ${latest.status ?? "Unknown"}`}
+                    {latest.startTime ? ` · ${new Date(latest.startTime).toLocaleString()}` : ""}
+                  </span>
+                );
+              })()}
             </div>
             {runAurora.data && (
               <p className={`mt-2 text-[11px] ${runAurora.data.ok ? "text-risk-normal" : "text-risk-high"}`}>
@@ -479,14 +520,36 @@ export function DeploymentPage() {
                   <History className="size-3.5 text-primary" /> Replay a historical storm
                 </div>
                 <p className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Re-run Aurora against a past hurricane from the public WeatherBench2 archive
-                  (2016–2022, no credentials). Pick one below and Aurora re-forecasts its track
-                  onto your asset map — the same detect → forecast → publish cycle, just aimed at
-                  a historical date.
+                  Re-run Aurora against a past hurricane and it re-forecasts the real system onto
+                  your asset map — the same detect → forecast → publish cycle, aimed at a past date.
+                  Pick a data source, then a storm.
                 </p>
 
+                <div className="mb-2.5">
+                  <div className="label-xs mb-1 text-muted-foreground">1 · Data source</div>
+                  <div className="inline-flex rounded-sm border p-0.5">
+                    {SOURCE_OPTIONS.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => pickSource(s.id)}
+                        title={s.blurb}
+                        className={`rounded-[3px] px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          sourceMode === s.id
+                            ? "bg-primary/15 text-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="ml-2 text-[10px] text-muted-foreground">{sourceOption.blurb}</span>
+                </div>
+
+                <div className="label-xs mb-1 text-muted-foreground">2 · Storm</div>
                 <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {STORM_PRESETS.map((p) => (
+                  {storms.map((p) => (
                     <button
                       key={p.id}
                       type="button"
@@ -511,7 +574,7 @@ export function DeploymentPage() {
                     }`}
                   >
                     <span className="text-[11px] font-medium text-foreground">Custom date…</span>
-                    <span className="text-[10px] text-muted-foreground">Pick any 2016–2022 storm</span>
+                    <span className="text-[10px] text-muted-foreground">Any {sourceOption.min.slice(0, 4)}–{sourceOption.max.slice(0, 4)} storm</span>
                   </button>
                 </div>
 
@@ -521,8 +584,8 @@ export function DeploymentPage() {
                       Analysis date (UTC)
                       <input
                         type="date"
-                        min="2016-01-01"
-                        max="2022-12-31"
+                        min={sourceOption.min}
+                        max={sourceOption.max}
                         value={customDate}
                         onChange={(e) => setCustomDate(e.target.value)}
                         className="rounded-sm border bg-background px-2 py-1 text-[11px] text-foreground"

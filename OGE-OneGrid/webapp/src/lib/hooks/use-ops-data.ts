@@ -22,6 +22,9 @@ export function eventsQuery(base: OpsBase) {
     queryKey: [base, "events"],
     queryFn: () => getServices(base).weather.listEvents(),
     staleTime: 60 * 1000,
+    // Aurora publishes a new forecast in the background (job run, not a user action)
+    // — poll so a freshly-published storm appears without a manual page reload.
+    refetchInterval: 30 * 1000,
   });
 }
 
