@@ -10,6 +10,7 @@ import {
   Gauge,
   Layers,
   LayoutGrid,
+  Waypoints,
   LogOut,
   Map as MapIcon,
   Network,
@@ -318,6 +319,11 @@ export function AppShell({
   const modelRes = useModelRes();
   const solution = useSolution();
   const brand = solutionBrand(solution);
+  const navEntries = useMemo<Entry[]>(() => {
+    if (solution !== "og") return NAV;
+    const dn: Leaf = { to: "/distribution-network", label: "Distribution Network", icon: Waypoints };
+    return NAV.map((e) => (e.kind === "group" && e.id === "twin" ? { ...e, children: [...e.children, dn] } : e));
+  }, [solution]);
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
   const cap = useCapacityStatus();
@@ -375,10 +381,11 @@ export function AppShell({
     !to ? false : to === "/" ? path === base || path === `${base}/` : path.startsWith(href(to));
 
   const activeGroupId = useMemo(() => {
-    for (const g of GROUPS) if (g.children.some((c) => isActive(c.to))) return g.id;
+    const groups = [...navEntries.filter((e): e is Group => e.kind === "group"), ADMIN];
+    for (const g of groups) if (g.children.some((c) => isActive(c.to))) return g.id;
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path]);
+  }, [path, navEntries]);
   const [openId, setOpenId] = useState<string | null>(activeGroupId);
   useEffect(() => {
     if (activeGroupId) setOpenId(activeGroupId);
@@ -450,7 +457,7 @@ export function AppShell({
 
         {/* Rail */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-          {NAV.map((e) =>
+          {navEntries.map((e) =>
             e.kind === "item" ? (
               <NavLeaf
                 key={e.label}
