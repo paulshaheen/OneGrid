@@ -1035,7 +1035,10 @@ function Phase-ChatAgent {
   }
   # Aurora weather inference card: point the Explorer at the ARM-provisioned scoring endpoint.
   if ($cfg.pcp -and $cfg.pcp.auroraEndpoint) { $envVars += "AURORA_ENDPOINT=$($cfg.pcp.auroraEndpoint)" }
-  if ($cfg.pcp -and $cfg.pcp.auroraDeployed) { $envVars += "AURORA_MODEL_DEPLOYED=$($cfg.pcp.auroraDeployed)" }
+  # Guarded by the truthy check above, so the literal is always "true" — avoid interpolating
+  # the PS bool directly, which stringifies to "True" and silently fails server.ts's strict
+  # `=== "true"` check (leaving the Deployment page stuck on "Model required" forever).
+  if ($cfg.pcp -and $cfg.pcp.auroraDeployed) { $envVars += "AURORA_MODEL_DEPLOYED=true" }
   # Lets the Deployment page's "Run Aurora forecast now" button start the same scheduled
   # Container Apps Job the cron trigger runs, via the app identity's Container Apps Jobs
   # Operator grant (main.bicep chatAgentAuroraJobOperator) - no separate credentials needed.

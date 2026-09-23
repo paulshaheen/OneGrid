@@ -878,7 +878,9 @@ export const getDataPlaneStatus = createServerFn({ method: "GET" }).handler(
       geoCatalogConfigured: Boolean(geoCatalogUrl),
       uploadConfigured: Boolean(uploadContainerUrl),
       auroraEndpointConfigured: Boolean(process.env["AURORA_ENDPOINT"]),
-      auroraModelDeployed: process.env["AURORA_MODEL_DEPLOYED"] === "true",
+      // Case-insensitive: deploy.ps1 sets a literal "true", but PowerShell bool
+      // interpolation elsewhere (or a manually-set app setting) can produce "True".
+      auroraModelDeployed: (process.env["AURORA_MODEL_DEPLOYED"] ?? "").toLowerCase() === "true",
       auroraAdapterConnected,
       geoCatalogLive,
       foundryLive,
