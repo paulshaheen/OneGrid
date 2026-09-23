@@ -41,9 +41,9 @@ function readAsBase64(file: File): Promise<string> {
 const SAMPLE_FILES: Record<string, { file: string; label: string }[]> = {
   csv: [
     { file: "sample-assets.csv", label: "Download sample CSV" },
-    // Approximate public locations of ExxonMobil + Southern Company facilities, placed so
-    // every storm preset on the Deployment page crosses real named assets.
-    { file: "sample-assets-hurricane-coast.csv", label: "Hurricane-coast sample (XOM + Southern Co.)" },
+    // Fictional oil & gas and utility operators on the Gulf/Southeast coast, placed so
+    // every storm preset on the Deployment page crosses named assets.
+    { file: "sample-assets-hurricane-coast.csv", label: "Hurricane-coast sample (oil & gas + utility)" },
   ],
   geojson: [{ file: "sample-assets.geojson", label: "Download sample GeoJSON" }],
 };
