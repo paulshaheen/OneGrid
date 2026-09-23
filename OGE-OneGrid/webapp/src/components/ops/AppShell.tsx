@@ -46,7 +46,7 @@ import { relativeTime } from "@/lib/format";
 import { useCapacityStatus } from "@/report/lib/api.js";
 import { useModelRes, setModelRes } from "@/lib/model-res";
 import { useIsDark, setDark as setThemeDark, useMode } from "@/lib/theme-mode";
-import { useSolution, switchSolution } from "@/lib/solution";
+import { useSolution, switchSolution, solutionBrand } from "@/lib/solution";
 
 // Header bell: a quick slide-down of the current notifications with a link to the
 // full Alerts page — instead of navigating away on every click.
@@ -286,6 +286,23 @@ function OneGridMark({ className }: { className?: string }) {
   );
 }
 
+/** OneField brand mark: drilling derrick + oil droplet. */
+function OneFieldMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      {/* oil droplet cresting the derrick */}
+      <path d="M12 3.2 C13.2 4.7 13.7 5.5 13.7 6.2 A1.7 1.7 0 0 1 10.3 6.2 C10.3 5.5 10.8 4.7 12 3.2 Z" fill="#fff" />
+      {/* derrick tower + cross-braces */}
+      <g stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity=".92">
+        <path d="M8 20 L12 7.6 L16 20" />
+        <path d="M9.15 16 h5.7 M10 12.6 h4 M10.85 9.6 h2.3" />
+      </g>
+      {/* ground line */}
+      <path d="M4 20 h16" stroke="#c3cedd" strokeWidth="1.7" strokeLinecap="round" opacity=".85" />
+    </svg>
+  );
+}
+
 export function AppShell({
   children,
   fullHeight = false,
@@ -300,6 +317,7 @@ export function AppShell({
   const mode = useMode();
   const modelRes = useModelRes();
   const solution = useSolution();
+  const brand = solutionBrand(solution);
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
   const cap = useCapacityStatus();
@@ -407,17 +425,20 @@ export function AppShell({
           <span
             className="grid size-8 place-items-center rounded-md"
             style={{
-              background: "linear-gradient(135deg, var(--color-primary), oklch(0.5 0.145 251))",
+              background:
+                solution === "og"
+                  ? "linear-gradient(135deg, #f59e0b, #b45309)"
+                  : "linear-gradient(135deg, var(--color-primary), oklch(0.5 0.145 251))",
             }}
           >
-            <OneGridMark className="size-5" />
+            {solution === "og" ? <OneFieldMark className="size-5" /> : <OneGridMark className="size-5" />}
           </span>
           {!collapsed && (
             <div className="leading-tight">
               <div className="text-[13px] font-semibold tracking-tight">
-                ONE<span style={{ color: "#38bdf8" }}>GRID</span>
+                ONE<span style={{ color: brand.accent }}>{brand.word}</span>
                 <span className="ml-1.5 rounded bg-primary/15 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-primary align-middle">
-                  {solution === "og" ? "Oil & Gas" : "Energy"}
+                  {brand.domain}
                 </span>
               </div>
               <div className="text-[10px] text-muted-foreground">
