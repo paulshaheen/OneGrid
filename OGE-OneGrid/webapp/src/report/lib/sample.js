@@ -627,13 +627,72 @@ const PROBLEMS = {
     "Excitation cubicle cooling fan fault",
   ],
 };
+// Oil & Gas problem descriptions, keyed by the O&G asset types (used when solution=og).
+const OG_PROBLEMS = {
+  offshore_platform: [
+    "Topside structural vibration exceedance — inspect brace welds",
+    "Riser corrosion monitoring reading out of range",
+    "Firewater deluge system test overdue",
+  ],
+  well: [
+    "Wellhead pressure excursion — inspect choke valve",
+    "Xmas-tree SCSSV function test overdue",
+    "Annulus pressure buildup — investigate casing integrity",
+  ],
+  turbine: [
+    "Gas turbine vibration alarm — investigate bearing",
+    "Compressor surge margin low — check anti-surge valve",
+    "Exhaust-gas temperature spread high",
+  ],
+  pump: [
+    "Export pump mechanical seal leak",
+    "Injection pump bearing temperature trending high",
+    "Discharge pressure low — check recirculation valve",
+  ],
+  generator: [
+    "Turbo-generator stator temperature high — inspect cooling",
+    "Lube-oil pressure low on generator skid",
+    "AVR excitation fault",
+  ],
+  boiler: [
+    "Fired-heater tube skin temperature high",
+    "Burner flame instability — check fuel-gas pressure",
+    "Flue-gas O₂ analyzer drift",
+  ],
+  refinery: [
+    "Crude column top pressure high — check overhead condenser",
+    "Preheat-train fouling — schedule exchanger clean",
+    "Reboiler outlet temperature deviation",
+  ],
+  lng_terminal: [
+    "Liquefaction train cold-box temperature deviation",
+    "Refrigerant compressor seal-gas alarm",
+    "Boil-off-gas compressor discharge pressure high",
+  ],
+  storage: [
+    "Tank floating-roof seal inspection overdue",
+    "High-level alarm function test overdue",
+    "Bund containment integrity inspection due",
+  ],
+  pipeline: [
+    "Line pressure drop — investigate for leak",
+    "Pig launcher/receiver valve fault",
+    "Cathodic-protection reading below setpoint",
+  ],
+  port: [
+    "Marine loading-arm hydraulic leak",
+    "Berth mooring-load monitoring fault",
+    "Vapor-recovery unit trip",
+  ],
+};
 function allWorkOrders() {
   const rows = [];
   let n = 48210;
+  const PMAP = getSolution() === "og" ? OG_PROBLEMS : PROBLEMS;
   for (const a of ASSETS) {
     const r = rng(a.asset_id + ":wo");
     const count = a.status === "critical" ? 3 : a.status === "watch" ? 2 : r() > 0.6 ? 1 : 0;
-    const probs = PROBLEMS[a.type] || PROBLEMS.turbine;
+    const probs = PMAP[a.type] || PMAP.turbine || PROBLEMS.turbine;
     for (let i = 0; i < count; i++) {
       const prio =
         a.status === "critical" && i === 0 ? 1 : a.status === "watch" ? 2 : 2 + Math.floor(r() * 3);
