@@ -127,6 +127,7 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
         <RuntimeConfigScript />
+        <ClarityScript />
       </head>
       <body>
         {children}
@@ -142,6 +143,19 @@ function RootShell({ children }: { children: ReactNode }) {
  * already has window.__APP_CONFIG__ from the server-rendered HTML. The client
  * id and tenant id are public identifiers, not secrets.
  */
+// Microsoft Clarity — session analytics for the OneGrid app. Project id y4gf8o3yki is
+// scoped to onegrid-app; the snippet self-injects the async tag on first paint and tracks
+// SPA route changes automatically thereafter.
+function ClarityScript() {
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: `(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);})(window,document,"clarity","script","y4gf8o3yki");`,
+      }}
+    />
+  );
+}
+
 function RuntimeConfigScript() {
   if (typeof process === "undefined") return null;
   const config = {
