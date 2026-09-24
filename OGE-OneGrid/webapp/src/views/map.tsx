@@ -6,6 +6,7 @@ import { AppShell } from "@/components/ops/AppShell";
 import { OpsMap } from "@/components/ops/OpsMap";
 import { PageLoading } from "@/components/ops/PageLoading";
 import { WeatherHoloMap } from "@/components/ops/WeatherHoloMap";
+import { WeatherSourceControl } from "@/components/ops/WeatherSourceControl";
 import { AssetDetailPanel } from "@/components/ops/AssetDetailPanel";
 import { RiskBadge } from "@/components/ops/RiskBadge";
 import { OpsLink, useOpsBase } from "@/components/ops/ops-nav";
@@ -87,6 +88,7 @@ export function MapPage() {
     <AppShell>
       <div className="flex h-[calc(100vh-3.5rem)] min-h-0">
         <div className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r bg-panel md:flex">
+          <WeatherSourceControl activeModelSource={event?.modelSource} />
           {event?.cycleShift && (
             <div className="border-b p-3">
               <div className="label-xs mb-1.5">Change since last cycle</div>
