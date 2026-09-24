@@ -1083,6 +1083,14 @@ async function listAuroraWeatherEventsFromBlob(): Promise<WeatherEvent[]> {
 
 export const listAuroraWeatherEvents = createServerFn({ method: "GET" }).handler(
   async (): Promise<WeatherEvent[]> => {
+    // Operator-selected weather source (set on the map). "synthetic" and "aurora"
+    // are authoritative: the chosen source lives in the model-outputs blob and wins
+    // over the Fabric unified-model default, so the map shows exactly what was picked.
+    // "fabric" (the default when nothing was chosen) keeps the original behavior below.
+    const mode = await readWeatherSourceMode();
+    if (mode === "synthetic" || mode === "aurora") {
+      return listAuroraWeatherEventsFromBlob();
+    }
     // Unified model: when the report-app /api data plane is wired AND actually has data,
     // weather events come from the conformed OneGridModel (dim_weather_event + WeatherForecast),
     // so the same dim_asset spine carries both twin health and storm exposure. But this call is
@@ -1104,6 +1112,298 @@ export const listAuroraWeatherEvents = createServerFn({ method: "GET" }).handler
     return listAuroraWeatherEventsFromBlob();
   },
 );
+
+// ---------------------------------------------------------------------------
+// Weather source mode (operator-selectable on the map): fabric | synthetic | aurora.
+// Persisted as a sidecar blob in the model-outputs container so the choice survives
+// restarts and is shared across every app worker (no per-instance memory state):
+//   - fabric   (default): the existing Fabric-first unified-model demo storms.
+//   - synthetic         : a canned demo hurricane written to weather-events.json — no GPU.
+//   - aurora            : the live Aurora pipeline's published weather-events.json.
+// listAuroraWeatherEvents honors this so the map renders exactly the chosen source.
+// ---------------------------------------------------------------------------
+
+export type WeatherSourceMode = "fabric" | "synthetic" | "aurora";
+const WEATHER_SOURCE_MODES: readonly WeatherSourceMode[] = ["fabric", "synthetic", "aurora"];
+const WEATHER_SOURCE_BLOB_NAME = "weather-source.json";
+
+/** Resolve the model-outputs blob URL + a managed-identity token, or null when unconfigured. */
+async function modelOutputBlobRef(blobName: string): Promise<{ url: string; token: string } | null> {
+  const containerUrl = process.env["UPLOAD_CONTAINER_URL"];
+  if (!containerUrl) return null;
+  const token = await getManagedIdentityToken(STORAGE_RESOURCE);
+  if (!token) return null;
+  return { url: `${containerUrl.replace(/\/$/, "")}/${blobName}`, token };
+}
+
+async function readModelOutputBlob(blobName: string): Promise<unknown | null> {
+  const ref = await modelOutputBlobRef(blobName);
+  if (!ref) return null;
+  try {
+    const res = await fetch(ref.url, {
+      headers: { Authorization: `Bearer ${ref.token}`, "x-ms-version": "2021-08-06" },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+async function writeModelOutputBlob(blobName: string, value: unknown): Promise<boolean> {
+  const ref = await modelOutputBlobRef(blobName);
+  if (!ref) return false;
+  try {
+    const res = await fetch(ref.url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${ref.token}`,
+        "x-ms-blob-type": "BlockBlob",
+        "x-ms-version": "2021-08-06",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(value),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function deleteModelOutputBlob(blobName: string): Promise<boolean> {
+  const ref = await modelOutputBlobRef(blobName);
+  if (!ref) return false;
+  try {
+    const res = await fetch(ref.url, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${ref.token}`, "x-ms-version": "2021-08-06" },
+    });
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
+async function readWeatherSourceMode(): Promise<WeatherSourceMode> {
+  const raw = await readModelOutputBlob(WEATHER_SOURCE_BLOB_NAME);
+  const mode = raw && typeof raw === "object" ? (raw as { mode?: unknown }).mode : undefined;
+  return typeof mode === "string" && (WEATHER_SOURCE_MODES as readonly string[]).includes(mode)
+    ? (mode as WeatherSourceMode)
+    : "fabric";
+}
+
+/** Remove the weather-events blob only when it holds synthetic demo data, so switching
+ * to fabric/aurora clears the canned hurricane without ever deleting a real Aurora forecast. */
+async function clearSyntheticWeatherBlob(): Promise<void> {
+  const existing = await readModelOutputBlob(WEATHER_EVENTS_BLOB_NAME);
+  const arr = Array.isArray(existing)
+    ? existing
+    : existing && typeof existing === "object" && Array.isArray((existing as { events?: unknown }).events)
+      ? (existing as { events: unknown[] }).events
+      : null;
+  if (!arr || arr.length === 0) return;
+  const allSynthetic = arr.every(
+    (e) => e && typeof e === "object" && (e as { modelSource?: unknown }).modelSource === "Synthetic",
+  );
+  if (allSynthetic) await deleteModelOutputBlob(WEATHER_EVENTS_BLOB_NAME);
+}
+
+// Canned demo scenario: a major Gulf of Mexico hurricane tracking NNW toward the
+// upper Texas / Louisiana coast, with a curving centerline, a widening uncertainty
+// cone, a perturbed ensemble and the previous cycle's track for cycle-over-cycle
+// comparison. Shaped to pass isWeatherEvent() so it renders identically to a live
+// Aurora forecast; only modelSource ("Synthetic") distinguishes it in the UI.
+const SYNTHETIC_HURRICANE_TRACK: ReadonlyArray<{
+  hour: number;
+  lat: number;
+  lon: number;
+  windMph: number;
+  category: number;
+  pressureMb: number;
+  coneRadiusMi: number;
+}> = [
+  { hour: 0, lat: 25.8, lon: -91.0, windMph: 115, category: 3, pressureMb: 950, coneRadiusMi: 40 },
+  { hour: 6, lat: 26.3, lon: -91.6, windMph: 120, category: 3, pressureMb: 946, coneRadiusMi: 48 },
+  { hour: 12, lat: 26.9, lon: -92.2, windMph: 125, category: 4, pressureMb: 940, coneRadiusMi: 58 },
+  { hour: 18, lat: 27.5, lon: -92.8, windMph: 130, category: 4, pressureMb: 936, coneRadiusMi: 66 },
+  { hour: 24, lat: 28.1, lon: -93.3, windMph: 130, category: 4, pressureMb: 935, coneRadiusMi: 75 },
+  { hour: 30, lat: 28.7, lon: -93.7, windMph: 125, category: 4, pressureMb: 940, coneRadiusMi: 88 },
+  { hour: 36, lat: 29.1, lon: -94.0, windMph: 115, category: 3, pressureMb: 948, coneRadiusMi: 100 },
+  { hour: 42, lat: 29.5, lon: -94.2, windMph: 100, category: 2, pressureMb: 958, coneRadiusMi: 110 },
+  { hour: 48, lat: 30.1, lon: -94.4, windMph: 80, category: 1, pressureMb: 972, coneRadiusMi: 120 },
+  { hour: 54, lat: 30.8, lon: -94.7, windMph: 65, category: 1, pressureMb: 984, coneRadiusMi: 135 },
+  { hour: 60, lat: 31.4, lon: -95.0, windMph: 55, category: 0, pressureMb: 992, coneRadiusMi: 150 },
+  { hour: 66, lat: 31.9, lon: -95.3, windMph: 45, category: 0, pressureMb: 998, coneRadiusMi: 165 },
+  { hour: 72, lat: 32.4, lon: -95.6, windMph: 40, category: 0, pressureMb: 1002, coneRadiusMi: 180 },
+  { hour: 78, lat: 32.8, lon: -95.8, windMph: 35, category: 0, pressureMb: 1005, coneRadiusMi: 195 },
+  { hour: 84, lat: 33.1, lon: -96.0, windMph: 30, category: 0, pressureMb: 1007, coneRadiusMi: 210 },
+  { hour: 90, lat: 33.4, lon: -96.2, windMph: 30, category: 0, pressureMb: 1008, coneRadiusMi: 225 },
+  { hour: 96, lat: 33.7, lon: -96.3, windMph: 25, category: 0, pressureMb: 1009, coneRadiusMi: 240 },
+  { hour: 102, lat: 33.9, lon: -96.4, windMph: 25, category: 0, pressureMb: 1010, coneRadiusMi: 255 },
+  { hour: 108, lat: 34.1, lon: -96.5, windMph: 20, category: 0, pressureMb: 1011, coneRadiusMi: 270 },
+  { hour: 114, lat: 34.3, lon: -96.6, windMph: 20, category: 0, pressureMb: 1011, coneRadiusMi: 285 },
+  { hour: 120, lat: 34.5, lon: -96.7, windMph: 20, category: 0, pressureMb: 1012, coneRadiusMi: 300 },
+];
+
+// Past track ([lon, lat], oldest -> newest) leading into the current position.
+const SYNTHETIC_HURRICANE_HISTORY: ReadonlyArray<[number, number]> = [
+  [-85.0, 22.0],
+  [-85.2, 22.2],
+  [-85.6, 22.6],
+  [-86.2, 23.1],
+  [-87.0, 23.6],
+  [-88.4, 24.2],
+  [-89.1, 24.5],
+  [-89.8, 24.9],
+  [-90.4, 25.3],
+];
+
+function buildSyntheticGulfHurricane(): WeatherEvent[] {
+  const now = new Date();
+  const forecast: WeatherEvent["forecast"] = SYNTHETIC_HURRICANE_TRACK.map((p) => ({
+    hour: p.hour,
+    lat: p.lat,
+    lon: p.lon,
+    windMph: p.windMph,
+    coneRadiusMi: p.coneRadiusMi,
+    category: p.category,
+    pressureMb: p.pressureMb,
+  }));
+
+  // Ensemble: lateral spread growing with lead time, straddling the centerline.
+  const ensemble: WeatherEvent["ensemble"] = [
+    { id: "m1", label: "GEFS 01", offsetDeg: 0.55 },
+    { id: "m2", label: "GEFS 02", offsetDeg: 0.28 },
+    { id: "m3", label: "GEFS 03", offsetDeg: -0.32 },
+    { id: "m4", label: "GEFS 04", offsetDeg: -0.6 },
+  ].map((member) => ({
+    id: member.id,
+    label: member.label,
+    track: SYNTHETIC_HURRICANE_TRACK.map((p, i) => {
+      const spread = (i / (SYNTHETIC_HURRICANE_TRACK.length - 1)) * member.offsetDeg;
+      return [p.lon + spread, p.lat + spread * 0.5] as [number, number];
+    }),
+  }));
+
+  // Previous cycle centerline: ~0.4deg east and slightly slower to intensify, so the
+  // UI can show a westward, stronger correction between cycles.
+  const previousForecast: WeatherEvent["forecast"] = SYNTHETIC_HURRICANE_TRACK.map((p) => ({
+    hour: p.hour,
+    lat: p.lat - 0.15,
+    lon: p.lon + 0.45,
+    windMph: Math.max(20, p.windMph - 10),
+    coneRadiusMi: p.coneRadiusMi + 10,
+    category: p.category,
+    pressureMb: p.pressureMb + 4,
+  }));
+
+  const event: WeatherEvent = {
+    id: "SYN_GULF_HUR",
+    name: "Hurricane Delta (synthetic)",
+    kind: "hurricane",
+    status: "active",
+    basin: "Gulf of Mexico",
+    currentCategory: 3,
+    currentWindMph: 115,
+    gustMph: 140,
+    pressureMb: 950,
+    movementDeg: 330,
+    movementMph: 12,
+    lat: SYNTHETIC_HURRICANE_TRACK[0]!.lat,
+    lon: SYNTHETIC_HURRICANE_TRACK[0]!.lon,
+    confidence: "high",
+    modelSource: "Synthetic",
+    updatedAtIso: now.toISOString(),
+    expectedLandfall: "Upper Texas coast (Galveston area), ~42 h",
+    cycleId: `${String(now.getUTCHours()).padStart(2, "0")}Z demo`,
+    ensemble,
+    previousForecast,
+    cycleShift: {
+      currentCycle: `${String(now.getUTCHours()).padStart(2, "0")}Z demo`,
+      previousCycle: "prior cycle",
+      shiftMi: 34,
+      shiftBearingDeg: 250,
+      shiftDirection: "WSW",
+      intensityDeltaMph: 10,
+      coneDeltaMi: -10,
+      summary: "Track nudged west toward the upper Texas coast; peak intensity up ~10 mph vs the prior cycle.",
+    },
+    history: [...SYNTHETIC_HURRICANE_HISTORY],
+    forecast,
+  };
+  return [event];
+}
+
+/** Current operator-selected weather source (and whether storage is wired to change it). */
+export const getWeatherSource = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{ mode: WeatherSourceMode; storageConfigured: boolean }> => ({
+    mode: await readWeatherSourceMode(),
+    storageConfigured: Boolean(process.env["UPLOAD_CONTAINER_URL"]),
+  }),
+);
+
+export type SetWeatherSourceResult = {
+  ok: boolean;
+  mode: WeatherSourceMode;
+  eventCount: number;
+  message: string;
+};
+
+/** Switch the map's weather source. "synthetic" also publishes the canned demo
+ * hurricane to the model-outputs blob (instant, no GPU); "fabric"/"aurora" clear any
+ * leftover synthetic blob so the real source is never shadowed. */
+export const setWeatherSource = createServerFn({ method: "POST" })
+  .validator((data: { mode: WeatherSourceMode }) => data)
+  .handler(async ({ data }): Promise<SetWeatherSourceResult> => {
+    const mode: WeatherSourceMode = (WEATHER_SOURCE_MODES as readonly string[]).includes(data?.mode)
+      ? data.mode
+      : "fabric";
+    if (!process.env["UPLOAD_CONTAINER_URL"]) {
+      return {
+        ok: false,
+        mode,
+        eventCount: 0,
+        message: "Storage is not configured for this deployment (UPLOAD_CONTAINER_URL is unset).",
+      };
+    }
+    let eventCount = 0;
+    if (mode === "synthetic") {
+      const events = buildSyntheticGulfHurricane();
+      const wrote = await writeModelOutputBlob(WEATHER_EVENTS_BLOB_NAME, events);
+      if (!wrote) {
+        return {
+          ok: false,
+          mode,
+          eventCount: 0,
+          message:
+            "Could not write the synthetic forecast to storage. Confirm the app identity has Storage Blob Data Contributor on the model-outputs container.",
+        };
+      }
+      eventCount = events.length;
+    } else {
+      // fabric or aurora: drop any canned demo blob so it can't shadow the real source.
+      await clearSyntheticWeatherBlob();
+    }
+    const savedMode = await writeModelOutputBlob(WEATHER_SOURCE_BLOB_NAME, {
+      mode,
+      updatedAtIso: new Date().toISOString(),
+    });
+    if (!savedMode) {
+      return {
+        ok: false,
+        mode,
+        eventCount,
+        message: "Could not persist the weather-source selection to storage.",
+      };
+    }
+    const label =
+      mode === "synthetic"
+        ? "Synthetic demo hurricane published — the map now shows the canned Gulf storm."
+        : mode === "aurora"
+          ? "Weather source set to Aurora (live). The map shows the pipeline's published forecast."
+          : "Weather source set to the default unified-model storms.";
+    return { ok: true, mode, eventCount, message: label };
+  });
 
 export type UploadResult = { ok: boolean; message: string; blobUrl?: string };
 
