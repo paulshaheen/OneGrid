@@ -1088,7 +1088,14 @@ export const listAuroraWeatherEvents = createServerFn({ method: "GET" }).handler
     // over the Fabric unified-model default, so the map shows exactly what was picked.
     // "fabric" (the default when nothing was chosen) keeps the original behavior below.
     const mode = await readWeatherSourceMode();
-    if (mode === "synthetic" || mode === "aurora") {
+    // Each source is fully segmented so they never overwrite each other:
+    //   synthetic -> generated in-code (never touches a blob),
+    //   aurora    -> the model-outputs weather-events.json blob, written ONLY by the pipeline,
+    //   fabric    -> the unified-model default handled below.
+    if (mode === "synthetic") {
+      return buildSyntheticGulfHurricane();
+    }
+    if (mode === "aurora") {
       return listAuroraWeatherEventsFromBlob();
     }
     // Unified model: when the report-app /api data plane is wired AND actually has data,
@@ -1170,19 +1177,6 @@ async function writeModelOutputBlob(blobName: string, value: unknown): Promise<b
   }
 }
 
-async function deleteModelOutputBlob(blobName: string): Promise<boolean> {
-  const ref = await modelOutputBlobRef(blobName);
-  if (!ref) return false;
-  try {
-    const res = await fetch(ref.url, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${ref.token}`, "x-ms-version": "2021-08-06" },
-    });
-    return res.ok || res.status === 404;
-  } catch {
-    return false;
-  }
-}
 
 async function readWeatherSourceMode(): Promise<WeatherSourceMode> {
   const raw = await readModelOutputBlob(WEATHER_SOURCE_BLOB_NAME);
@@ -1190,22 +1184,6 @@ async function readWeatherSourceMode(): Promise<WeatherSourceMode> {
   return typeof mode === "string" && (WEATHER_SOURCE_MODES as readonly string[]).includes(mode)
     ? (mode as WeatherSourceMode)
     : "fabric";
-}
-
-/** Remove the weather-events blob only when it holds synthetic demo data, so switching
- * to fabric/aurora clears the canned hurricane without ever deleting a real Aurora forecast. */
-async function clearSyntheticWeatherBlob(): Promise<void> {
-  const existing = await readModelOutputBlob(WEATHER_EVENTS_BLOB_NAME);
-  const arr = Array.isArray(existing)
-    ? existing
-    : existing && typeof existing === "object" && Array.isArray((existing as { events?: unknown }).events)
-      ? (existing as { events: unknown[] }).events
-      : null;
-  if (!arr || arr.length === 0) return;
-  const allSynthetic = arr.every(
-    (e) => e && typeof e === "object" && (e as { modelSource?: unknown }).modelSource === "Synthetic",
-  );
-  if (allSynthetic) await deleteModelOutputBlob(WEATHER_EVENTS_BLOB_NAME);
 }
 
 // Canned demo scenario: a major Gulf of Mexico hurricane tracking NNW toward the
@@ -1367,22 +1345,11 @@ export const setWeatherSource = createServerFn({ method: "POST" })
       };
     }
     let eventCount = 0;
+    // Sources are segmented, so switching only records the selection — it never writes
+    // or clears event data. Synthetic is generated in-code on read; Aurora owns
+    // weather-events.json (written only by the pipeline); fabric uses the unified model.
     if (mode === "synthetic") {
-      const events = buildSyntheticGulfHurricane();
-      const wrote = await writeModelOutputBlob(WEATHER_EVENTS_BLOB_NAME, events);
-      if (!wrote) {
-        return {
-          ok: false,
-          mode,
-          eventCount: 0,
-          message:
-            "Could not write the synthetic forecast to storage. Confirm the app identity has Storage Blob Data Contributor on the model-outputs container.",
-        };
-      }
-      eventCount = events.length;
-    } else {
-      // fabric or aurora: drop any canned demo blob so it can't shadow the real source.
-      await clearSyntheticWeatherBlob();
+      eventCount = buildSyntheticGulfHurricane().length;
     }
     const savedMode = await writeModelOutputBlob(WEATHER_SOURCE_BLOB_NAME, {
       mode,
@@ -1398,9 +1365,9 @@ export const setWeatherSource = createServerFn({ method: "POST" })
     }
     const label =
       mode === "synthetic"
-        ? "Synthetic demo hurricane published — the map now shows the canned Gulf storm."
+        ? "Weather source set to Synthetic — the map shows the canned Gulf demo hurricane."
         : mode === "aurora"
-          ? "Weather source set to Aurora (live). The map shows the pipeline's published forecast."
+          ? "Weather source set to Aurora (live) — the map shows the pipeline's published forecast."
           : "Weather source set to the default unified-model storms.";
     return { ok: true, mode, eventCount, message: label };
   });
