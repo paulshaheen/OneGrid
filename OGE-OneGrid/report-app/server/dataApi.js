@@ -792,7 +792,9 @@ function buildEvents(eventRows, fcRows) {
       lat: num(e.lat),
       lon: num(e.lon),
       confidence: e.status === 'active' ? 'high' : e.status === 'forecast' ? 'moderate' : 'low',
-      modelSource: 'OneGrid unified model (HURDAT2 best-track / SPC outlook)',
+      modelSource: String(e.event_id || '').startsWith('aurora')
+        ? 'Aurora (Azure ML) \u00b7 GFS initial conditions'
+        : 'OneGrid unified model (HURDAT2 best-track / SPC outlook)',
       updatedAtIso: e.updated_at || new Date().toISOString(),
       expectedLandfall: '',
       // unified-model extras (harmless to consumers that ignore them)
