@@ -48,7 +48,7 @@ def _to_event(config: Config, track: Track, index: int) -> dict:
         "name": name,
         "kind": "hurricane" if peak_wind_mph >= 74 else "tropical_storm",
         "status": _status(current_wind_mph),
-        "basin": _basin(current.lon),
+        "basin": _basin(current.lat, current.lon),
         "currentCategory": _category(current_wind_mph),
         "currentWindMph": round(current_wind_mph),
         "gustMph": round(current_wind_mph * _GUST_FACTOR),
@@ -146,5 +146,21 @@ def _confidence(track: Track) -> str:
     return "low"
 
 
-def _basin(lon: float) -> str:
-    return "East Pacific" if lon < -100 else "North Atlantic"
+def _basin(lat: float, lon: float) -> str:
+    """Tropical-cyclone basin from position (lon normalized to -180..180)."""
+    lon = ((lon + 180.0) % 360.0) - 180.0
+    if lat >= 0:
+        if 100 <= lon <= 180:
+            return "West Pacific"
+        if 30 <= lon < 100:
+            return "North Indian"
+        if -180 <= lon < -140:
+            return "Central Pacific"
+        if -140 <= lon < -92:
+            return "East Pacific"
+        return "North Atlantic"
+    if 20 <= lon < 135:
+        return "South Indian"
+    if 135 <= lon <= 180 or -180 <= lon < -70:
+        return "South Pacific"
+    return "South Atlantic"
