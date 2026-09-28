@@ -1,13 +1,14 @@
 import { X } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import type { Asset, AssetRisk, WeatherEvent } from "@/lib/domain/types";
 import { ASSET_TYPE_LABEL, STATUS_LABEL, coords, riskColorVar } from "@/lib/format";
 import { nearbyAssets } from "@/lib/services/mock-providers";
 import { RiskBadge } from "@/components/ops/RiskBadge";
-import { useApi } from "@/report/lib/api.js";
 
 type AssetDamage = {
   assetId: string;
+  siteId?: string;
   equipmentCategory?: string;
   damageMode?: string;
   damageProbability?: number;
@@ -15,6 +16,28 @@ type AssetDamage = {
   expectedLossUsd?: number;
   damageFactors?: { label: string; detail: string }[];
 };
+
+// Live predicted-damage rows from the report-app data plane (Aurora-driven).
+// Fetched directly (not the solution-gated api hook) so the card shows whenever
+// the exposure API has data for the selected asset or site.
+function useAssetDamage(): AssetDamage[] {
+  const [rows, setRows] = useState<AssetDamage[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/exposure", { headers: { Accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => {
+        if (alive) setRows(Array.isArray(d) ? d : []);
+      })
+      .catch(() => {
+        if (alive) setRows([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return rows;
+}
 
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
@@ -50,8 +73,25 @@ export function AssetDetailPanel({
   onSelect?: (id: string) => void;
 }) {
   const nearby = nearbyAssets(asset, allAssets, 75);
-  const exposureApi = useApi("/api/exposure") as { data: AssetDamage[] | null };
-  const dmg = exposureApi.data?.find((e) => e.assetId === asset.id);
+  const damageRows = useAssetDamage();
+  const notNeg = (e: AssetDamage) => e.damageMode && e.damageMode !== "Negligible";
+  // Equipment selected -> that asset's damage; site selected -> aggregate its units.
+  const dmg = damageRows.find((e) => e.assetId === asset.id && notNeg(e));
+  const siteRows = dmg ? [] : damageRows.filter((e) => e.siteId === asset.id);
+  const siteAtRisk = siteRows.filter(notNeg);
+  const siteAgg =
+    !dmg && siteAtRisk.length > 0
+      ? {
+          atRisk: siteAtRisk.length,
+          units: siteRows.length,
+          totalLoss: siteRows.reduce((s, e) => s + (e.expectedLossUsd ?? 0), 0),
+          totalDowntime: siteRows.reduce((s, e) => s + (e.expectedDowntimeH ?? 0), 0),
+          worst: siteAtRisk.reduce((w, e) =>
+            (e.damageProbability ?? 0) > (w.damageProbability ?? 0) ? e : w,
+          ),
+        }
+      : null;
+  const cleanId = (id: string) => id.replace(/_/g, " ");
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-card">
@@ -223,6 +263,35 @@ export function AssetDetailPanel({
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
             Fragility estimate from the Aurora forecast wind/rain at this asset, its equipment
             class and current condition. Deterministic and explainable.
+          </p>
+        </Section>
+      )}
+
+      {siteAgg && (
+        <Section title="Predicted equipment damage">
+          <Row
+            label="Equipment at risk"
+            value={`${siteAgg.atRisk} of ${siteAgg.units} units`}
+          />
+          <Row
+            label="Est. site loss exposure"
+            value={`$${Math.round(siteAgg.totalLoss).toLocaleString()}`}
+          />
+          <Row label="Est. cumulative downtime" value={`${siteAgg.totalDowntime} asset-h`} />
+          <div
+            className="mt-2 rounded-sm border px-2.5 py-2"
+            style={{ borderColor: riskColorVar(risk ? risk.level : "elevated") }}
+          >
+            <div className="label-xs">Most vulnerable unit</div>
+            <div className="num mt-0.5 text-sm font-semibold">{cleanId(siteAgg.worst.assetId)}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {siteAgg.worst.damageMode} · {Math.round((siteAgg.worst.damageProbability ?? 0) * 100)}%
+              damage probability · ${Math.round(siteAgg.worst.expectedLossUsd ?? 0).toLocaleString()}
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            Fragility estimate from the Aurora forecast at each unit (equipment class + current
+            condition), aggregated across the site. Expand the site to inspect a single unit.
           </p>
         </Section>
       )}
