@@ -836,37 +836,112 @@ const RECS_BY_LEVEL = {
   normal: [],
 };
 
+// ---------------------------------------------------------------------------
+// Damage / vulnerability model (fragility curves). Translates the hazard the
+// storm delivers to an asset (forecast wind + rainfall) into the expected
+// PHYSICAL consequence, keyed on equipment_category and modulated by current
+// condition (aakr_health) and site criticality. Deterministic + explainable.
+// NOTE: keep in lock-step with the Python port in
+// planetary-computer-pro-poc/infra/fabric/notebooks/compute_aurora_exposure
+// (fact_asset_damage) so the notebook and the live UI agree.
+// ---------------------------------------------------------------------------
+const DMG = {
+  // wind fragility: 50% damage-probability wind (mph) + logistic steepness
+  wind: { Electrical: [85, 0.055], Rotating: [100, 0.05], Fired: [105, 0.05], Static: [120, 0.045] },
+  // flood/water-ingress susceptibility (0-1) applied over the rainfall band
+  flood: { Electrical: 0.85, Rotating: 0.55, Fired: 0.45, Static: 0.30 },
+  rainOnset: 4.0, rainSat: 14.0,
+  // full-loss repair/replacement time (h) and value ($) by category
+  repairH: { Electrical: 60, Rotating: 96, Fired: 168, Static: 120 },
+  repairUsd: { Electrical: 450000, Rotating: 1300000, Fired: 2600000, Static: 900000 },
+  // deferred-production / outage cost ($/h) by site criticality
+  outageUsdPerH: { business_critical: 22000, important: 11000, standard: 4000 },
+};
+const clip01 = (x) => Math.max(0, Math.min(1, x));
+
+function assetDamage(wind, rain, category, healthScore, criticality) {
+  const cat = DMG.wind[category] ? category : 'Static';
+  const [w50, k] = DMG.wind[cat];
+  const pWind = 1 / (1 + Math.exp(-k * ((wind || 0) - w50)));
+  const pFlood = (DMG.flood[cat] || 0.3) * clip01(((rain || 0) - DMG.rainOnset) / (DMG.rainSat - DMG.rainOnset));
+  const pBase = 1 - (1 - pWind) * (1 - pFlood);
+  const health = healthScore == null ? 85 : healthScore;
+  const healthFactor = 1 + ((100 - health) / 100) * 0.5;      // degraded equipment fails easier
+  const p = Math.min(0.98, pBase * healthFactor);
+  const downtimeH = Math.round(p * (DMG.repairH[cat] || 120));
+  const outagePerH = DMG.outageUsdPerH[criticality] || DMG.outageUsdPerH.standard;
+  const lossUsd = Math.round((p * (DMG.repairUsd[cat] || 900000) + downtimeH * outagePerH) / 1000) * 1000;
+  let mode;
+  if (pFlood >= pWind && (rain || 0) >= DMG.rainOnset) mode = 'Flooding / water ingress';
+  else if ((wind || 0) >= 74) mode = 'Hurricane-force wind';
+  else if ((wind || 0) >= 39) mode = 'Storm-force wind / debris';
+  else if (p >= 0.05) mode = 'Marginal wind exposure';
+  else mode = 'Negligible';
+  return {
+    damageProbability: Math.round(p * 1000) / 1000,
+    damageMode: mode,
+    expectedDowntimeH: downtimeH,
+    expectedLossUsd: lossUsd,
+    damageFactors: [
+      { label: 'Wind fragility', detail: `${Math.round(pWind * 100)}% at ${Math.round(wind || 0)} mph (${cat})` },
+      { label: 'Flood/ingress', detail: `${Math.round(pFlood * 100)}% at ${(rain || 0)} in` },
+      { label: 'Condition', detail: `health ${Math.round(health)} (\u00d7${healthFactor.toFixed(2)})` },
+    ],
+  };
+}
+
 // AssetRisk[] from fact_asset_exposure. Exposure has no event_id, so eventId is
-// resolved from hazard_kind (preferring an active event of that hazard).
+// resolved from hazard_kind (preferring an active event of that hazard). Each row
+// is enriched with the predicted physical damage (fragility model above).
 export function exposure() {
   return cached('exposure', 30_000, async () => {
-    const [exp, events] = await qBatch(['EVALUATE fact_asset_exposure', 'EVALUATE dim_weather_event']);
+    const [exp, events, assets, sites, health] = await qBatch([
+      'EVALUATE fact_asset_exposure', 'EVALUATE dim_weather_event',
+      'EVALUATE dim_asset', 'EVALUATE dim_site', 'EVALUATE aakr_health',
+    ]);
     const hazToEvent = {};
     for (const e of events) {
       if (!e.hazard_kind) continue;
       if (!hazToEvent[e.hazard_kind] || e.status === 'active') hazToEvent[e.hazard_kind] = e.event_id;
     }
-    return exp.map((r) => ({
-      assetId: r.asset_id,
-      score: num(r.score),
-      level: r.level,
-      eventId: hazToEvent[r.hazard_kind] || null,
-      distanceMi: num(r.distance_mi),
-      forecastWindMph: num(r.forecast_wind_mph),
-      rainfallIn: num(r.rainfall_in),
-      hoursToImpact: num(r.hours_to_impact),
-      tsWindEtaH: null,
-      hurWindEtaH: null,
-      evacWindowH: null,
-      insideCone: bool(r.inside_threat_area),
-      factors: riskFactors(r),
-      recommendations: RECS_BY_LEVEL[r.level] || [],
-      // unified-model extras
-      siteId: r.site_id,
-      hazardKind: r.hazard_kind,
-      cycleId: r.cycle_id,
-      primaryThreat: r.primary_threat,
-    }));
+    const catOf = {};
+    for (const a of assets) catOf[a.asset_id] = a.equipment_category;
+    const critOf = {};
+    for (const s of sites) critOf[s.site_id] = s.criticality;
+    const healthOf = {};
+    for (const h of health) healthOf[h.asset_id] = num(h.health_score);
+    return exp.map((r) => {
+      const dmg = assetDamage(num(r.forecast_wind_mph), num(r.rainfall_in),
+        catOf[r.asset_id], healthOf[r.asset_id], critOf[r.site_id]);
+      return {
+        assetId: r.asset_id,
+        score: num(r.score),
+        level: r.level,
+        eventId: hazToEvent[r.hazard_kind] || null,
+        distanceMi: num(r.distance_mi),
+        forecastWindMph: num(r.forecast_wind_mph),
+        rainfallIn: num(r.rainfall_in),
+        hoursToImpact: num(r.hours_to_impact),
+        tsWindEtaH: null,
+        hurWindEtaH: null,
+        evacWindowH: null,
+        insideCone: bool(r.inside_threat_area),
+        factors: riskFactors(r),
+        recommendations: RECS_BY_LEVEL[r.level] || [],
+        // predicted physical damage (fragility model)
+        equipmentCategory: catOf[r.asset_id] || null,
+        damageProbability: dmg.damageProbability,
+        damageMode: dmg.damageMode,
+        expectedDowntimeH: dmg.expectedDowntimeH,
+        expectedLossUsd: dmg.expectedLossUsd,
+        damageFactors: dmg.damageFactors,
+        // unified-model extras
+        siteId: r.site_id,
+        hazardKind: r.hazard_kind,
+        cycleId: r.cycle_id,
+        primaryThreat: r.primary_threat,
+      };
+    });
   });
 }
 

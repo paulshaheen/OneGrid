@@ -4,6 +4,17 @@ import type { Asset, AssetRisk, WeatherEvent } from "@/lib/domain/types";
 import { ASSET_TYPE_LABEL, STATUS_LABEL, coords, riskColorVar } from "@/lib/format";
 import { nearbyAssets } from "@/lib/services/mock-providers";
 import { RiskBadge } from "@/components/ops/RiskBadge";
+import { useApi } from "@/report/lib/api.js";
+
+type AssetDamage = {
+  assetId: string;
+  equipmentCategory?: string;
+  damageMode?: string;
+  damageProbability?: number;
+  expectedDowntimeH?: number;
+  expectedLossUsd?: number;
+  damageFactors?: { label: string; detail: string }[];
+};
 
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
@@ -39,6 +50,8 @@ export function AssetDetailPanel({
   onSelect?: (id: string) => void;
 }) {
   const nearby = nearbyAssets(asset, allAssets, 75);
+  const exposureApi = useApi("/api/exposure") as { data: AssetDamage[] | null };
+  const dmg = exposureApi.data?.find((e) => e.assetId === asset.id);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-card">
@@ -176,6 +189,41 @@ export function AssetDetailPanel({
               </li>
             ))}
           </ul>
+        </Section>
+      )}
+
+      {dmg && dmg.damageMode && dmg.damageMode !== "Negligible" && (
+        <Section title="Predicted equipment damage">
+          <Row label="Likely failure mode" value={dmg.damageMode} />
+          <Row
+            label="Damage probability"
+            value={`${Math.round((dmg.damageProbability ?? 0) * 100)}%`}
+          />
+          <Row
+            label="Expected downtime"
+            value={dmg.expectedDowntimeH ? `${dmg.expectedDowntimeH} h` : "—"}
+          />
+          <Row
+            label="Expected loss"
+            value={`$${Math.round(dmg.expectedLossUsd ?? 0).toLocaleString()}`}
+          />
+          {dmg.equipmentCategory && (
+            <Row label="Equipment class" value={dmg.equipmentCategory} />
+          )}
+          {dmg.damageFactors && dmg.damageFactors.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {dmg.damageFactors.map((f) => (
+                <li key={f.label} className="flex items-start justify-between gap-3 text-xs">
+                  <span className="font-medium">{f.label}</span>
+                  <span className="text-right text-[11px] text-muted-foreground">{f.detail}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+            Fragility estimate from the Aurora forecast wind/rain at this asset, its equipment
+            class and current condition. Deterministic and explainable.
+          </p>
         </Section>
       )}
 
