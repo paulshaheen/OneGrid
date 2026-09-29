@@ -162,7 +162,7 @@ All are environment variables on the job (validated up front by `config.py`):
 |---|---|---|
 | `ANALYSIS_TIME` | The moment to forecast **from**. Empty = latest cycle ("now"). Must be a synoptic hour (00/06/12/18 UTC). | `2021-08-29T00:00` (Hurricane Ida) or empty |
 | `INITIAL_CONDITION_SOURCE` | Data source for the present state. | `gfs` (real-time) |
-| `DETECTION_BBOX` | Region to detect storms: `minLon,minLat,maxLon,maxLat`. | `-100,15,-70,35` (Gulf) or `-140,10,-50,55` (US-wide) |
+| `DETECTION_BBOX` | Region to detect storms: `minLon,minLat,maxLon,maxLat`. | `-125,7,-55,50` (default: E Pacific + Atlantic around North America), `-100,15,-70,35` (Gulf only), or `-140,10,-50,55` (US-wide) |
 | `AURORA_NUM_STEPS` | Forecast length in 6 h steps (1–60). | `20` = 120 h |
 | `AURORA_MODEL_NAME` | Which Aurora checkpoint. | `aurora-0.25-finetuned` |
 | `STORM_NAMES` | Optional labels for detected storms (strongest first). | `Hurricane Ida` |

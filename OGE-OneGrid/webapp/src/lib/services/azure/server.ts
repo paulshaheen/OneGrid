@@ -1049,6 +1049,33 @@ function isAssetLike(value: unknown): value is Asset {
   return typeof a["id"] === "string" && isCoordinate(a["lat"], a["lon"]);
 }
 
+// Ops region we surface storms for: the East Pacific + Gulf + Caribbean + western
+// North Atlantic waters around North America. Aurora detects cyclones by genesis
+// across whatever DETECTION_BBOX it is handed, and the published weather-events blob
+// can still hold globe-wide systems from an earlier wide-box run, which a US-centric
+// map smears into a line across it. We keep only events that touch this box. Keep in
+// sync with the report-app filter (report-app/server/dataApi.js) and the Aurora
+// DETECTION_BBOX (planetary-computer-pro-poc): -125,7,-55,50.
+const STORM_DOMAIN = { minLon: -125, minLat: 7, maxLon: -55, maxLat: 50 };
+function inStormDomain(lon: number, lat: number): boolean {
+  return (
+    Number.isFinite(lon) &&
+    Number.isFinite(lat) &&
+    lon >= STORM_DOMAIN.minLon &&
+    lon <= STORM_DOMAIN.maxLon &&
+    lat >= STORM_DOMAIN.minLat &&
+    lat <= STORM_DOMAIN.maxLat
+  );
+}
+/** Keep an event if its current position or any track / forecast point is inside the
+ * domain, so systems approaching the region still appear as they enter it. */
+function eventInStormDomain(ev: WeatherEvent): boolean {
+  if (inStormDomain(ev.lon, ev.lat)) return true;
+  if (Array.isArray(ev.forecast) && ev.forecast.some((p) => inStormDomain(p.lon, p.lat))) return true;
+  if (Array.isArray(ev.history) && ev.history.some(([lon, lat]) => inStormDomain(lon, lat))) return true;
+  return false;
+}
+
 /** Load storm objects produced by the Aurora post-processing job, reading directly from the
  * model-outputs blob it publishes to. Used as the primary source when the report-app data
  * plane isn't enabled, and as a FALLBACK when it is enabled but returns nothing (e.g. Fabric
@@ -1075,7 +1102,7 @@ async function listAuroraWeatherEventsFromBlob(): Promise<WeatherEvent[]> {
           Array.isArray((payload as { events?: unknown }).events)
         ? (payload as { events: unknown[] }).events
         : [];
-    return events.filter(isWeatherEvent);
+    return events.filter(isWeatherEvent).filter(eventInStormDomain);
   } catch {
     return [];
   }
@@ -1093,7 +1120,7 @@ export const listAuroraWeatherEvents = createServerFn({ method: "GET" }).handler
     //   aurora    -> the model-outputs weather-events.json blob, written ONLY by the pipeline,
     //   fabric    -> the unified-model default handled below.
     if (mode === "synthetic") {
-      return buildSyntheticGulfHurricane();
+      return buildSyntheticGulfHurricane().filter(eventInStormDomain);
     }
     if (mode === "aurora") {
       return listAuroraWeatherEventsFromBlob();
@@ -1110,7 +1137,7 @@ export const listAuroraWeatherEvents = createServerFn({ method: "GET" }).handler
         if (res.ok) {
           const payload = (await res.json()) as unknown;
           const events = Array.isArray(payload) ? payload.filter(isWeatherEvent) : [];
-          if (events.length > 0) return events;
+          if (events.length > 0) return events.filter(eventInStormDomain);
         }
       } catch {
         // fall through to the blob source below

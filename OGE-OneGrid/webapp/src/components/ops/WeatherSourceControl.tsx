@@ -61,10 +61,11 @@ export function WeatherSourceControl({
 
   return (
     <div className="border-b p-3">
-      <div className="label-xs mb-2 flex items-center gap-1.5">
+      <div className="label-xs mb-1 flex items-center gap-1.5">
         <CloudSun className="size-3.5 text-primary" /> Weather source
       </div>
-      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Weather source">
+      <p className="mb-2 text-[10px] leading-tight text-muted-foreground">Click a source to switch the map.</p>
+      <div className="grid grid-cols-3 gap-1.5 rounded-lg border border-white/5 bg-black/20 p-1.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]" role="group" aria-label="Weather source">
         {OPTIONS.map(({ mode, label, Icon }) => {
           const active = current === mode;
           const busy = pendingMode === mode;
@@ -78,11 +79,11 @@ export function WeatherSourceControl({
                 if (mode !== current) change.mutate(mode);
               }}
               title={OPTIONS.find((o) => o.mode === mode)?.detail}
-              className={`flex flex-col items-center gap-1 rounded-sm border px-1.5 py-2 text-[10px] font-medium transition-colors ${
+              className={`relative flex min-h-11 min-w-0 cursor-pointer select-none flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-1.5 text-center text-[11px] font-medium leading-tight shadow-[inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-1px_0_rgba(0,0,0,0.35),0_2px_0_rgba(0,0,0,0.55),0_4px_6px_-2px_rgba(0,0,0,0.45)] transition-[background-color,border-color,box-shadow,transform] duration-150 motion-reduce:transition-none motion-safe:enabled:hover:-translate-y-px motion-safe:enabled:active:translate-y-px enabled:active:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${
                 active
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:bg-accent"
-              } ${change.isPending || !storageConfigured ? "cursor-not-allowed opacity-70" : ""}`}
+                  ? "border-primary/80 bg-primary/25 text-foreground ring-1 ring-primary/40 enabled:hover:border-primary enabled:hover:bg-primary/30"
+                  : "border-white/20 bg-white/[0.12] text-foreground enabled:hover:border-white/30 enabled:hover:bg-white/[0.18]"
+              }`}
               aria-pressed={active}
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Icon className="size-3.5" />}

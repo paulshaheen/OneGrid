@@ -206,7 +206,7 @@ def load_config() -> Config:
         static_repo=os.environ.get("AURORA_STATIC_REPO", "").strip() or DEFAULT_STATIC_REPO,
         static_name=os.environ.get("AURORA_STATIC_NAME", "").strip() or DEFAULT_STATIC_NAME,
         analysis_time=analysis_time,
-        detection_bbox=_parse_bbox(os.environ.get("DETECTION_BBOX", "-100,15,-70,35")),
+        detection_bbox=_parse_bbox(os.environ.get("DETECTION_BBOX", "-125,7,-55,50")),
         storm_names=tuple(
             n.strip() for n in os.environ.get("STORM_NAMES", "").split(",") if n.strip()
         ),

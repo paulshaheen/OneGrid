@@ -18,7 +18,7 @@ export AURORA_ENDPOINT="https://$EP.westeurope.inference.ml.azure.com/score"
 export INITIAL_CONDITION_SOURCE=gfs
 export ANALYSIS_TIME=2021-08-29T00:00
 export AURORA_NUM_STEPS=12
-export DETECTION_BBOX="-100,15,-70,35"
+export DETECTION_BBOX="-125,7,-55,50"
 export STORM_NAMES="Hurricane Ida"
 export OUTPUT_BLOB_NAME=weather-events.json
 
