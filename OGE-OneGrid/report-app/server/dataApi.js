@@ -756,6 +756,31 @@ const REGION_BASIN = {
   west_coast: 'Eastern Pacific / West Coast', northeast: 'Atlantic / Northeast',
 };
 
+// Ops region we surface storms for: the East Pacific + Gulf + Caribbean + western
+// North Atlantic waters around North America. Aurora detects cyclones by genesis
+// across whatever DETECTION_BBOX it is handed, so a globe-wide box drops storms
+// (open/central Pacific, eastern Atlantic near Africa, southern hemisphere) far off
+// the North-America-centric holo map, where they smear into a horizontal line
+// across it. We keep only events that touch this box. Keep in sync with the Aurora
+// DETECTION_BBOX (planetary-computer-pro-poc/aurora + deploy/azure/main.bicep):
+// -125,7,-55,50.
+const STORM_DOMAIN = { minLon: -125, minLat: 7, maxLon: -55, maxLat: 50 };
+function inStormDomain(lon, lat) {
+  return (
+    Number.isFinite(lon) && Number.isFinite(lat) &&
+    lon >= STORM_DOMAIN.minLon && lon <= STORM_DOMAIN.maxLon &&
+    lat >= STORM_DOMAIN.minLat && lat <= STORM_DOMAIN.maxLat
+  );
+}
+// Keep an event if its current position or any track / forecast point falls inside
+// the domain, so systems approaching the region still appear as they enter it.
+function eventInStormDomain(ev) {
+  if (inStormDomain(ev.lon, ev.lat)) return true;
+  if (Array.isArray(ev.forecast) && ev.forecast.some((p) => inStormDomain(p.lon, p.lat))) return true;
+  if (Array.isArray(ev.history) && ev.history.some((pt) => inStormDomain(pt[0], pt[1]))) return true;
+  return false;
+}
+
 function toForecastPoint(r) {
   return {
     hour: num(r.hour), lat: num(r.lat), lon: num(r.lon), windMph: num(r.wind_mph),
@@ -809,7 +834,7 @@ function buildEvents(eventRows, fcRows) {
 export function weatherEvents() {
   return cached('weatherEvents', 30_000, async () => {
     const [events, fc] = await qBatch(['EVALUATE dim_weather_event', 'EVALUATE WeatherForecast']);
-    return buildEvents(events, fc);
+    return buildEvents(events, fc).filter(eventInStormDomain);
   });
 }
 

@@ -1100,7 +1100,7 @@
                 },
                 {
                   "name": "DETECTION_BBOX",
-                  "value": "-100,15,-70,35"
+                  "value": "-125,7,-55,50"
                 },
                 {
                   "name": "AURORA_BLOB_ACCOUNT_URL",

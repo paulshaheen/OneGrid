@@ -1035,7 +1035,7 @@ resource auroraJob 'Microsoft.App/jobs@2024-03-01' = if (deployAuroraJob) {
             }
             {
               name: 'DETECTION_BBOX'
-              value: '-100,15,-70,35'
+              value: '-125,7,-55,50'
             }
             {
               name: 'AURORA_BLOB_ACCOUNT_URL'
