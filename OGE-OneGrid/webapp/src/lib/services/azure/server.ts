@@ -21,6 +21,7 @@ import type {
   ThresholdRule,
   WeatherEvent,
 } from "@/lib/domain/types";
+import { eventInStormDomain } from "@/lib/map/storm-domain";
 
 // Data-plane audiences for Managed Identity tokens.
 const GEOCATALOG_RESOURCE = "https://geocatalog.spatio.azure.com";
@@ -1047,33 +1048,6 @@ function isAssetLike(value: unknown): value is Asset {
   if (!value || typeof value !== "object") return false;
   const a = value as Record<string, unknown>;
   return typeof a["id"] === "string" && isCoordinate(a["lat"], a["lon"]);
-}
-
-// Ops region we surface storms for: the East Pacific + Gulf + Caribbean + western
-// North Atlantic waters around North America. Aurora detects cyclones by genesis
-// across whatever DETECTION_BBOX it is handed, and the published weather-events blob
-// can still hold globe-wide systems from an earlier wide-box run, which a US-centric
-// map smears into a line across it. We keep only events that touch this box. Keep in
-// sync with the report-app filter (report-app/server/dataApi.js) and the Aurora
-// DETECTION_BBOX (planetary-computer-pro-poc): -125,7,-55,50.
-const STORM_DOMAIN = { minLon: -125, minLat: 7, maxLon: -55, maxLat: 50 };
-function inStormDomain(lon: number, lat: number): boolean {
-  return (
-    Number.isFinite(lon) &&
-    Number.isFinite(lat) &&
-    lon >= STORM_DOMAIN.minLon &&
-    lon <= STORM_DOMAIN.maxLon &&
-    lat >= STORM_DOMAIN.minLat &&
-    lat <= STORM_DOMAIN.maxLat
-  );
-}
-/** Keep an event if its current position or any track / forecast point is inside the
- * domain, so systems approaching the region still appear as they enter it. */
-function eventInStormDomain(ev: WeatherEvent): boolean {
-  if (inStormDomain(ev.lon, ev.lat)) return true;
-  if (Array.isArray(ev.forecast) && ev.forecast.some((p) => inStormDomain(p.lon, p.lat))) return true;
-  if (Array.isArray(ev.history) && ev.history.some(([lon, lat]) => inStormDomain(lon, lat))) return true;
-  return false;
 }
 
 /** Load storm objects produced by the Aurora post-processing job, reading directly from the
