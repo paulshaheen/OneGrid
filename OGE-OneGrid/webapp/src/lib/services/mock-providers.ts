@@ -1,7 +1,8 @@
 // Mock provider implementations backed by the isolated sample dataset.
 // Replace individually with Azure-backed providers via src/lib/services/index.ts.
 
-import { sampleAlerts, sampleAssets, sampleEvent, samplePacificEvent } from "@/lib/data/sample-gom";
+import { sampleAlerts, sampleAssets, sampleEvent } from "@/lib/data/sample-gom";
+import { listAuroraWeatherEvents } from "@/lib/services/azure/server";
 import { derivePosture } from "@/lib/services/posture";
 import { DEFAULT_RULES } from "@/lib/services/thresholds";
 import type {
@@ -40,21 +41,39 @@ export class MockAssetService implements AssetService {
 
 export class MockWeatherService implements WeatherService {
   readonly providerLabel = "Blended global forecast ensemble";
+  // Honor the operator-selected weather source (Demo / Synthetic / Aurora) in Oil &
+  // Gas mode too, so the storm-model picker works exactly like Energy: the mode-aware
+  // published forecast drives the storms shown over the sample estate.
   async listEvents(): Promise<WeatherEvent[]> {
-    return [sampleEvent, samplePacificEvent];
+    return listAuroraWeatherEvents();
   }
   async getEvent(id: string): Promise<WeatherEvent | null> {
-    return [sampleEvent, samplePacificEvent].find((e) => e.id === id) ?? null;
+    const events = await listAuroraWeatherEvents();
+    return events.find((e) => e.id === id) ?? null;
   }
 }
 
+function highestRiskFor(asset: Asset, events: WeatherEvent[], horizonHours: number): AssetRisk | null {
+  if (events.length === 0) return null;
+  return events
+    .map((event) => scoreAsset(asset, event, horizonHours))
+    .reduce((highest, risk) => (risk.score > highest.score ? risk : highest));
+}
+
 export class MockRiskEngineService implements RiskEngineService {
+  // Score the sample estate against the mode-aware forecast so asset risk tracks the
+  // storm the picker selected (keeps the map's storms and risk colouring in sync).
   async scoreEstate(horizonHours = 120): Promise<AssetRisk[]> {
-    return sampleAssets.map((a) => scoreAsset(a, sampleEvent, horizonHours));
+    const events = await listAuroraWeatherEvents();
+    return sampleAssets.flatMap((a) => {
+      const risk = highestRiskFor(a, events, horizonHours);
+      return risk ? [risk] : [];
+    });
   }
   async scoreOne(assetId: string, horizonHours = 120): Promise<AssetRisk | null> {
+    const events = await listAuroraWeatherEvents();
     const asset = sampleAssets.find((a) => a.id === assetId);
-    return asset ? scoreAsset(asset, sampleEvent, horizonHours) : null;
+    return asset ? highestRiskFor(asset, events, horizonHours) : null;
   }
 }
 
