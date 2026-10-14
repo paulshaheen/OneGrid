@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PauseCircle,
+  Server,
   ServerCog,
   Settings,
   ShieldAlert,
@@ -241,6 +242,7 @@ const ADMIN: Group = {
   label: "Admin",
   icon: Settings,
   children: [
+    { to: "/infrastructure", label: "Infrastructure", icon: Server },
     { to: "/thresholds", label: "Thresholds", icon: SlidersHorizontal },
     { to: "/governance", label: "Governance & Security", icon: ShieldCheck },
     { to: "/deployment", label: "Deployment", icon: ServerCog },
@@ -259,6 +261,7 @@ const MOBILE_ROUTES = [
   { to: "/risk", label: "Storm Exposure" },
   { to: "/posture", label: "Response Posture" },
   { to: "/ontology", label: "Ontology" },
+  { to: "/infrastructure", label: "Infrastructure" },
   { to: "/thresholds", label: "Thresholds" },
   { to: "/governance", label: "Governance & Security" },
   { to: "/deployment", label: "Deployment" },
