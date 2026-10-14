@@ -3,6 +3,7 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
   Boxes,
+  Database,
   Network,
   Plug,
   CircleDollarSign,
@@ -21,16 +22,26 @@ import { InfraOperations } from "@/components/infra/InfraOperations";
 import { InfraAssets3D } from "@/components/infra/InfraAssets3D";
 import { InfraTopology } from "@/components/infra/InfraTopology";
 import { InfraSources } from "@/components/infra/InfraSources";
+import { InfraSql } from "@/components/infra/InfraSql";
 import { InfraCost } from "@/components/infra/InfraCost";
 import { InfraPerformance } from "@/components/infra/InfraPerformance";
 import { InfraLogs } from "@/components/infra/InfraLogs";
 import { InfraTickets } from "@/components/infra/InfraTickets";
 
 type TabId =
-  "operations" | "assets" | "topology" | "sources" | "cost" | "performance" | "logs" | "tickets";
+  | "operations"
+  | "assets"
+  | "sql"
+  | "topology"
+  | "sources"
+  | "cost"
+  | "performance"
+  | "logs"
+  | "tickets";
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "operations", label: "Operations", icon: Activity },
   { id: "assets", label: "Assets", icon: Boxes },
+  { id: "sql", label: "SQL Estate", icon: Database },
   { id: "topology", label: "Topology", icon: Network },
   { id: "sources", label: "Source systems", icon: Plug },
   { id: "cost", label: "Cost", icon: CircleDollarSign },
@@ -39,7 +50,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "tickets", label: "Service tickets", icon: Ticket },
 ];
 const TAB_IDS = new Set<TabId>(TABS.map((t) => t.id));
-const SCROLLING: Set<TabId> = new Set(["operations", "sources", "cost", "performance"]);
+const SCROLLING: Set<TabId> = new Set(["operations", "sql", "sources", "cost", "performance"]);
 
 export function InfrastructurePage() {
   const router = useRouter();
@@ -159,6 +170,7 @@ export function InfrastructurePage() {
                 <InfraOperations onOpenAsset={openAsset} onGoTab={(t) => setTab(t as TabId)} />
               )}
               {tab === "sources" && <InfraSources onOpenAsset={openAsset} />}
+              {tab === "sql" && <InfraSql onOpenAsset={openAsset} />}
               {tab === "cost" && <InfraCost onOpenAsset={openAsset} />}
               {tab === "performance" && <InfraPerformance onOpenAsset={openAsset} />}
             </div>

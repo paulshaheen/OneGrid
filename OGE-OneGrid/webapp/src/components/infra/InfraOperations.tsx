@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   TriangleAlert as AlertTriangle,
+  ArrowRight,
   Boxes,
   CircleDollarSign,
   Cloud,
@@ -16,9 +17,12 @@ import {
 import { cn } from "@/lib/utils";
 import {
   ASSETS,
+  ASSET_BY_ID,
   SITES,
   SOURCES,
   TICKETS,
+  OUTAGES,
+  OUTAGE_STATUS_META,
   CATEGORY_META,
   STATUS_COLOR,
   STATUS_LABEL,
@@ -26,10 +30,12 @@ import {
   fleetStats,
   type InfraStatus,
   type InfraCategory,
+  type Outage,
 } from "@/lib/infra/infra-data";
 import { useLiveTick, liveValue, liveAssetStatus } from "@/lib/infra/infra-live";
 import { KindIcon, RadialGauge, Sparkline, StatusDot, StatTile } from "./infra-ui";
 import { fmtCost, fmtNum, fmtRelTime } from "./infra-format";
+import { OutageRca } from "./OutageRca";
 
 const SITE_ICON: Record<string, typeof Cloud> = {
   cloud: Cloud,
@@ -92,6 +98,13 @@ export function InfraOperations({
       ),
     [],
   );
+
+  const [rcaOutage, setRcaOutage] = useState<Outage | null>(null);
+  const outages = useMemo(() => {
+    const rank = (o: Outage) => (o.status === "active" ? 0 : o.status === "mitigated" ? 1 : 2);
+    return [...OUTAGES].sort((a, b) => rank(a) - rank(b) || a.startedMinAgo - b.startedMinAgo);
+  }, []);
+  const activeOutages = OUTAGES.filter((o) => o.status === "active").length;
 
   return (
     <div className="space-y-4 p-4">
@@ -167,6 +180,89 @@ export function InfraOperations({
           />
         </div>
       </div>
+
+      {/* ── outages (click to investigate) ── */}
+      {outages.length > 0 && (
+        <div className="rounded-xl border bg-card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="size-4 text-primary" />
+              <span className="text-[13px] font-semibold text-foreground">Outages</span>
+              {activeOutages > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-400">
+                  <span className="size-1.5 animate-pulse rounded-full bg-red-400" />{" "}
+                  {activeOutages} active
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              click to investigate root cause
+            </span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {outages.map((o) => {
+              const sev = SEV_COLOR[o.severity];
+              const sm = OUTAGE_STATUS_META[o.status];
+              const root = ASSET_BY_ID.get(o.rootCauseAssetId);
+              return (
+                <button
+                  key={o.id}
+                  onClick={() => setRcaOutage(o)}
+                  className="flex flex-col gap-1.5 rounded-xl border bg-muted/20 p-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/40"
+                  style={{ borderLeft: `3px solid ${sev}` }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="rounded px-1 py-0.5 text-[9px] font-bold uppercase"
+                      style={{ background: `${sev}22`, color: sev }}
+                    >
+                      {o.severity}
+                    </span>
+                    <span
+                      className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-bold uppercase"
+                      style={{ background: `${sm.color}1f`, color: sm.color }}
+                    >
+                      {o.status === "active" && (
+                        <span
+                          className="size-1.5 animate-pulse rounded-full"
+                          style={{ background: sm.color }}
+                        />
+                      )}
+                      {sm.label}
+                    </span>
+                    <span className="ml-auto font-mono text-[9.5px] text-muted-foreground">
+                      {o.id}
+                    </span>
+                  </div>
+                  <div className="text-[12.5px] font-semibold leading-snug text-foreground">
+                    {o.title}
+                  </div>
+                  <div className="truncate text-[10.5px] text-muted-foreground">
+                    {o.affectedServices[0]}
+                    {o.affectedServices.length > 1 ? ` +${o.affectedServices.length - 1}` : ""} · ~
+                    {o.estUsers} users
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="inline-flex min-w-0 items-center gap-1 text-[10.5px] text-muted-foreground">
+                      {root && (
+                        <>
+                          <span style={{ color: CATEGORY_META[root.category].color }}>
+                            <KindIcon kind={root.kind} className="size-3" />
+                          </span>
+                          <span className="truncate">{root.name}</span>
+                        </>
+                      )}
+                    </span>
+                    <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-primary">
+                      Root cause <ArrowRight className="size-3" />
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── category + sources ── */}
       <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
@@ -389,6 +485,14 @@ export function InfraOperations({
           </div>
         </div>
       </div>
+
+      {rcaOutage && (
+        <OutageRca
+          outage={rcaOutage}
+          onOpenAsset={onOpenAsset}
+          onClose={() => setRcaOutage(null)}
+        />
+      )}
     </div>
   );
 }

@@ -14,7 +14,12 @@ import {
   TICKETS,
   COST_RECS,
   PERF_RECS,
+  SQL_LIFECYCLE,
+  SQL_STATE_META,
+  ESU_META,
+  sqlState,
   type InfraAsset,
+  type SqlMeta,
 } from "@/lib/infra/infra-data";
 import { liveAssetStatus } from "@/lib/infra/infra-live";
 import { KindIcon, LiveMetricRow, StatusDot } from "./infra-ui";
@@ -113,6 +118,8 @@ export function InfraAssetDetail({
             <Field label="Run-rate" value={`${fmtCost(asset.costMonthly)}/mo`} />
           )}
         </dl>
+
+        {asset.sql && <SqlLifecycle meta={asset.sql} />}
 
         {/* live telemetry */}
         <section>
@@ -288,6 +295,43 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
       {children}
     </div>
+  );
+}
+
+function SqlLifecycle({ meta }: { meta: SqlMeta }) {
+  const state = sqlState(meta.version);
+  const sm = SQL_STATE_META[state];
+  const esu = ESU_META[meta.esuStatus];
+  const info = SQL_LIFECYCLE[meta.version];
+  const eol = info.extendedEnd
+    ? new Date(info.extendedEnd).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+    : "evergreen";
+  return (
+    <section
+      className="rounded-lg border p-2.5"
+      style={{ background: `${sm.color}0d`, borderColor: `${sm.color}33` }}
+    >
+      <div className="mb-1.5 flex items-center justify-between">
+        <SectionTitle>SQL lifecycle</SectionTitle>
+        <span
+          className="rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase"
+          style={{ background: `${sm.color}22`, color: sm.color }}
+        >
+          {sm.label}
+        </span>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+        <Field
+          label="Engine"
+          value={meta.engine === "SQL Server" ? `SQL Server ${meta.version}` : meta.engine}
+        />
+        <Field label="Edition" value={`${meta.edition} · ${meta.cores} cores`} />
+        <Field label="End of life" value={eol} />
+        <Field label="ESU" value={esu.label} />
+        {meta.build && <Field label="Build" value={meta.build} mono />}
+        <Field label="Databases" value={String(meta.databases)} />
+      </dl>
+    </section>
   );
 }
 

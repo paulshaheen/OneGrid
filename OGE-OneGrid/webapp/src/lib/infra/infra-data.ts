@@ -93,7 +93,103 @@ export interface InfraAsset {
   costMonthly: number;
   tags: Record<string, string>;
   note?: string;
+  /** SQL lifecycle metadata — present only on SQL instances (see SQL Estate tab). */
+  sql?: SqlMeta;
 }
+
+// ── SQL estate / lifecycle ───────────────────────────────────────────────────
+export type SqlEngine = "SQL Server" | "Azure SQL DB" | "Azure SQL MI";
+export type SqlVersion = "2012" | "2014" | "2016" | "2017" | "2019" | "2022" | "Azure";
+export type SqlHost = "VM" | "Arc" | "Azure Local" | "Azure SQL" | "Azure SQL MI";
+/** ESU = Extended Security Updates. n/a = still supported; enrolled = covered via
+ *  Azure Arc; eligible = past support & could enroll but hasn't (exposure); expired
+ *  = ESU window closed, fully unsupported. */
+export type EsuStatus = "n/a" | "enrolled" | "eligible" | "expired";
+
+export interface SqlMeta {
+  engine: SqlEngine;
+  version: SqlVersion;
+  build?: string;
+  edition: string;
+  cores: number;
+  hostType: SqlHost;
+  databases: number;
+  arcEnabled: boolean;
+  esuStatus: EsuStatus;
+  /** Amortised SQL Server license run-rate ($/mo); 0 for Azure managed services. */
+  licenseMonthly: number;
+  /** Extended Security Updates run-rate ($/mo) when enrolled via Arc. */
+  esuMonthly: number;
+}
+
+export type SqlState =
+  "current" | "mainstream" | "extended" | "eol-approaching" | "eol-esu" | "eol";
+export interface SqlVersionInfo {
+  label: string;
+  mainstreamEnd?: string;
+  extendedEnd?: string;
+  esuEnd?: string;
+}
+// Microsoft SQL Server lifecycle dates (Fixed Lifecycle Policy). Azure SQL DB / MI
+// are evergreen (no end-of-support).
+export const SQL_LIFECYCLE: Record<SqlVersion, SqlVersionInfo> = {
+  "2012": {
+    label: "SQL Server 2012",
+    mainstreamEnd: "2017-07-11",
+    extendedEnd: "2022-07-12",
+    esuEnd: "2025-07-08",
+  },
+  "2014": {
+    label: "SQL Server 2014",
+    mainstreamEnd: "2019-07-09",
+    extendedEnd: "2024-07-09",
+    esuEnd: "2027-07-13",
+  },
+  "2016": {
+    label: "SQL Server 2016",
+    mainstreamEnd: "2021-07-13",
+    extendedEnd: "2026-07-14",
+    esuEnd: "2029-07-10",
+  },
+  "2017": { label: "SQL Server 2017", mainstreamEnd: "2022-10-11", extendedEnd: "2027-10-12" },
+  "2019": { label: "SQL Server 2019", mainstreamEnd: "2025-02-28", extendedEnd: "2030-01-08" },
+  "2022": { label: "SQL Server 2022", mainstreamEnd: "2028-01-11", extendedEnd: "2033-01-11" },
+  Azure: { label: "Azure SQL (evergreen)" },
+};
+// Anchor "today" to the demo's current forecast cycle so lifecycle math is stable.
+const SQL_NOW_MS = Date.UTC(2026, 9, 14);
+const SQL_DAY = 86400000;
+export function sqlState(version: SqlVersion): SqlState {
+  const info = SQL_LIFECYCLE[version];
+  if (!info.extendedEnd) return "current";
+  const ext = Date.parse(info.extendedEnd);
+  if (ext < SQL_NOW_MS) {
+    const esu = info.esuEnd ? Date.parse(info.esuEnd) : 0;
+    return esu > SQL_NOW_MS ? "eol-esu" : "eol";
+  }
+  if (ext - SQL_NOW_MS < 365 * SQL_DAY) return "eol-approaching";
+  const main = info.mainstreamEnd ? Date.parse(info.mainstreamEnd) : 0;
+  return main && main < SQL_NOW_MS ? "extended" : "mainstream";
+}
+export function sqlDaysToEol(version: SqlVersion): number | null {
+  const info = SQL_LIFECYCLE[version];
+  if (!info.extendedEnd) return null;
+  return Math.round((Date.parse(info.extendedEnd) - SQL_NOW_MS) / SQL_DAY);
+}
+export const SQL_STATE_META: Record<SqlState, { label: string; color: string }> = {
+  current: { label: "Current", color: "#3fb950" },
+  mainstream: { label: "Mainstream", color: "#3fb950" },
+  extended: { label: "Extended support", color: "#5aa9ff" },
+  "eol-approaching": { label: "EOL approaching", color: "#f0b429" },
+  "eol-esu": { label: "EOL · ESU", color: "#f0803c" },
+  eol: { label: "End of life", color: "#ff5a5f" },
+};
+export const ESU_META: Record<EsuStatus, { label: string; color: string }> = {
+  "n/a": { label: "—", color: "#7d8597" },
+  enrolled: { label: "ESU enrolled", color: "#3fb950" },
+  eligible: { label: "ESU eligible", color: "#f0b429" },
+  expired: { label: "ESU expired", color: "#ff5a5f" },
+};
 
 export interface InfraEdge {
   id: string;
@@ -530,6 +626,18 @@ export const ASSETS: InfraAsset[] = [
       num("conns", "Connections", 310, "", { min: 0, max: 800, warn: 600, crit: 740 }),
       num("latency", "Read latency", 6, "ms", { warn: 20, crit: 40, min: 1, max: 80 }),
     ],
+    sql: {
+      engine: "Azure SQL DB",
+      version: "Azure",
+      edition: "Business Critical",
+      cores: 8,
+      hostType: "Azure SQL",
+      databases: 12,
+      arcEnabled: false,
+      esuStatus: "n/a",
+      licenseMonthly: 0,
+      esuMonthly: 0,
+    },
   },
   {
     id: "pg-ontology",
@@ -770,6 +878,18 @@ export const ASSETS: InfraAsset[] = [
       num("lag", "Replication lag", 2.1, "s", { warn: 10, crit: 30, min: 0, max: 60 }),
       num("latency", "Read latency", 7, "ms", { warn: 20, crit: 40, min: 1, max: 80 }),
     ],
+    sql: {
+      engine: "Azure SQL DB",
+      version: "Azure",
+      edition: "Business Critical",
+      cores: 8,
+      hostType: "Azure SQL",
+      databases: 12,
+      arcEnabled: false,
+      esuStatus: "n/a",
+      licenseMonthly: 0,
+      esuMonthly: 0,
+    },
   },
   {
     id: "storage-dr",
@@ -921,6 +1041,193 @@ export const ASSETS: InfraAsset[] = [
       pct("disk", "Disk", 96, 85, 94),
       num("latency", "IO latency", 42, "ms", { warn: 20, crit: 40, min: 1, max: 120 }),
     ],
+    sql: {
+      engine: "SQL Server",
+      version: "2016",
+      build: "13.0.6435.1",
+      edition: "Enterprise",
+      cores: 8,
+      hostType: "VM",
+      databases: 9,
+      arcEnabled: true,
+      esuStatus: "eligible",
+      licenseMonthly: 1750,
+      esuMonthly: 0,
+    },
+  },
+  {
+    id: "sql-hist-2012",
+    name: "sql-archive-2012",
+    kind: "sql-db",
+    category: "data",
+    siteId: "dc-hou",
+    status: "critical",
+    env: "shared",
+    os: "Windows Server 2012 R2",
+    sku: "SQL Server 2012 Std · 4 vCPU",
+    ip: "10.10.2.60",
+    sources: ["arc", "monitor", "update", "defender"],
+    costMonthly: 0,
+    tags: { role: "archive / reporting", arc: "enabled", eol: "2022" },
+    note: "SQL Server 2012 past end of ESU — fully unsupported. Decommission or migrate the archive DBs.",
+    metrics: [
+      pct("cpu", "CPU", 28),
+      pct("storage", "Storage", 82, 85, 94),
+      num("conns", "Connections", 40, "", { min: 0, max: 200, warn: 160, crit: 190 }),
+      num("latency", "Read latency", 14, "ms", { warn: 20, crit: 40, min: 1, max: 80 }),
+    ],
+    sql: {
+      engine: "SQL Server",
+      version: "2012",
+      build: "11.0.7512.0",
+      edition: "Standard",
+      cores: 4,
+      hostType: "VM",
+      databases: 5,
+      arcEnabled: true,
+      esuStatus: "expired",
+      licenseMonthly: 480,
+      esuMonthly: 0,
+    },
+  },
+  {
+    id: "sql-gis-2014",
+    name: "sql-gis-2014",
+    kind: "sql-db",
+    category: "data",
+    siteId: "dc-hou",
+    status: "warning",
+    env: "shared",
+    os: "Windows Server 2019",
+    sku: "SQL Server 2014 Std · 8 vCPU",
+    ip: "10.10.2.62",
+    sources: ["arc", "monitor", "update", "defender"],
+    costMonthly: 0,
+    tags: { role: "GIS spatial DB", arc: "enabled", esu: "year-2" },
+    note: "SQL Server 2014 past end of support but covered by Extended Security Updates (Year 2) via Azure Arc.",
+    metrics: [
+      pct("cpu", "CPU", 44),
+      pct("storage", "Storage", 61),
+      num("conns", "Connections", 120, "", { min: 0, max: 400, warn: 320, crit: 380 }),
+      num("latency", "Read latency", 9, "ms", { warn: 20, crit: 40, min: 1, max: 80 }),
+    ],
+    sql: {
+      engine: "SQL Server",
+      version: "2014",
+      build: "12.0.6449.1",
+      edition: "Standard",
+      cores: 8,
+      hostType: "Arc",
+      databases: 7,
+      arcEnabled: true,
+      esuStatus: "enrolled",
+      licenseMonthly: 900,
+      esuMonthly: 560,
+    },
+  },
+  {
+    id: "sql-billing-2019",
+    name: "sql-billing-2019",
+    kind: "sql-db",
+    category: "data",
+    siteId: "dc-hou",
+    status: "healthy",
+    env: "shared",
+    os: "Windows Server 2022",
+    sku: "SQL Server 2019 Ent · 16 vCPU",
+    ip: "10.10.2.64",
+    sources: ["arc", "monitor", "update", "defender"],
+    costMonthly: 0,
+    tags: { role: "billing / CIS", arc: "enabled" },
+    note: "SQL Server 2019 Enterprise — in extended support with runway to 2030.",
+    metrics: [
+      pct("cpu", "CPU", 52),
+      pct("storage", "Storage", 58),
+      num("conns", "Connections", 280, "", { min: 0, max: 800, warn: 640, crit: 760 }),
+      num("latency", "Read latency", 5, "ms", { warn: 20, crit: 40, min: 1, max: 80 }),
+    ],
+    sql: {
+      engine: "SQL Server",
+      version: "2019",
+      build: "15.0.4345.5",
+      edition: "Enterprise",
+      cores: 16,
+      hostType: "Arc",
+      databases: 14,
+      arcEnabled: true,
+      esuStatus: "n/a",
+      licenseMonthly: 3500,
+      esuMonthly: 0,
+    },
+  },
+  {
+    id: "sqlmi-ops",
+    name: "sqlmi-onegrid",
+    kind: "sql-db",
+    category: "data",
+    siteId: "az-east",
+    status: "healthy",
+    env: "prod",
+    sku: "Azure SQL MI · General Purpose · 8 vCore",
+    ip: "10.20.3.30",
+    region: "eastus2",
+    sources: ["monitor", "defender", "resourcegraph"],
+    costMonthly: 1680,
+    tags: { role: "modernized workloads", tier: "GP" },
+    note: "Azure SQL Managed Instance — evergreen target for migrating the on-prem SQL estate.",
+    metrics: [
+      pct("cpu", "CPU", 38),
+      pct("storage", "Storage", 44),
+      num("conns", "Connections", 190, "", { min: 0, max: 800, warn: 640, crit: 760 }),
+      num("latency", "Read latency", 4, "ms", { warn: 20, crit: 40, min: 1, max: 80 }),
+    ],
+    sql: {
+      engine: "Azure SQL MI",
+      version: "Azure",
+      edition: "General Purpose",
+      cores: 8,
+      hostType: "Azure SQL MI",
+      databases: 20,
+      arcEnabled: false,
+      esuStatus: "n/a",
+      licenseMonthly: 0,
+      esuMonthly: 0,
+    },
+  },
+  {
+    id: "sql-scada-2017",
+    name: "sql-scada-2017",
+    kind: "sql-db",
+    category: "data",
+    siteId: "sub-west",
+    status: "warning",
+    env: "edge",
+    os: "Windows Server 2019 IoT",
+    sku: "SQL Server 2017 Std · 4 vCPU",
+    ip: "172.16.11.40",
+    sources: ["arc", "monitor", "update"],
+    costMonthly: 0,
+    tags: { role: "SCADA config DB", arc: "enabled", cluster: "al-west" },
+    note: "SQL Server 2017 on Azure Local — extended support ends Oct 2027; plan the upgrade.",
+    metrics: [
+      pct("cpu", "CPU", 33),
+      pct("storage", "Storage", 49),
+      num("conns", "Connections", 60, "", { min: 0, max: 200, warn: 160, crit: 190 }),
+      num("latency", "Read latency", 8, "ms", { warn: 20, crit: 40, min: 1, max: 80 }),
+    ],
+    sql: {
+      engine: "SQL Server",
+      version: "2017",
+      build: "14.0.3485.1",
+      edition: "Standard",
+      cores: 4,
+      hostType: "Azure Local",
+      databases: 3,
+      arcEnabled: true,
+      esuStatus: "n/a",
+      licenseMonthly: 700,
+      esuMonthly: 0,
+    },
   },
   {
     id: "core-router",
@@ -1419,6 +1726,14 @@ export const ASSETS: InfraAsset[] = [
 ];
 export const ASSET_BY_ID = new Map(ASSETS.map((a) => [a.id, a]));
 
+// ── SQL estate (derived) ──────────────────────────────────────────────────────
+export type SqlAsset = InfraAsset & { sql: SqlMeta };
+export const SQL_INSTANCES: SqlAsset[] = ASSETS.filter((a): a is SqlAsset => !!a.sql);
+/** Total SQL run-rate for an instance = service/compute + amortised license + ESU. */
+export function sqlMonthlyCost(a: SqlAsset): number {
+  return a.costMonthly + a.sql.licenseMonthly + a.sql.esuMonthly;
+}
+
 // ── relationships (the ontology edges) ────────────────────────────────────────
 function E(from: string, to: string, rel: RelKind, note?: string): InfraEdge {
   const id = `${from}~${rel}~${to}`;
@@ -1454,6 +1769,11 @@ export const EDGES: InfraEdge[] = [
   E("hv-host-1", "vm-ad", "hosts"),
   E("hv-host-1", "vm-historian", "hosts"),
   E("hv-host-2", "vm-sql-legacy", "hosts"),
+  E("hv-host-1", "sql-billing-2019", "hosts"),
+  E("hv-host-1", "sql-gis-2014", "hosts"),
+  E("hv-host-2", "sql-hist-2012", "hosts"),
+  E("al-node-a1", "sql-scada-2017", "hosts"),
+  E("ca-onegrid", "sqlmi-ops", "depends-on"),
   E("hv-host-2", "vm-historian", "backs-up"),
   E("core-switch", "hv-host-1", "connects-to"),
   E("core-switch", "hv-host-2", "connects-to"),
@@ -1632,6 +1952,187 @@ export const TICKETS: Ticket[] = [
       "agw-onegrid-dr intentionally stopped to save cost; recovery runbook starts it on failover. Closed as by-design.",
   },
 ];
+
+// ── outages + root-cause analysis ─────────────────────────────────────────────
+export type OutageStatus = "active" | "mitigated" | "resolved";
+export interface OutageEvent {
+  tMinAgo: number;
+  kind: "signal" | "event" | "action";
+  assetId?: string;
+  message: string;
+}
+export interface OutageEvidence {
+  assetId: string;
+  metricKey?: string;
+  note: string;
+}
+export interface Outage {
+  id: string;
+  title: string;
+  severity: TicketSeverity;
+  status: OutageStatus;
+  startedMinAgo: number;
+  /** null while still ongoing (active/mitigated). */
+  durationMin: number | null;
+  rootCauseAssetId: string;
+  rootCauseSummary: string;
+  /** Ordered causal path of asset ids: root cause -> … -> impact. */
+  chain: string[];
+  impactedAssetIds: string[];
+  affectedServices: string[];
+  estUsers: number;
+  slaMin: number;
+  timeline: OutageEvent[];
+  evidence: OutageEvidence[];
+  remediation: string[];
+  relatedTicketId?: string;
+}
+
+export const OUTAGES: Outage[] = [
+  {
+    id: "OUT-4821",
+    title: "Harbor Substation telemetry blackout",
+    severity: "sev1",
+    status: "active",
+    startedMinAgo: 38,
+    durationMin: null,
+    rootCauseAssetId: "scada-gw-b",
+    rootCauseSummary:
+      "The OPC UA uplink from scada-gw-harbor to Eventhouse dropped (suspected fiber SFP). Tags are buffering in the edge store-and-forward, driving ingestion lag and a live telemetry gap across the Harbor feeders.",
+    chain: ["scada-gw-b", "eventhouse-eh", "ca-onegrid"],
+    impactedAssetIds: ["scada-gw-b", "iot-edge-b", "eventhouse-eh", "plc-b1", "sensor-b-flow"],
+    affectedServices: ["OT telemetry — Harbor feeders", "Real-time exposure model"],
+    estUsers: 6,
+    slaMin: 60,
+    timeline: [
+      {
+        tMinAgo: 38,
+        kind: "event",
+        assetId: "scada-gw-b",
+        message: "OPC UA session to OneGridEH failed: timeout",
+      },
+      { tMinAgo: 37, kind: "signal", assetId: "scada-gw-b", message: "Uplink health 99% → 0%" },
+      {
+        tMinAgo: 34,
+        kind: "signal",
+        assetId: "scada-gw-b",
+        message: "Queue depth climbing past 2,000 (SLO 500)",
+      },
+      { tMinAgo: 30, kind: "signal", assetId: "iot-edge-b", message: "Offline buffer 40% → 68%" },
+      {
+        tMinAgo: 28,
+        kind: "signal",
+        assetId: "eventhouse-eh",
+        message: "Ingestion lag crossed SLO (45s → 55s)",
+      },
+      { tMinAgo: 25, kind: "event", message: "Alert fired: Harbor telemetry blackout (Sev1)" },
+      { tMinAgo: 10, kind: "action", message: "OT Network paged — inspecting fiber SFP at Harbor" },
+    ],
+    evidence: [
+      { assetId: "scada-gw-b", metricKey: "uplink", note: "Uplink health flatlined at 0%" },
+      { assetId: "scada-gw-b", metricKey: "queue", note: "Buffer queue depth ~3,400 tags" },
+      { assetId: "iot-edge-b", metricKey: "buffer", note: "Edge offline buffer 68% and rising" },
+      { assetId: "eventhouse-eh", metricKey: "lag", note: "Ingestion lag 55s (SLO 45s)" },
+    ],
+    remediation: [
+      "Fail the OT uplink over to the LTE backup APN",
+      "Replace the suspect fiber SFP at Harbor Substation",
+      "Once restored, drain buffered tags and verify no gaps in OneGridEH",
+    ],
+    relatedTicketId: "INC0048213",
+  },
+  {
+    id: "OUT-4820",
+    title: "GIS query failures — legacy SQL volume full",
+    severity: "sev2",
+    status: "mitigated",
+    startedMinAgo: 126,
+    durationMin: null,
+    rootCauseAssetId: "vm-sql-legacy",
+    rootCauseSummary:
+      "The data volume on vm-sql-legacy reached 96% and autogrow failed (no space on device), so GIS spatial queries began timing out. The instance (SQL Server 2016) is also past end of support — ESU-eligible but not enrolled.",
+    chain: ["vm-sql-legacy", "ca-onegrid"],
+    impactedAssetIds: ["vm-sql-legacy"],
+    affectedServices: ["GIS / outage-map queries", "Dispatch"],
+    estUsers: 35,
+    slaMin: 240,
+    timeline: [
+      { tMinAgo: 126, kind: "signal", assetId: "vm-sql-legacy", message: "Data volume 90% → 96%" },
+      {
+        tMinAgo: 120,
+        kind: "event",
+        assetId: "vm-sql-legacy",
+        message: "Autogrow failed: no space on device (E:)",
+      },
+      { tMinAgo: 118, kind: "signal", assetId: "vm-sql-legacy", message: "IO latency 12ms → 42ms" },
+      { tMinAgo: 116, kind: "event", message: "GIS query timeouts reported by Dispatch" },
+      {
+        tMinAgo: 100,
+        kind: "action",
+        message: "Freed ~40 GB of stale backups — queries recovered (mitigated)",
+      },
+    ],
+    evidence: [
+      { assetId: "vm-sql-legacy", metricKey: "disk", note: "Data volume at 96%" },
+      { assetId: "vm-sql-legacy", metricKey: "latency", note: "IO latency 42ms (SLO 20ms)" },
+    ],
+    remediation: [
+      "Expand the E: volume / attach a managed data disk",
+      "Migrate to Azure SQL MI to remove the end-of-support exposure",
+      "If staying on 2016, enroll Extended Security Updates via Azure Arc",
+    ],
+    relatedTicketId: "INC0048207",
+  },
+  {
+    id: "OUT-4815",
+    title: "Slow web app — AKS node memory pressure",
+    severity: "sev3",
+    status: "resolved",
+    startedMinAgo: 300,
+    durationMin: 95,
+    rootCauseAssetId: "aks-prod-2",
+    rootCauseSummary:
+      "Memory pressure on aks-onegrid-prod-2 evicted the SSR render pods, so the web app served slow and intermittently empty responses until cluster-autoscaler added a node.",
+    chain: ["aks-prod-2", "ca-onegrid"],
+    impactedAssetIds: ["aks-prod-2", "ca-onegrid"],
+    affectedServices: ["OneGrid web app (SSR render)"],
+    estUsers: 210,
+    slaMin: 480,
+    timeline: [
+      { tMinAgo: 300, kind: "signal", assetId: "aks-prod-2", message: "Working set 80% → 88%" },
+      {
+        tMinAgo: 296,
+        kind: "event",
+        assetId: "aks-prod-2",
+        message: "Pod onegrid-web-7c9 evicted (MemoryPressure)",
+      },
+      { tMinAgo: 292, kind: "signal", assetId: "ca-onegrid", message: "p95 latency 180ms → 820ms" },
+      { tMinAgo: 290, kind: "event", message: "Alert: web app p95 breach (Sev3)" },
+      {
+        tMinAgo: 220,
+        kind: "action",
+        message: "Cluster-autoscaler added a D8s_v5 node to the user pool",
+      },
+      { tMinAgo: 205, kind: "action", message: "Latency recovered — incident resolved" },
+    ],
+    evidence: [
+      { assetId: "aks-prod-2", metricKey: "mem", note: "Working set 88% at peak" },
+      { assetId: "ca-onegrid", metricKey: "p95", note: "p95 820ms (SLO 400ms)" },
+    ],
+    remediation: [
+      "Raise the user-pool minimum nodes / right-size to memory-optimized E-series",
+      "Set memory requests & limits on the SSR render pods",
+      "Add an HPA keyed on working-set",
+    ],
+    relatedTicketId: "INC0048188",
+  },
+];
+
+export const OUTAGE_STATUS_META: Record<OutageStatus, { label: string; color: string }> = {
+  active: { label: "Active", color: "#ff5a5f" },
+  mitigated: { label: "Mitigated", color: "#f0b429" },
+  resolved: { label: "Resolved", color: "#3fb950" },
+};
 
 // ── cost recommendations (Advisor-style) ──────────────────────────────────────
 export const COST_RECS: CostRec[] = [
