@@ -19,6 +19,7 @@ import { Route as ControlRoomRouteImport } from './routes/control-room'
 import { Route as CopilotRouteImport } from './routes/copilot'
 import { Route as DeploymentRouteImport } from './routes/deployment'
 import { Route as DistributionNetworkRouteImport } from './routes/distribution-network'
+import { Route as EsuPlannerRouteImport } from './routes/esu-planner'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as GovernanceRouteImport } from './routes/governance'
 import { Route as InfrastructureRouteImport } from './routes/infrastructure'
@@ -40,6 +41,7 @@ import { Route as AuthenticatedAppControlRoomRouteImport } from './routes/_authe
 import { Route as AuthenticatedAppCopilotRouteImport } from './routes/_authenticated/app.copilot'
 import { Route as AuthenticatedAppDeploymentRouteImport } from './routes/_authenticated/app.deployment'
 import { Route as AuthenticatedAppDistributionNetworkRouteImport } from './routes/_authenticated/app.distribution-network'
+import { Route as AuthenticatedAppEsuPlannerRouteImport } from './routes/_authenticated/app.esu-planner'
 import { Route as AuthenticatedAppEventsRouteImport } from './routes/_authenticated/app.events'
 import { Route as AuthenticatedAppGovernanceRouteImport } from './routes/_authenticated/app.governance'
 import { Route as AuthenticatedAppInfrastructureRouteImport } from './routes/_authenticated/app.infrastructure'
@@ -100,6 +102,11 @@ const DeploymentRoute = DeploymentRouteImport.update({
 const DistributionNetworkRoute = DistributionNetworkRouteImport.update({
   id: '/distribution-network',
   path: '/distribution-network',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EsuPlannerRoute = EsuPlannerRouteImport.update({
+  id: '/esu-planner',
+  path: '/esu-planner',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EventsRoute = EventsRouteImport.update({
@@ -211,6 +218,12 @@ const AuthenticatedAppDistributionNetworkRoute =
     path: '/app/distribution-network',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAppEsuPlannerRoute =
+  AuthenticatedAppEsuPlannerRouteImport.update({
+    id: '/app/esu-planner',
+    path: '/app/esu-planner',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppEventsRoute = AuthenticatedAppEventsRouteImport.update({
   id: '/app/events',
   path: '/app/events',
@@ -290,6 +303,7 @@ export interface FileRoutesByFullPath {
   '/copilot': typeof CopilotRoute
   '/deployment': typeof DeploymentRoute
   '/distribution-network': typeof DistributionNetworkRoute
+  '/esu-planner': typeof EsuPlannerRoute
   '/events': typeof EventsRoute
   '/governance': typeof GovernanceRoute
   '/infrastructure': typeof InfrastructureRoute
@@ -310,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
+  '/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
   '/app/events': typeof AuthenticatedAppEventsRoute
   '/app/governance': typeof AuthenticatedAppGovernanceRoute
   '/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
@@ -334,6 +349,7 @@ export interface FileRoutesByTo {
   '/copilot': typeof CopilotRoute
   '/deployment': typeof DeploymentRoute
   '/distribution-network': typeof DistributionNetworkRoute
+  '/esu-planner': typeof EsuPlannerRoute
   '/events': typeof EventsRoute
   '/governance': typeof GovernanceRoute
   '/infrastructure': typeof InfrastructureRoute
@@ -354,6 +370,7 @@ export interface FileRoutesByTo {
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
+  '/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
   '/app/events': typeof AuthenticatedAppEventsRoute
   '/app/governance': typeof AuthenticatedAppGovernanceRoute
   '/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
@@ -380,6 +397,7 @@ export interface FileRoutesById {
   '/copilot': typeof CopilotRoute
   '/deployment': typeof DeploymentRoute
   '/distribution-network': typeof DistributionNetworkRoute
+  '/esu-planner': typeof EsuPlannerRoute
   '/events': typeof EventsRoute
   '/governance': typeof GovernanceRoute
   '/infrastructure': typeof InfrastructureRoute
@@ -400,6 +418,7 @@ export interface FileRoutesById {
   '/_authenticated/app/copilot': typeof AuthenticatedAppCopilotRoute
   '/_authenticated/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/_authenticated/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
+  '/_authenticated/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
   '/_authenticated/app/events': typeof AuthenticatedAppEventsRoute
   '/_authenticated/app/governance': typeof AuthenticatedAppGovernanceRoute
   '/_authenticated/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
@@ -426,6 +445,7 @@ export interface FileRouteTypes {
     | '/copilot'
     | '/deployment'
     | '/distribution-network'
+    | '/esu-planner'
     | '/events'
     | '/governance'
     | '/infrastructure'
@@ -446,6 +466,7 @@ export interface FileRouteTypes {
     | '/app/copilot'
     | '/app/deployment'
     | '/app/distribution-network'
+    | '/app/esu-planner'
     | '/app/events'
     | '/app/governance'
     | '/app/infrastructure'
@@ -470,6 +491,7 @@ export interface FileRouteTypes {
     | '/copilot'
     | '/deployment'
     | '/distribution-network'
+    | '/esu-planner'
     | '/events'
     | '/governance'
     | '/infrastructure'
@@ -490,6 +512,7 @@ export interface FileRouteTypes {
     | '/app/copilot'
     | '/app/deployment'
     | '/app/distribution-network'
+    | '/app/esu-planner'
     | '/app/events'
     | '/app/governance'
     | '/app/infrastructure'
@@ -515,6 +538,7 @@ export interface FileRouteTypes {
     | '/copilot'
     | '/deployment'
     | '/distribution-network'
+    | '/esu-planner'
     | '/events'
     | '/governance'
     | '/infrastructure'
@@ -535,6 +559,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/copilot'
     | '/_authenticated/app/deployment'
     | '/_authenticated/app/distribution-network'
+    | '/_authenticated/app/esu-planner'
     | '/_authenticated/app/events'
     | '/_authenticated/app/governance'
     | '/_authenticated/app/infrastructure'
@@ -561,6 +586,7 @@ export interface RootRouteChildren {
   CopilotRoute: typeof CopilotRoute
   DeploymentRoute: typeof DeploymentRoute
   DistributionNetworkRoute: typeof DistributionNetworkRoute
+  EsuPlannerRoute: typeof EsuPlannerRoute
   EventsRoute: typeof EventsRoute
   GovernanceRoute: typeof GovernanceRoute
   InfrastructureRoute: typeof InfrastructureRoute
@@ -645,6 +671,13 @@ declare module '@tanstack/react-router' {
       path: '/distribution-network'
       fullPath: '/distribution-network'
       preLoaderRoute: typeof DistributionNetworkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/esu-planner': {
+      id: '/esu-planner'
+      path: '/esu-planner'
+      fullPath: '/esu-planner'
+      preLoaderRoute: typeof EsuPlannerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/events': {
@@ -794,6 +827,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppDistributionNetworkRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/esu-planner': {
+      id: '/_authenticated/app/esu-planner'
+      path: '/app/esu-planner'
+      fullPath: '/app/esu-planner'
+      preLoaderRoute: typeof AuthenticatedAppEsuPlannerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/events': {
       id: '/_authenticated/app/events'
       path: '/app/events'
@@ -890,6 +930,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppCopilotRoute: typeof AuthenticatedAppCopilotRoute
   AuthenticatedAppDeploymentRoute: typeof AuthenticatedAppDeploymentRoute
   AuthenticatedAppDistributionNetworkRoute: typeof AuthenticatedAppDistributionNetworkRoute
+  AuthenticatedAppEsuPlannerRoute: typeof AuthenticatedAppEsuPlannerRoute
   AuthenticatedAppEventsRoute: typeof AuthenticatedAppEventsRoute
   AuthenticatedAppGovernanceRoute: typeof AuthenticatedAppGovernanceRoute
   AuthenticatedAppInfrastructureRoute: typeof AuthenticatedAppInfrastructureRoute
@@ -915,6 +956,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppDeploymentRoute: AuthenticatedAppDeploymentRoute,
   AuthenticatedAppDistributionNetworkRoute:
     AuthenticatedAppDistributionNetworkRoute,
+  AuthenticatedAppEsuPlannerRoute: AuthenticatedAppEsuPlannerRoute,
   AuthenticatedAppEventsRoute: AuthenticatedAppEventsRoute,
   AuthenticatedAppGovernanceRoute: AuthenticatedAppGovernanceRoute,
   AuthenticatedAppInfrastructureRoute: AuthenticatedAppInfrastructureRoute,
@@ -944,6 +986,7 @@ const rootRouteChildren: RootRouteChildren = {
   CopilotRoute: CopilotRoute,
   DeploymentRoute: DeploymentRoute,
   DistributionNetworkRoute: DistributionNetworkRoute,
+  EsuPlannerRoute: EsuPlannerRoute,
   EventsRoute: EventsRoute,
   GovernanceRoute: GovernanceRoute,
   InfrastructureRoute: InfrastructureRoute,
