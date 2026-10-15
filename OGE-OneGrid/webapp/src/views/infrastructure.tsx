@@ -3,6 +3,7 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
   Boxes,
+  Calculator,
   Database,
   Network,
   Plug,
@@ -27,11 +28,13 @@ import { InfraCost } from "@/components/infra/InfraCost";
 import { InfraPerformance } from "@/components/infra/InfraPerformance";
 import { InfraLogs } from "@/components/infra/InfraLogs";
 import { InfraTickets } from "@/components/infra/InfraTickets";
+import { EsuCompass } from "@/features/esu/EsuCompass";
 
 type TabId =
   | "operations"
   | "assets"
   | "sql"
+  | "esu"
   | "topology"
   | "sources"
   | "cost"
@@ -42,6 +45,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "operations", label: "Operations", icon: Activity },
   { id: "assets", label: "Assets", icon: Boxes },
   { id: "sql", label: "SQL Estate", icon: Database },
+  { id: "esu", label: "ESU Planner", icon: Calculator },
   { id: "topology", label: "Topology", icon: Network },
   { id: "sources", label: "Source systems", icon: Plug },
   { id: "cost", label: "Cost", icon: CircleDollarSign },
@@ -50,7 +54,14 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "tickets", label: "Service tickets", icon: Ticket },
 ];
 const TAB_IDS = new Set<TabId>(TABS.map((t) => t.id));
-const SCROLLING: Set<TabId> = new Set(["operations", "sql", "sources", "cost", "performance"]);
+const SCROLLING: Set<TabId> = new Set([
+  "operations",
+  "sql",
+  "esu",
+  "sources",
+  "cost",
+  "performance",
+]);
 
 export function InfrastructurePage() {
   const router = useRouter();
@@ -171,6 +182,7 @@ export function InfrastructurePage() {
               )}
               {tab === "sources" && <InfraSources onOpenAsset={openAsset} />}
               {tab === "sql" && <InfraSql onOpenAsset={openAsset} />}
+              {tab === "esu" && <EsuCompass />}
               {tab === "cost" && <InfraCost onOpenAsset={openAsset} />}
               {tab === "performance" && <InfraPerformance onOpenAsset={openAsset} />}
             </div>

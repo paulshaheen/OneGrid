@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "algorithm": "sha256",
+  "sourceCommit": "9d4cf8caf2138ccd2c04a1b4652b7a6bef1d2520",
+  "rulesReviewed": "2026-10-15",
+  "files": [
+    {
+      "path": "lib/model.ts",
+      "sha256": "5d5cf71acd91f22861cba89610e2a989586946a31f8eb6b5e62be24be79251c3"
+    },
+    {
+      "path": "lib/engine.ts",
+      "sha256": "b64ab0eae444dfd20a57b1ed1d7c53315d410d12e701fabd18784aad2bf3127f"
+    },
+    {
+      "path": "lib/rates.ts",
+      "sha256": "cfb8139f91fe71864a23f5cb41630e2b777f7b51c537070750073cb125b2c56b"
+    },
+    {
+      "path": "lib/defaults.ts",
+      "sha256": "9dc84db069c974ad4fe880fb03e273a62e0615ad68d00a88f939fa6a8c03c934"
+    },
+    {
+      "path": "lib/retail-snapshot.json",
+      "sha256": "2fb6ccd2a67e6e01aeb27fe9803abacb8fb4c83dd464284ec1baee55d532e1b2"
+    },
+    {
+      "path": "lib/import-export.ts",
+      "sha256": "c9af1f8047159e783c57aebc07ea0dd5c1d3f89c6f4e3aa8d9798103ab50478b"
+    },
+    {
+      "path": "tests/run.mjs",
+      "sha256": "ab0a6ecda4269413b8c1ad1c6981b722b275d5a11a7a05245b04a80ba2a777f4"
+    }
+  ]
+}

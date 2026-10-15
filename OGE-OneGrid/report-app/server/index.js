@@ -109,6 +109,41 @@ async function handleApi(req, res, url) {
       const tag = url.searchParams.get('tag');
       return json(res, 200, await api.tagTrend(tag, Number(url.searchParams.get('hours')) || 24, Number(url.searchParams.get('bin')) || 15));
     }
+    // ── ESU Compass retail price refresh ─────────────────────────────────
+    // Proxies the public Azure Retail Prices API (browser can't call it directly
+    // — no CORS). Returns the raw meter items; the webapp runs the vendored
+    // ESU `parseRates` on them so that pricing logic stays byte-for-byte.
+    if (p === '/api/prices') {
+      const region = url.searchParams.get('region') || 'eastus';
+      if (!/^[a-z0-9]{2,35}$/.test(region)) return json(res, 400, { error: 'Select a valid public Azure region.' });
+      const filters = [
+        "serviceName eq 'Azure Arc' and contains(productName, 'Extended')",
+        "productName eq 'Azure Arc-enabled SQL Server - Arc-enabled servers'",
+        `serviceName eq 'SQL Managed Instance' and (armRegionName eq '${region}' or armRegionName eq 'Global')`,
+      ];
+      try {
+        const groups = await Promise.all(filters.map(async (filter) => {
+          let u = 'https://prices.azure.com/api/retail/prices?' + new URLSearchParams({ 'api-version': '2023-01-01-preview', '$filter': filter, currencyCode: "'USD'" });
+          const items = [];
+          let pages = 0;
+          while (u && pages < 8) {
+            const r = await fetch(u, { signal: AbortSignal.timeout(25000) });
+            if (!r.ok) throw new Error('Microsoft retail pricing service is unavailable.');
+            const data = await r.json();
+            if (!Array.isArray(data.Items)) throw new Error('Unexpected retail pricing response.');
+            items.push(...data.Items);
+            u = data.NextPageLink || '';
+            if (u && new URL(u).hostname !== 'prices.azure.com') throw new Error('Unexpected pricing continuation URL.');
+            pages++;
+          }
+          if (u) throw new Error('Pricing results exceeded the page limit; rates were not applied.');
+          return items;
+        }));
+        return json(res, 200, { region, checked: new Date().toISOString().slice(0, 10), items: groups.flat() });
+      } catch (e) {
+        return json(res, 502, { error: e instanceof Error ? e.message : 'Pricing refresh failed. Saved rates are unchanged.' });
+      }
+    }
     return json(res, 404, { error: 'unknown endpoint' });
   } catch (e) {
     // A paused/suspended capacity isn't a server bug — surface it as 503 with a flag so the

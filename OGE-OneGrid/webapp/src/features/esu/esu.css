@@ -1,0 +1,1897 @@
+/* ===========================================================================
+   ESU Compass — OneGrid dark re-skin.
+   Every rule is scoped under .esu-root so it cannot leak into the rest of the
+   app. Colors come from OneGrid's theme tokens (var(--card), --border,
+   --primary, --muted-foreground, …) plus the Infrastructure status palette, so
+   the planner reads as a native OneGrid surface. The vendored engine/markup is
+   untouched; this file only styles the semantic class names it emits.
+   ========================================================================= */
+
+.esu-root {
+  --esu-green: #3fb950;
+  --esu-amber: #f0b429;
+  --esu-red: #ff5a5f;
+  --esu-teal: #2dd4bf;
+  --esu-purple: #a78bfa;
+  --esu-gap: 18px;
+  --esu-surface: var(--card);
+  --esu-surface-2: color-mix(in oklab, var(--card) 60%, var(--background));
+  --esu-radius: calc(var(--radius) + 4px);
+
+  color: var(--foreground);
+  background: var(--background);
+  font-family:
+    "Segoe UI",
+    Aptos,
+    Calibri,
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+  font-size: 13.5px;
+  line-height: 1.5;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+.esu-root *,
+.esu-root *::before,
+.esu-root *::after {
+  box-sizing: border-box;
+}
+.esu-root h1,
+.esu-root h2,
+.esu-root h3,
+.esu-root h4 {
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+}
+.esu-root p {
+  margin: 0;
+}
+.esu-root a {
+  color: inherit;
+  text-decoration: none;
+}
+.esu-root small {
+  font-size: 11px;
+}
+.esu-root .muted {
+  color: var(--muted-foreground);
+}
+.esu-root .small {
+  font-size: 11.5px;
+}
+.esu-root .mono {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 10.5px;
+  opacity: 0.75;
+}
+.esu-root .amber-text,
+.esu-root .amber-text * {
+  color: var(--esu-amber);
+}
+.esu-root .flex {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.esu-root .top-space {
+  margin-top: var(--esu-gap);
+}
+.esu-root .desktop-only {
+  display: inline;
+}
+
+/* ── sub-nav (replaces the vendor sidebar) ─────────────────────────────── */
+.esu-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+  background: color-mix(in oklab, var(--background) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.esu-subnav {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.esu-subnav::-webkit-scrollbar {
+  display: none;
+}
+.esu-subnav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  padding: 11px 13px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+.esu-subnav button:hover {
+  color: var(--foreground);
+}
+.esu-subnav button.active {
+  color: var(--foreground);
+  border-bottom-color: var(--primary);
+}
+.esu-subnav .nav-new {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
+  color: color-mix(in oklab, var(--primary) 70%, var(--foreground));
+}
+.esu-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+}
+.esu-top-actions .saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.esu-top-actions .saved > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--esu-green);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--esu-green) 20%, transparent);
+}
+
+/* ── main column ───────────────────────────────────────────────────────── */
+.esu-root main {
+  display: block;
+  padding: 20px 22px 40px;
+  max-width: 1360px;
+  margin: 0 auto;
+}
+
+/* ── workspace bar ─────────────────────────────────────────────────────── */
+.esu-root .workspace-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .customer-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.esu-root .customer-name .avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.esu-root .customer-name input {
+  background: none;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 650;
+  padding: 2px 2px;
+  min-width: 180px;
+}
+.esu-root .customer-name input:hover {
+  border-bottom-color: var(--border);
+}
+.esu-root .customer-name input:focus {
+  outline: none;
+  border-bottom-color: var(--primary);
+}
+.esu-root .period-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── sample banner ─────────────────────────────────────────────────────── */
+.esu-root .sample-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: var(--esu-gap);
+  border: 1px solid color-mix(in oklab, var(--primary) 35%, var(--border));
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+  border-radius: var(--esu-radius);
+  font-size: 12.5px;
+}
+.esu-root .sample-banner span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.esu-root .sample-banner button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── page heading / eyebrow ────────────────────────────────────────────── */
+.esu-root .page-heading {
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .page-heading h1 {
+  font-size: 23px;
+  margin: 6px 0 5px;
+}
+.esu-root .page-heading p {
+  color: var(--muted-foreground);
+  max-width: 60ch;
+}
+.esu-root .eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.esu-root .eyebrow.light {
+  color: color-mix(in oklab, var(--foreground) 70%, transparent);
+}
+.esu-root .live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--esu-green);
+  animation: esu-pulse 2s infinite;
+}
+@keyframes esu-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* ── hero ──────────────────────────────────────────────────────────────── */
+.esu-root .hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 28px 32px;
+  min-height: 268px;
+  align-items: center;
+  border-radius: var(--esu-radius);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(
+      740px 360px at 90% -12%,
+      color-mix(in oklab, var(--primary) 28%, transparent),
+      transparent 66%
+    ),
+    radial-gradient(
+      640px 320px at 38% 132%,
+      color-mix(in oklab, var(--esu-teal) 18%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(135deg, color-mix(in oklab, var(--primary) 15%, var(--card)), var(--card));
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .hero-copy h1 {
+  font-size: 34px;
+  line-height: 1.08;
+  margin: 14px 0 12px;
+}
+.esu-root .hero-copy h1 span {
+  color: var(--primary);
+}
+.esu-root .hero-copy p {
+  color: color-mix(in oklab, var(--foreground) 80%, transparent);
+  font-size: 14px;
+}
+.esu-root .hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.esu-root .hero-visual {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 80px;
+  min-height: 150px;
+}
+.esu-root .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(42px);
+  opacity: 0.55;
+}
+.esu-root .orb-one {
+  width: 180px;
+  height: 180px;
+  background: var(--primary);
+  top: -10px;
+  right: 10px;
+}
+.esu-root .orb-two {
+  width: 150px;
+  height: 150px;
+  background: var(--esu-teal);
+  bottom: -20px;
+  left: 0;
+  opacity: 0.35;
+}
+.esu-root .glass-stack {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in oklab, var(--foreground) 14%, transparent);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+  backdrop-filter: blur(10px);
+  min-width: 164px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+.esu-root .glass-stack span {
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  color: var(--muted-foreground);
+  margin-top: 6px;
+}
+.esu-root .glass-stack b {
+  font-size: 17px;
+}
+.esu-root .glass-stack small {
+  color: var(--muted-foreground);
+}
+.esu-root .stack-a {
+  z-index: 1;
+}
+.esu-root .stack-b {
+  z-index: 1;
+}
+.esu-root .flow-line {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: 80px;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--primary) 70%, transparent),
+    color-mix(in oklab, var(--esu-green) 65%, transparent)
+  );
+  transform: translate(-50%, -50%);
+}
+.esu-root .floating-check {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--esu-green);
+  color: #04140a;
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--esu-green) 20%, transparent);
+}
+
+/* ── metrics ───────────────────────────────────────────────────────────── */
+.esu-root .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .metric {
+  padding: 15px 16px;
+  border-radius: var(--esu-radius);
+  border: 1px solid var(--border);
+  background: var(--esu-surface);
+}
+.esu-root .metric.accent {
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
+  background: color-mix(in oklab, var(--primary) 10%, var(--card));
+}
+.esu-root .metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted-foreground);
+  font-size: 11.5px;
+}
+.esu-root .metric strong {
+  display: block;
+  font-size: 25px;
+  font-weight: 680;
+  margin: 8px 0 3px;
+  letter-spacing: -0.02em;
+}
+.esu-root .metric p {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+/* ── panels ────────────────────────────────────────────────────────────── */
+.esu-root .panel {
+  padding: 18px 20px;
+  border-radius: var(--esu-radius);
+  border: 1px solid var(--border);
+  background: var(--esu-surface);
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.esu-root .panel-heading h2 {
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.esu-root .panel-heading p {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.esu-root .plain-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.esu-root .plain-content p {
+  font-size: 12.5px;
+  color: color-mix(in oklab, var(--foreground) 85%, transparent);
+}
+.esu-root .panel-footnote {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 10px;
+}
+.esu-root .panel-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+}
+
+/* grids */
+.esu-root .overview-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 12px;
+}
+.esu-root .two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.esu-root .overview-grid .panel,
+.esu-root .two-col .panel {
+  margin-bottom: 0;
+}
+.esu-root .section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 8px;
+}
+.esu-root .section-title.top-space {
+  margin-top: var(--esu-gap);
+}
+.esu-root .section-title h2 {
+  font-size: 16px;
+}
+
+/* ── buttons ───────────────────────────────────────────────────────────── */
+.esu-root .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: calc(var(--radius) + 2px);
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
+  white-space: nowrap;
+}
+.esu-root .button:hover {
+  background: color-mix(in oklab, var(--secondary) 70%, var(--foreground) 6%);
+}
+.esu-root .button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+.esu-root .button.primary:hover {
+  background: color-mix(in oklab, var(--primary) 88%, black);
+}
+.esu-root .button.secondary {
+  background: var(--secondary);
+}
+.esu-root .button.white {
+  background: var(--foreground);
+  border-color: var(--foreground);
+  color: var(--background);
+}
+.esu-root .button.small {
+  padding: 6px 10px;
+  font-size: 11.5px;
+}
+.esu-root .button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.esu-root .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.esu-root .text-button.light {
+  color: color-mix(in oklab, var(--foreground) 75%, transparent);
+}
+.esu-root .inline-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.esu-root .icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.esu-root .icon-button:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.esu-root .icon-button.danger:hover {
+  background: color-mix(in oklab, var(--esu-red) 18%, transparent);
+  color: var(--esu-red);
+}
+
+/* ── badges ────────────────────────────────────────────────────────────── */
+.esu-root .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.esu-root .badge.neutral {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.esu-root .badge.blue {
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+  color: color-mix(in oklab, var(--primary) 65%, var(--foreground));
+  border-color: color-mix(in oklab, var(--primary) 30%, transparent);
+}
+.esu-root .badge.green {
+  background: color-mix(in oklab, var(--esu-green) 16%, transparent);
+  color: var(--esu-green);
+  border-color: color-mix(in oklab, var(--esu-green) 35%, transparent);
+}
+.esu-root .badge.red {
+  background: color-mix(in oklab, var(--esu-red) 16%, transparent);
+  color: var(--esu-red);
+  border-color: color-mix(in oklab, var(--esu-red) 35%, transparent);
+}
+.esu-root .badge.amber {
+  background: color-mix(in oklab, var(--esu-amber) 16%, transparent);
+  color: var(--esu-amber);
+  border-color: color-mix(in oklab, var(--esu-amber) 35%, transparent);
+}
+
+/* ── fields / inputs ───────────────────────────────────────────────────── */
+.esu-root .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.esu-root .form-grid.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.esu-root .form-grid.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+.esu-root .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.esu-root .field > span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.esu-root .field small {
+  font-size: 10.5px;
+  color: var(--muted-foreground);
+  opacity: 0.85;
+}
+.esu-root input[type="text"],
+.esu-root input[type="number"],
+.esu-root input[type="date"],
+.esu-root .field input,
+.esu-root select,
+.esu-root textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: calc(var(--radius) + 1px);
+  border: 1px solid var(--input);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12.5px;
+}
+.esu-root textarea {
+  resize: vertical;
+}
+.esu-root input:focus,
+.esu-root select:focus,
+.esu-root textarea:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent);
+}
+.esu-root input[readonly] {
+  opacity: 0.7;
+}
+.esu-root select option {
+  background: var(--card);
+  color: var(--foreground);
+}
+.esu-root .check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+.esu-root .check input {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* ── notices ───────────────────────────────────────────────────────────── */
+.esu-root .notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 14px;
+  border-radius: var(--esu-radius);
+  border: 1px solid var(--border);
+  background: var(--esu-surface-2);
+  font-size: 12px;
+  color: color-mix(in oklab, var(--foreground) 88%, transparent);
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .notice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--muted-foreground);
+}
+.esu-root .notice.warn {
+  border-color: color-mix(in oklab, var(--esu-amber) 40%, var(--border));
+  background: color-mix(in oklab, var(--esu-amber) 10%, transparent);
+}
+.esu-root .notice.warn svg {
+  color: var(--esu-amber);
+}
+.esu-root .notice.success {
+  border-color: color-mix(in oklab, var(--esu-green) 40%, var(--border));
+  background: color-mix(in oklab, var(--esu-green) 10%, transparent);
+}
+.esu-root .notice.success svg {
+  color: var(--esu-green);
+}
+
+/* ── tables ────────────────────────────────────────────────────────────── */
+.esu-root .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--esu-radius);
+}
+.esu-root table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.esu-root thead th {
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  background: var(--esu-surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.esu-root tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  vertical-align: top;
+}
+.esu-root tbody tr:last-child td {
+  border-bottom: none;
+}
+.esu-root tbody td small {
+  display: block;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.esu-root tbody td strong {
+  font-weight: 620;
+}
+.esu-root .rate-table input {
+  max-width: 120px;
+  padding: 4px 8px;
+}
+.esu-root .name-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 620;
+  cursor: pointer;
+}
+.esu-root .name-button:hover {
+  color: var(--primary);
+}
+.esu-root .sql-cell {
+  margin-bottom: 4px;
+}
+
+/* ── segmented ─────────────────────────────────────────────────────────── */
+.esu-root .segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: calc(var(--radius) + 3px);
+  border: 1px solid var(--border);
+  background: var(--esu-surface-2);
+  gap: 2px;
+}
+.esu-root .segmented button {
+  border: none;
+  background: none;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.esu-root .segmented button.selected {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.esu-root .section-tabs {
+  margin-bottom: var(--esu-gap);
+}
+
+/* ── toolbar / search ──────────────────────────────────────────────────── */
+.esu-root .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.esu-root .searchbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-radius: calc(var(--radius) + 2px);
+  border: 1px solid var(--input);
+  background: var(--background);
+  min-width: 230px;
+}
+.esu-root .searchbox svg {
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+.esu-root .searchbox input {
+  border: none;
+  background: none;
+  padding: 8px 0;
+}
+.esu-root .searchbox input:focus {
+  box-shadow: none;
+}
+.esu-root .inventory-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--esu-radius);
+  background: var(--esu-surface-2);
+  margin-bottom: 14px;
+  font-size: 12px;
+}
+.esu-root .inventory-summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-foreground);
+}
+.esu-root .inventory-summary strong {
+  color: var(--foreground);
+}
+.esu-root .inventory-summary .text-button {
+  margin-left: auto;
+}
+
+/* ── chart ─────────────────────────────────────────────────────────────── */
+.esu-root .chart {
+  display: flex;
+  gap: 10px;
+  height: 190px;
+}
+.esu-root .chart-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted-foreground);
+  text-align: right;
+  padding-bottom: 20px;
+}
+.esu-root .chart-plot {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 4px;
+}
+.esu-root .chart-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.esu-root .chart-bar-wrap {
+  display: flex;
+  align-items: flex-end;
+  height: 150px;
+  width: 100%;
+  justify-content: center;
+}
+.esu-root .chart-bar {
+  width: 72%;
+  max-width: 30px;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 4px 4px 0 0;
+  overflow: hidden;
+}
+.esu-root .chart-column > span {
+  font-size: 9px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.esu-root .seg {
+  width: 100%;
+}
+.esu-root .seg.blue {
+  background: var(--primary);
+}
+.esu-root .seg.amber {
+  background: var(--esu-amber);
+}
+.esu-root .seg.purple {
+  background: var(--esu-purple);
+}
+.esu-root .seg.teal {
+  background: var(--esu-teal);
+}
+.esu-root .chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.esu-root .chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.esu-root .chart-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.esu-root .chart-legend i.blue {
+  background: var(--primary);
+}
+.esu-root .chart-legend i.amber {
+  background: var(--esu-amber);
+}
+.esu-root .chart-legend i.teal {
+  background: var(--esu-teal);
+}
+
+/* ── breakdown rows ────────────────────────────────────────────────────── */
+.esu-root .breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+  font-size: 12.5px;
+}
+.esu-root .breakdown-row span {
+  color: var(--muted-foreground);
+}
+.esu-root .breakdown-row.total {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  margin-top: 4px;
+  padding-top: 10px;
+  font-weight: 700;
+}
+.esu-root .breakdown-row.total span {
+  color: var(--foreground);
+}
+
+/* ── inventory host cards ──────────────────────────────────────────────── */
+.esu-root .host-card {
+  border: 1px solid var(--border);
+  border-radius: var(--esu-radius);
+  background: var(--esu-surface);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.esu-root .host-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 15px;
+}
+.esu-root .host-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.esu-root .host-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--primary) 15%, transparent);
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.esu-root .host-heading h3 {
+  font-size: 14px;
+}
+.esu-root .host-heading p {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.esu-root .host-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 15px 10px 64px;
+}
+.esu-root .host-pills span {
+  font-size: 10.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.esu-root .host-card .table-wrap {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+}
+
+/* ── steps / teasers ───────────────────────────────────────────────────── */
+.esu-root .steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .steps button {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  text-align: left;
+  padding: 16px;
+  border-radius: var(--esu-radius);
+  border: 1px solid var(--border);
+  background: var(--esu-surface);
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.esu-root .steps button:hover {
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
+}
+.esu-root .steps button > span {
+  font-size: 20px;
+  font-weight: 700;
+  color: color-mix(in oklab, var(--primary) 60%, var(--muted-foreground));
+}
+.esu-root .steps h3 {
+  font-size: 13.5px;
+}
+.esu-root .steps p {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.esu-root .steps svg {
+  margin-left: auto;
+  color: var(--muted-foreground);
+}
+.esu-root .migration-teaser {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--primary) 16%, var(--card)),
+    var(--card)
+  );
+}
+.esu-root .teaser-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--primary) 20%, transparent);
+  color: var(--primary);
+}
+.esu-root .migration-teaser h2 {
+  font-size: 20px;
+}
+.esu-root .teaser-price {
+  margin: 4px 0;
+}
+.esu-root .teaser-price span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.esu-root .teaser-price strong {
+  font-size: 24px;
+}
+.esu-root .teaser-price small {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+.esu-root .review-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 15px;
+  border-radius: var(--esu-radius);
+  border: 1px solid color-mix(in oklab, var(--esu-amber) 35%, var(--border));
+  background: color-mix(in oklab, var(--esu-amber) 9%, transparent);
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .review-strip svg {
+  color: var(--esu-amber);
+  flex-shrink: 0;
+}
+.esu-root .review-strip span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.esu-root .review-strip svg:last-child {
+  margin-left: auto;
+}
+
+/* ── migration ─────────────────────────────────────────────────────────── */
+.esu-root .migration-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: var(--esu-gap);
+}
+.esu-root .migration-header h2 {
+  font-size: 20px;
+  margin: 8px 0 4px;
+}
+.esu-root .migration-header p {
+  color: var(--muted-foreground);
+  font-size: 12.5px;
+}
+.esu-root .migration-layout {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.esu-root .migration-forms {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.esu-root .business-case {
+  position: sticky;
+  top: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.esu-root .number-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+.esu-root .migration-workload {
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+}
+.esu-root .result-panel {
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--primary) 14%, var(--card)),
+    var(--card)
+  );
+}
+.esu-root .result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.esu-root .savings {
+  font-size: 34px;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  color: var(--esu-green);
+  margin: 2px 0;
+}
+.esu-root .savings.negative {
+  color: var(--esu-red);
+}
+.esu-root .comparison-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0;
+}
+.esu-root .comparison-bars > div span {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.esu-root .comparison-bars > div b {
+  display: block;
+  font-size: 15px;
+  margin: 2px 0 5px;
+}
+.esu-root .comparison-bars i {
+  display: block;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--muted-foreground);
+}
+.esu-root .comparison-bars .azure i {
+  background: var(--primary);
+}
+.esu-root .estimate-note {
+  font-size: 11px;
+  color: var(--esu-amber);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--esu-amber) 10%, transparent);
+  margin-top: 8px;
+}
+.esu-root .alternative-results {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+.esu-root .alternative-results span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--esu-surface-2);
+}
+.esu-root .alternative-results strong {
+  font-size: 16px;
+  color: var(--foreground);
+}
+.esu-root details summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  list-style: none;
+  padding: 6px 0;
+}
+.esu-root details summary::-webkit-details-marker {
+  display: none;
+}
+.esu-root .subform {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--esu-radius);
+  background: var(--esu-surface-2);
+  margin-bottom: 10px;
+}
+
+/* ── rates ─────────────────────────────────────────────────────────────── */
+.esu-root .price-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--esu-radius);
+  border: 1px solid var(--border);
+  background: var(--esu-surface-2);
+  margin-bottom: 12px;
+}
+.esu-root .price-refresh p {
+  font-size: 10.5px;
+  color: var(--muted-foreground);
+}
+.esu-root .spin {
+  animation: esu-spin 1s linear infinite;
+}
+@keyframes esu-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── sources ───────────────────────────────────────────────────────────── */
+.esu-root .source-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.esu-root .source-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--esu-radius);
+  border: 1px solid var(--border);
+  background: var(--esu-surface);
+  transition: border-color 0.15s;
+}
+.esu-root .source-item:hover {
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
+}
+.esu-root .source-number {
+  font-size: 13px;
+  font-weight: 700;
+  color: color-mix(in oklab, var(--primary) 60%, var(--muted-foreground));
+}
+.esu-root .source-item h3 {
+  font-size: 13px;
+}
+.esu-root .source-item p {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  margin: 3px 0;
+}
+.esu-root .source-item small {
+  color: var(--primary);
+}
+.esu-root .source-item svg {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+.esu-root .clean-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.esu-root .clean-list li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 12.5px;
+  color: color-mix(in oklab, var(--foreground) 85%, transparent);
+}
+.esu-root .clean-list li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.esu-root .rule-callout {
+  padding: 12px 14px;
+  border-left: 3px solid var(--primary);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--esu-surface-2);
+  margin-bottom: 10px;
+}
+.esu-root .rule-callout strong {
+  display: block;
+  font-size: 12.5px;
+  margin-bottom: 3px;
+}
+.esu-root .rule-callout p {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+}
+
+/* ── review panel / lists ──────────────────────────────────────────────── */
+.esu-root .review-panel ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.esu-root .review-panel li {
+  font-size: 12px;
+  color: color-mix(in oklab, var(--foreground) 85%, transparent);
+}
+
+/* ── empty ─────────────────────────────────────────────────────────────── */
+.esu-root .empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 34px 20px;
+}
+.esu-root .empty-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 24px;
+}
+.esu-root .empty h3 {
+  font-size: 14px;
+}
+.esu-root .empty p {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  max-width: 42ch;
+}
+
+/* ── brand symbol ──────────────────────────────────────────────────────── */
+.esu-root .brand-symbol {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  width: 18px;
+  height: 18px;
+}
+.esu-root .brand-symbol i {
+  border-radius: 2px;
+  background: var(--primary);
+}
+.esu-root .brand-symbol i:nth-child(2) {
+  background: var(--esu-teal);
+}
+.esu-root .brand-symbol i:nth-child(3) {
+  background: var(--esu-amber);
+}
+.esu-root .brand-symbol i:nth-child(4) {
+  background: var(--primary);
+  opacity: 0.6;
+}
+
+/* ── footer ────────────────────────────────────────────────────────────── */
+.esu-root .main-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.esu-root .main-footer i {
+  opacity: 0.5;
+  margin: 0 4px;
+  font-style: normal;
+}
+
+/* ── toast ─────────────────────────────────────────────────────────────── */
+.esu-root .toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+  font-size: 12.5px;
+  max-width: min(520px, 90vw);
+}
+.esu-root .toast svg:first-child {
+  color: var(--esu-green);
+  flex-shrink: 0;
+}
+.esu-root .toast button {
+  background: none;
+  border: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  margin-left: 4px;
+}
+
+/* ── editor drawer (modal) ─────────────────────────────────────────────── */
+.esu-root .modal-backdrop,
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  justify-content: flex-end;
+}
+.esu-root .drawer,
+.modal-backdrop .drawer {
+  width: min(560px, 100%);
+  height: 100%;
+  background: var(--card);
+  color: var(--foreground);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
+  font-family:
+    "Segoe UI",
+    Aptos,
+    Calibri,
+    -apple-system,
+    sans-serif;
+  animation: esu-slide-in 0.2s ease;
+}
+@keyframes esu-slide-in {
+  from {
+    transform: translateX(28px);
+    opacity: 0.5;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.modal-backdrop .drawer header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-backdrop .drawer header h2 {
+  font-size: 16px;
+}
+.modal-backdrop .drawer header p {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  margin-top: 3px;
+}
+.modal-backdrop .drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.modal-backdrop .drawer-body h3 {
+  font-size: 13px;
+  margin-top: 4px;
+}
+.modal-backdrop .drawer-body h4 {
+  font-size: 12px;
+}
+.modal-backdrop .drawer footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+}
+/* reuse field/button styles inside the portal-rendered drawer */
+.modal-backdrop .field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.modal-backdrop .field > span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.modal-backdrop .field small {
+  font-size: 10.5px;
+  color: var(--muted-foreground);
+}
+.modal-backdrop .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.modal-backdrop input,
+.modal-backdrop select,
+.modal-backdrop textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: calc(var(--radius) + 1px);
+  border: 1px solid var(--input);
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12.5px;
+}
+.modal-backdrop input:focus,
+.modal-backdrop select:focus,
+.modal-backdrop textarea:focus {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 25%, transparent);
+}
+.modal-backdrop select option {
+  background: var(--card);
+}
+.modal-backdrop .check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+.modal-backdrop .check input {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+  width: auto;
+}
+.modal-backdrop .notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 60%, var(--background));
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.modal-backdrop .notice.warn {
+  border-color: color-mix(in oklab, #f0b429 40%, var(--border));
+}
+.modal-backdrop .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: calc(var(--radius) + 2px);
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-backdrop .button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+.modal-backdrop .button.small {
+  padding: 6px 10px;
+  font-size: 11.5px;
+}
+.modal-backdrop .icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.modal-backdrop .icon-button:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.modal-backdrop .icon-button.danger:hover {
+  color: #ff5a5f;
+}
+.modal-backdrop .section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.modal-backdrop .subform {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--card) 55%, var(--background));
+}
+.modal-backdrop .muted {
+  color: var(--muted-foreground);
+}
+.modal-backdrop .small {
+  font-size: 11.5px;
+}
+.modal-backdrop .amber-text {
+  color: #f0b429;
+}
+
+/* ── print report ──────────────────────────────────────────────────────── */
+#print-report {
+  display: none;
+}
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #print-report,
+  #print-report * {
+    visibility: visible !important;
+  }
+  #print-report {
+    display: block !important;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 24px;
+    background: #fff;
+    color: #111;
+    font-family: "Segoe UI", sans-serif;
+  }
+  #print-report h1 {
+    font-size: 20px;
+    margin: 10px 0;
+  }
+  #print-report h2 {
+    font-size: 15px;
+    margin: 16px 0 6px;
+  }
+  #print-report table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 6px 0;
+    font-size: 11px;
+  }
+  #print-report th,
+  #print-report td {
+    border: 1px solid #ccc;
+    padding: 5px 7px;
+    text-align: left;
+  }
+  #print-report .report-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #print-report .report-source {
+    font-size: 10px;
+    margin: 2px 0;
+  }
+}
+
+/* ── responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .esu-root .metric-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .esu-root .overview-grid,
+  .esu-root .two-col,
+  .esu-root .migration-layout {
+    grid-template-columns: 1fr;
+  }
+  .esu-root .business-case {
+    position: static;
+  }
+  .esu-root .hero {
+    grid-template-columns: 1fr;
+  }
+  .esu-root .hero-visual {
+    display: none;
+  }
+  .esu-root .steps,
+  .esu-root .source-list,
+  .esu-root .alternative-results,
+  .esu-root .form-grid.three,
+  .esu-root .form-grid.four {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 680px) {
+  .esu-root .metric-grid,
+  .esu-root .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .esu-root .desktop-only {
+    display: none;
+  }
+}
