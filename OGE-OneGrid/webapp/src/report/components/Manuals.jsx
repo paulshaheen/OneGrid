@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getJson } from '../lib/api.js';
 
 // Styling for rendered manual markdown so it reads like a real O&M manual, not raw .md.
 const MANUAL_CSS = `
@@ -77,7 +78,7 @@ export function ManualViewer({ theme, id, onClose }) {
   useEffect(() => {
     if (!id) return;
     setM(null); setErr(null);
-    fetch(`/api/manuals/item/${encodeURIComponent(id)}`).then((r) => r.json())
+    getJson(`/api/manuals/item/${encodeURIComponent(id)}`)
       .then((d) => (d.error ? setErr(d.error) : setM(d))).catch((e) => setErr(e.message));
   }, [id]);
   const dark = theme.persona !== 'executive';
@@ -117,7 +118,8 @@ export function ManualResolveModal({ theme, wo, onClose }) {
     p.set('problem', wo.problem_descr || wo.descriptor || '');
     p.set('assetName', wo.parent_descr || wo.location || wo.problem_location || wo.asset_name || '');
     p.set('assetType', wo.wr_type || '');
-    fetch(`/api/manuals/resolve?${p.toString()}`).then((r) => r.json())
+    if (wo.asset_type) p.set('assetKind', wo.asset_type);
+    getJson(`/api/manuals/resolve?${p.toString()}`)
       .then((d) => (d.error ? setErr(d.error) : setData(d))).catch((e) => setErr(e.message));
   }, [wo]);
   const dark = theme.persona !== 'executive';

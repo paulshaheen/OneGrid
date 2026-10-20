@@ -26,7 +26,11 @@ function backendEnabled() {
       /* ignore */
     }
   }
-  return typeof window !== "undefined" && !!window.__APP_CONFIG__ && !!window.__APP_CONFIG__.reportApiEnabled;
+  return (
+    typeof window !== "undefined" &&
+    !!window.__APP_CONFIG__ &&
+    !!window.__APP_CONFIG__.reportApiEnabled
+  );
 }
 
 // Central resolver: path -> sample data (exact shapes from the original dataApi).
@@ -66,9 +70,26 @@ export async function getJson(path) {
     if (!res.ok) throw new Error(`${path} -> ${res.status}`);
     return res.json();
   }
+  // OneRig's equipment-manual library (Foundry IQ) is served client-side; lazy-loaded so the
+  // energy bundle doesn't carry it.
+  if (String(path).startsWith("/api/manuals/") && isOg()) {
+    const { p, params } = parse(path);
+    const { resolveOgManualsRoute } = await import("./og-manuals.js");
+    const d = resolveOgManualsRoute(p, params);
+    if (d === null) throw new Error(`${path} -> 404 (no sample provider)`);
+    return d;
+  }
   const data = resolve(path);
   if (data === null) throw new Error(`${path} -> 404 (no sample provider)`);
   return data;
+}
+
+function isOg() {
+  try {
+    return typeof window !== "undefined" && getSolution() === "og";
+  } catch {
+    return false;
+  }
 }
 export async function postJson(path, body) {
   if (backendEnabled()) {
@@ -120,7 +141,10 @@ export function useCapacityStatus({ pollMs = 45000 } = {}) {
     // Preview override: /any-page?cap=paused forces the banner so it can be demoed without
     // actually pausing the Fabric capacity.
     try {
-      if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cap") === "paused") {
+      if (
+        typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("cap") === "paused"
+      ) {
         setStatus({
           ok: false,
           capacityPaused: true,
@@ -142,7 +166,8 @@ export function useCapacityStatus({ pollMs = 45000 } = {}) {
       try {
         const res = await fetch("/api/status", { headers: { Accept: "application/json" } });
         const d = await res.json().catch(() => ({}));
-        if (alive) setStatus({ ok: !!d.ok, capacityPaused: !!d.capacityPaused, message: d.message });
+        if (alive)
+          setStatus({ ok: !!d.ok, capacityPaused: !!d.capacityPaused, message: d.message });
       } catch {
         // A network failure isn't a paused capacity — don't cry wolf with the paused banner.
         if (alive) setStatus({ ok: false, capacityPaused: false, message: undefined });

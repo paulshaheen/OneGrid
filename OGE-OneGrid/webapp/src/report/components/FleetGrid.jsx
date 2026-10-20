@@ -309,6 +309,7 @@ function WorkOrdersTab({ theme, asset }) {
   const toManualWo = (w) => ({
     wr_id: w.wr_id, problem_descr: w.problem, wr_type: w.type,
     parent_descr: w.parent, location: w.entity, wr_status: w.status,
+    asset_type: w.asset_type || asset?.type || '',
   });
   if (!data) return <Spinner theme={theme} label="Loading work orders…" />;
   if (!rows.length) return <Empty theme={theme} msg="No work orders found for this equipment." />;

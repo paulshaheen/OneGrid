@@ -424,6 +424,7 @@ export function Simulation({ theme, asset, detail }) {
       descriptor: sensor?.desc || asset?.name || '',
       parent_descr: asset?.name || asset?.plant || '',
       wr_type: asset?.category || asset?.equipment_category || sim.type || '',
+      asset_type: asset?.type || sim.type || '',
     });
   };
 
