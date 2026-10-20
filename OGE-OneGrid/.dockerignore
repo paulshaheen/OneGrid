@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/dist-sample
+**/.vite
+**/.cache
+**/.turbo
+.git
+**/*.log
+report-app/server/target.json
+report-app/server/target.local.json

@@ -6,3 +6,6 @@ pnpm-lock.yaml
 package-lock.json
 bun.lock
 routeTree.gen.ts
+
+# Vendored ESU Compass core — frozen, byte-for-byte; never reformat.
+src/features/esu/vendor/

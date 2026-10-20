@@ -1,0 +1,4 @@
+# Vendored ESU Compass core is a frozen, hash-verified dependency.
+# Never let Git convert line endings — it would change the bytes and break
+# scripts/verify-esu-integrity.mjs (sha256) and tests/run.mjs.
+* -text

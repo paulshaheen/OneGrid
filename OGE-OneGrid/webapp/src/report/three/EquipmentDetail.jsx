@@ -435,6 +435,7 @@ export function EquipmentDetail({ asset, theme, snapshot = {}, anomalies = [], r
                     descriptor: sel.tag?.desc || sel.label,
                     parent_descr: asset?.name || asset?.plant || '',
                     wr_type: asset?.equipment_category || asset?.equipment_group || type || '',
+                    asset_type: asset?.type || type || '',
                   })}
                   className="w-full text-xs font-semibold px-3 py-2 rounded-lg inline-flex items-center justify-center gap-1.5"
                   style={{ background: theme.accent, color: theme.mode === 'light' ? '#fff' : '#06121f' }}

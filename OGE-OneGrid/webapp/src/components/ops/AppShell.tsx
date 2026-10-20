@@ -2,8 +2,11 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useEffect, useId, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  Atom,
   Bell,
+  BookOpen,
   Boxes,
+  Calculator,
   ChevronDown,
   Cpu,
   FlaskConical,
@@ -17,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PauseCircle,
+  Server,
   ServerCog,
   Settings,
   ShieldAlert,
@@ -241,13 +245,25 @@ const ADMIN: Group = {
   label: "Admin",
   icon: Settings,
   children: [
+    { to: "/infrastructure", label: "Infrastructure", icon: Server },
     { to: "/thresholds", label: "Thresholds", icon: SlidersHorizontal },
     { to: "/governance", label: "Governance & Security", icon: ShieldCheck },
     { to: "/deployment", label: "Deployment", icon: ServerCog },
   ],
 };
 
-const GROUPS = [...NAV.filter((e): e is Group => e.kind === "group"), ADMIN];
+const RESOURCES: Group = {
+  kind: "group",
+  id: "resources",
+  label: "Resources",
+  icon: BookOpen,
+  children: [
+    { to: "/esu-planner", label: "ESU Planner", icon: Calculator },
+    { label: "Nuclear Permitting", icon: Atom, soon: true },
+  ],
+};
+
+const GROUPS = [...NAV.filter((e): e is Group => e.kind === "group"), RESOURCES, ADMIN];
 const MOBILE_ROUTES = [
   { to: "/", label: "Overview" },
   { to: "/asset-explorer", label: "Asset Explorer" },
@@ -259,6 +275,8 @@ const MOBILE_ROUTES = [
   { to: "/risk", label: "Storm Exposure" },
   { to: "/posture", label: "Response Posture" },
   { to: "/ontology", label: "Ontology" },
+  { to: "/esu-planner", label: "ESU Planner" },
+  { to: "/infrastructure", label: "Infrastructure" },
   { to: "/thresholds", label: "Thresholds" },
   { to: "/governance", label: "Governance & Security" },
   { to: "/deployment", label: "Deployment" },
@@ -292,9 +310,19 @@ function OneRigMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
       {/* oil droplet cresting the derrick */}
-      <path d="M12 3.2 C13.2 4.7 13.7 5.5 13.7 6.2 A1.7 1.7 0 0 1 10.3 6.2 C10.3 5.5 10.8 4.7 12 3.2 Z" fill="#fff" />
+      <path
+        d="M12 3.2 C13.2 4.7 13.7 5.5 13.7 6.2 A1.7 1.7 0 0 1 10.3 6.2 C10.3 5.5 10.8 4.7 12 3.2 Z"
+        fill="#fff"
+      />
       {/* derrick tower + cross-braces */}
-      <g stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity=".92">
+      <g
+        stroke="#fff"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+        opacity=".92"
+      >
         <path d="M8 20 L12 7.6 L16 20" />
         <path d="M9.15 16 h5.7 M10 12.6 h4 M10.85 9.6 h2.3" />
       </g>
@@ -321,8 +349,14 @@ export function AppShell({
   const brand = solutionBrand(solution);
   const navEntries = useMemo<Entry[]>(() => {
     if (solution !== "og") return NAV;
-    const dn: Leaf = { to: "/distribution-network", label: "Distribution Network", icon: Waypoints };
-    return NAV.map((e) => (e.kind === "group" && e.id === "twin" ? { ...e, children: [...e.children, dn] } : e));
+    const dn: Leaf = {
+      to: "/distribution-network",
+      label: "Distribution Network",
+      icon: Waypoints,
+    };
+    return NAV.map((e) =>
+      e.kind === "group" && e.id === "twin" ? { ...e, children: [...e.children, dn] } : e,
+    );
   }, [solution]);
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
@@ -381,7 +415,7 @@ export function AppShell({
     !to ? false : to === "/" ? path === base || path === `${base}/` : path.startsWith(href(to));
 
   const activeGroupId = useMemo(() => {
-    const groups = [...navEntries.filter((e): e is Group => e.kind === "group"), ADMIN];
+    const groups = [...navEntries.filter((e): e is Group => e.kind === "group"), RESOURCES, ADMIN];
     for (const g of groups) if (g.children.some((c) => isActive(c.to))) return g.id;
     return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -405,7 +439,13 @@ export function AppShell({
         )}
       >
         {!collapsed && (
-          <svg className="og-sidebar-flare" viewBox="0 0 240 280" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <svg
+            className="og-sidebar-flare"
+            viewBox="0 0 240 280"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            focusable="false"
+          >
             <defs>
               <linearGradient id={`${sidebarFlareId}-color`} x1="0" y1="0" x2="1" y2="0">
                 <stop offset="0" stopColor="var(--og-sidebar-flare-color)" stopOpacity="0.75" />
@@ -416,10 +456,18 @@ export function AppShell({
               <filter id={`${sidebarFlareId}-soft`} x="-30%" y="-60%" width="160%" height="220%">
                 <feGaussianBlur stdDeviation="8" />
               </filter>
-              <path id={`${sidebarFlareId}-path`} d="M -32 70 C 20 58, 64 144, 119 158 S 181 206, 269 220" />
+              <path
+                id={`${sidebarFlareId}-path`}
+                d="M -32 70 C 20 58, 64 144, 119 158 S 181 206, 269 220"
+              />
             </defs>
             <g fill="none" stroke={`url(#${sidebarFlareId}-color)`} strokeLinecap="round">
-              <use href={`#${sidebarFlareId}-path`} strokeWidth="30" opacity="0.22" filter={`url(#${sidebarFlareId}-soft)`} />
+              <use
+                href={`#${sidebarFlareId}-path`}
+                strokeWidth="30"
+                opacity="0.22"
+                filter={`url(#${sidebarFlareId}-soft)`}
+              />
               <use href={`#${sidebarFlareId}-path`} strokeWidth="6" opacity="0.1" />
               <use href={`#${sidebarFlareId}-path`} strokeWidth="1.1" opacity="0.45" />
             </g>
@@ -438,7 +486,11 @@ export function AppShell({
                   : "linear-gradient(135deg, var(--color-primary), oklch(0.5 0.145 251))",
             }}
           >
-            {solution === "og" ? <OneRigMark className="size-5" /> : <OneGridMark className="size-5" />}
+            {solution === "og" ? (
+              <OneRigMark className="size-5" />
+            ) : (
+              <OneGridMark className="size-5" />
+            )}
           </span>
           {!collapsed && (
             <div className="leading-tight">
@@ -479,6 +531,14 @@ export function AppShell({
           )}
 
           <div className="my-2 border-t" />
+
+          <NavGroup
+            group={RESOURCES}
+            open={openId === RESOURCES.id}
+            onToggle={() => setOpenId((v) => (v === RESOURCES.id ? null : RESOURCES.id))}
+            isActive={isActive}
+            collapsed={collapsed}
+          />
 
           <NavGroup
             group={ADMIN}
@@ -589,7 +649,9 @@ export function AppShell({
                           onClick={() => switchSolution("energy")}
                           className={cn(
                             "px-2.5 py-1 text-[11px] font-semibold",
-                            solution === "energy" ? "og-primary-control bg-primary text-primary-foreground" : "text-muted-foreground",
+                            solution === "energy"
+                              ? "og-primary-control bg-primary text-primary-foreground"
+                              : "text-muted-foreground",
                           )}
                         >
                           Energy
@@ -598,7 +660,9 @@ export function AppShell({
                           onClick={() => switchSolution("og")}
                           className={cn(
                             "px-2.5 py-1 text-[11px] font-semibold",
-                            solution === "og" ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                            solution === "og"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground",
                           )}
                         >
                           Oil &amp; Gas
@@ -612,7 +676,9 @@ export function AppShell({
                           onClick={() => setDark(true)}
                           className={cn(
                             "px-2.5 py-1 text-[11px] font-semibold",
-                            dark ? "og-primary-control bg-primary text-primary-foreground" : "text-muted-foreground",
+                            dark
+                              ? "og-primary-control bg-primary text-primary-foreground"
+                              : "text-muted-foreground",
                           )}
                         >
                           Dark
@@ -635,7 +701,9 @@ export function AppShell({
                           onClick={() => setModelRes("high")}
                           className={cn(
                             "px-2.5 py-1 text-[11px] font-semibold",
-                            modelRes === "high" ? "og-primary-control bg-primary text-primary-foreground" : "text-muted-foreground",
+                            modelRes === "high"
+                              ? "og-primary-control bg-primary text-primary-foreground"
+                              : "text-muted-foreground",
                           )}
                         >
                           High
@@ -644,7 +712,9 @@ export function AppShell({
                           onClick={() => setModelRes("low")}
                           className={cn(
                             "px-2.5 py-1 text-[11px] font-semibold",
-                            modelRes === "low" ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+                            modelRes === "low"
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground",
                           )}
                         >
                           Low
