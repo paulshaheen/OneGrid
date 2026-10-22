@@ -28,6 +28,7 @@ import { Route as MapRouteImport } from './routes/map'
 import { Route as OntologyRouteImport } from './routes/ontology'
 import { Route as PostureRouteImport } from './routes/posture'
 import { Route as RiskRouteImport } from './routes/risk'
+import { Route as SapRouteImport } from './routes/sap'
 import { Route as SimulationRouteImport } from './routes/simulation'
 import { Route as ThresholdsRouteImport } from './routes/thresholds'
 import { Route as TimelineRouteImport } from './routes/timeline'
@@ -51,6 +52,7 @@ import { Route as AuthenticatedAppOntologyRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAppOverviewLegacyRouteImport } from './routes/_authenticated/app.overview-legacy'
 import { Route as AuthenticatedAppPostureRouteImport } from './routes/_authenticated/app.posture'
 import { Route as AuthenticatedAppRiskRouteImport } from './routes/_authenticated/app.risk'
+import { Route as AuthenticatedAppSapRouteImport } from './routes/_authenticated/app.sap'
 import { Route as AuthenticatedAppSimulationRouteImport } from './routes/_authenticated/app.simulation'
 import { Route as AuthenticatedAppThresholdsRouteImport } from './routes/_authenticated/app.thresholds'
 import { Route as AuthenticatedAppTimelineRouteImport } from './routes/_authenticated/app.timeline'
@@ -147,6 +149,11 @@ const PostureRoute = PostureRouteImport.update({
 const RiskRoute = RiskRouteImport.update({
   id: '/risk',
   path: '/risk',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SapRoute = SapRouteImport.update({
+  id: '/sap',
+  path: '/sap',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SimulationRoute = SimulationRouteImport.update({
@@ -274,6 +281,11 @@ const AuthenticatedAppRiskRoute = AuthenticatedAppRiskRouteImport.update({
   path: '/app/risk',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppSapRoute = AuthenticatedAppSapRouteImport.update({
+  id: '/app/sap',
+  path: '/app/sap',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAppSimulationRoute =
   AuthenticatedAppSimulationRouteImport.update({
     id: '/app/simulation',
@@ -312,6 +324,7 @@ export interface FileRoutesByFullPath {
   '/ontology': typeof OntologyRoute
   '/posture': typeof PostureRoute
   '/risk': typeof RiskRoute
+  '/sap': typeof SapRoute
   '/simulation': typeof SimulationRoute
   '/thresholds': typeof ThresholdsRoute
   '/timeline': typeof TimelineRoute
@@ -334,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
+  '/app/sap': typeof AuthenticatedAppSapRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
@@ -358,6 +372,7 @@ export interface FileRoutesByTo {
   '/ontology': typeof OntologyRoute
   '/posture': typeof PostureRoute
   '/risk': typeof RiskRoute
+  '/sap': typeof SapRoute
   '/simulation': typeof SimulationRoute
   '/thresholds': typeof ThresholdsRoute
   '/timeline': typeof TimelineRoute
@@ -380,6 +395,7 @@ export interface FileRoutesByTo {
   '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
+  '/app/sap': typeof AuthenticatedAppSapRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
@@ -406,6 +422,7 @@ export interface FileRoutesById {
   '/ontology': typeof OntologyRoute
   '/posture': typeof PostureRoute
   '/risk': typeof RiskRoute
+  '/sap': typeof SapRoute
   '/simulation': typeof SimulationRoute
   '/thresholds': typeof ThresholdsRoute
   '/timeline': typeof TimelineRoute
@@ -428,6 +445,7 @@ export interface FileRoutesById {
   '/_authenticated/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/_authenticated/app/posture': typeof AuthenticatedAppPostureRoute
   '/_authenticated/app/risk': typeof AuthenticatedAppRiskRoute
+  '/_authenticated/app/sap': typeof AuthenticatedAppSapRoute
   '/_authenticated/app/simulation': typeof AuthenticatedAppSimulationRoute
   '/_authenticated/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/_authenticated/app/timeline': typeof AuthenticatedAppTimelineRoute
@@ -454,6 +472,7 @@ export interface FileRouteTypes {
     | '/ontology'
     | '/posture'
     | '/risk'
+    | '/sap'
     | '/simulation'
     | '/thresholds'
     | '/timeline'
@@ -476,6 +495,7 @@ export interface FileRouteTypes {
     | '/app/overview-legacy'
     | '/app/posture'
     | '/app/risk'
+    | '/app/sap'
     | '/app/simulation'
     | '/app/thresholds'
     | '/app/timeline'
@@ -500,6 +520,7 @@ export interface FileRouteTypes {
     | '/ontology'
     | '/posture'
     | '/risk'
+    | '/sap'
     | '/simulation'
     | '/thresholds'
     | '/timeline'
@@ -522,6 +543,7 @@ export interface FileRouteTypes {
     | '/app/overview-legacy'
     | '/app/posture'
     | '/app/risk'
+    | '/app/sap'
     | '/app/simulation'
     | '/app/thresholds'
     | '/app/timeline'
@@ -547,6 +569,7 @@ export interface FileRouteTypes {
     | '/ontology'
     | '/posture'
     | '/risk'
+    | '/sap'
     | '/simulation'
     | '/thresholds'
     | '/timeline'
@@ -569,6 +592,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/overview-legacy'
     | '/_authenticated/app/posture'
     | '/_authenticated/app/risk'
+    | '/_authenticated/app/sap'
     | '/_authenticated/app/simulation'
     | '/_authenticated/app/thresholds'
     | '/_authenticated/app/timeline'
@@ -595,6 +619,7 @@ export interface RootRouteChildren {
   OntologyRoute: typeof OntologyRoute
   PostureRoute: typeof PostureRoute
   RiskRoute: typeof RiskRoute
+  SapRoute: typeof SapRoute
   SimulationRoute: typeof SimulationRoute
   ThresholdsRoute: typeof ThresholdsRoute
   TimelineRoute: typeof TimelineRoute
@@ -734,6 +759,13 @@ declare module '@tanstack/react-router' {
       path: '/risk'
       fullPath: '/risk'
       preLoaderRoute: typeof RiskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sap': {
+      id: '/sap'
+      path: '/sap'
+      fullPath: '/sap'
+      preLoaderRoute: typeof SapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/simulation': {
@@ -897,6 +929,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppRiskRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/sap': {
+      id: '/_authenticated/app/sap'
+      path: '/app/sap'
+      fullPath: '/app/sap'
+      preLoaderRoute: typeof AuthenticatedAppSapRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/simulation': {
       id: '/_authenticated/app/simulation'
       path: '/app/simulation'
@@ -940,6 +979,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppOverviewLegacyRoute: typeof AuthenticatedAppOverviewLegacyRoute
   AuthenticatedAppPostureRoute: typeof AuthenticatedAppPostureRoute
   AuthenticatedAppRiskRoute: typeof AuthenticatedAppRiskRoute
+  AuthenticatedAppSapRoute: typeof AuthenticatedAppSapRoute
   AuthenticatedAppSimulationRoute: typeof AuthenticatedAppSimulationRoute
   AuthenticatedAppThresholdsRoute: typeof AuthenticatedAppThresholdsRoute
   AuthenticatedAppTimelineRoute: typeof AuthenticatedAppTimelineRoute
@@ -966,6 +1006,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppOverviewLegacyRoute: AuthenticatedAppOverviewLegacyRoute,
   AuthenticatedAppPostureRoute: AuthenticatedAppPostureRoute,
   AuthenticatedAppRiskRoute: AuthenticatedAppRiskRoute,
+  AuthenticatedAppSapRoute: AuthenticatedAppSapRoute,
   AuthenticatedAppSimulationRoute: AuthenticatedAppSimulationRoute,
   AuthenticatedAppThresholdsRoute: AuthenticatedAppThresholdsRoute,
   AuthenticatedAppTimelineRoute: AuthenticatedAppTimelineRoute,
@@ -995,6 +1036,7 @@ const rootRouteChildren: RootRouteChildren = {
   OntologyRoute: OntologyRoute,
   PostureRoute: PostureRoute,
   RiskRoute: RiskRoute,
+  SapRoute: SapRoute,
   SimulationRoute: SimulationRoute,
   ThresholdsRoute: ThresholdsRoute,
   TimelineRoute: TimelineRoute,

@@ -11,6 +11,7 @@ import {
   Cpu,
   FlaskConical,
   Gauge,
+  Landmark,
   Layers,
   LayoutGrid,
   Waypoints,
@@ -237,6 +238,7 @@ const NAV: Entry[] = [
     ],
   },
   { kind: "item", to: "/ontology", label: "Ontology", icon: Network },
+  { kind: "item", to: "/sap", label: "SAP S/4HANA", icon: Landmark },
 ];
 
 const ADMIN: Group = {
@@ -275,6 +277,7 @@ const MOBILE_ROUTES = [
   { to: "/risk", label: "Storm Exposure" },
   { to: "/posture", label: "Response Posture" },
   { to: "/ontology", label: "Ontology" },
+  { to: "/sap", label: "SAP S/4HANA" },
   { to: "/esu-planner", label: "ESU Planner" },
   { to: "/infrastructure", label: "Infrastructure" },
   { to: "/thresholds", label: "Thresholds" },
