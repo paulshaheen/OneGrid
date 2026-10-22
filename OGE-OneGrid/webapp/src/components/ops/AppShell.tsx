@@ -238,7 +238,6 @@ const NAV: Entry[] = [
     ],
   },
   { kind: "item", to: "/ontology", label: "Ontology", icon: Network },
-  { kind: "item", to: "/sap", label: "SAP S/4HANA", icon: Landmark },
 ];
 
 const ADMIN: Group = {
@@ -261,6 +260,7 @@ const RESOURCES: Group = {
   icon: BookOpen,
   children: [
     { to: "/esu-planner", label: "ESU Planner", icon: Calculator },
+    { to: "/sap", label: "SAP S/4HANA", icon: Landmark },
     { label: "Nuclear Permitting", icon: Atom, soon: true },
   ],
 };
@@ -277,8 +277,8 @@ const MOBILE_ROUTES = [
   { to: "/risk", label: "Storm Exposure" },
   { to: "/posture", label: "Response Posture" },
   { to: "/ontology", label: "Ontology" },
-  { to: "/sap", label: "SAP S/4HANA" },
   { to: "/esu-planner", label: "ESU Planner" },
+  { to: "/sap", label: "SAP S/4HANA" },
   { to: "/infrastructure", label: "Infrastructure" },
   { to: "/thresholds", label: "Thresholds" },
   { to: "/governance", label: "Governance & Security" },
