@@ -12,15 +12,18 @@ from __future__ import annotations
 import math
 
 from .config import Config
+from .nhc import NhcStorm, nearest
 from .tracking import Track
 
 _MS_TO_MPH = 2.236936
 _GUST_FACTOR = 1.25
 
 
-def tracks_to_events(config: Config, tracks: list[Track]) -> list[dict]:
+def tracks_to_events(
+    config: Config, tracks: list[Track], official: list[NhcStorm] | None = None
+) -> list[dict]:
     events = [
-        _to_event(config, track, index)
+        _to_event(config, track, index, official)
         for index, track in enumerate(
             sorted(tracks, key=lambda t: min(c.pressure_hpa for c in t)), start=1
         )
@@ -28,7 +31,23 @@ def tracks_to_events(config: Config, tracks: list[Track]) -> list[dict]:
     return events
 
 
-def _to_event(config: Config, track: Track, index: int) -> dict:
+def _name(config: Config, track: Track, index: int, official: list[NhcStorm] | None) -> str:
+    # Official names are matched by position against NHC's active storms. Detection
+    # order changes between cycles, so rank-based STORM_NAMES is only a fallback for
+    # when the NHC feed could not be read.
+    if official is not None:
+        match = nearest(track[0].lat, track[0].lon, official, config.nhc_match_km)
+        if match and match.name:
+            return match.name
+        return f"Aurora system {index}"
+    if index - 1 < len(config.storm_names):
+        return config.storm_names[index - 1]
+    return f"Aurora system {index}"
+
+
+def _to_event(
+    config: Config, track: Track, index: int, official: list[NhcStorm] | None
+) -> dict:
     current = track[0]
     peak_wind_ms = max(c.wind_ms for c in track)
     peak_wind_mph = peak_wind_ms * _MS_TO_MPH
@@ -37,11 +56,7 @@ def _to_event(config: Config, track: Track, index: int) -> dict:
     movement_deg, movement_mph = _movement(track)
     stamp = config.analysis_time
     event_id = f"aurora-{stamp:%Y%m%dT%H}-{index}"
-    name = (
-        config.storm_names[index - 1]
-        if index - 1 < len(config.storm_names)
-        else f"Aurora system {index}"
-    )
+    name = _name(config, track, index, official)
 
     return {
         "id": event_id,

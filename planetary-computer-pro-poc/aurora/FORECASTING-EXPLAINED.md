@@ -82,8 +82,18 @@ Each stage below names the real code file (`aurora_pipeline/…`) that does it.
     cyclone.
   - Restrict the search to `DETECTION_BBOX` (`minLon,minLat,maxLon,maxLat`) so you
     only track storms in your operating region.
-- Output: a list of **seeds** (each a lat/lon + detected intensity). `Seeded N
-  cyclone tracker(s)` in the logs is this count.
+- Output: a list of **seeds** (each a lat/lon + detected intensity).
+- **Official-storm filter** (`nhc.py`): the detector also catches strong mid-latitude
+  (extratropical) lows, so by default (`STORM_FILTER=nhc`) only seeds within
+  `NHC_MATCH_KM` of a storm on NHC's
+  [`CurrentStorms.json`](https://www.nhc.noaa.gov/CurrentStorms.json) are kept, and
+  each published event takes its **official name by position**. If the NHC feed is
+  unreachable, seeds poleward of `TROPICAL_MAX_LAT` are dropped instead and
+  `STORM_NAMES` is used as a fallback. Only names and positions come from NHC;
+  intensity and track stay Aurora's. Historical replays (`ANALYSIS_TIME` more than a
+  day old) automatically use the tropical-latitude filter, since NHC's feed only
+  lists storms active now. `Seeded N cyclone tracker(s)` in the logs is
+  the count after this filter.
 - **If N = 0, the endpoint is never called** — no storms, no forecast, empty publish.
 
 ### (4) Aurora endpoint inference — `inference.py` + the deployed GPU endpoint
@@ -165,7 +175,9 @@ All are environment variables on the job (validated up front by `config.py`):
 | `DETECTION_BBOX` | Region to detect storms: `minLon,minLat,maxLon,maxLat`. | `-125,7,-55,50` (default: E Pacific + Atlantic around North America), `-100,15,-70,35` (Gulf only), or `-140,10,-50,55` (US-wide) |
 | `AURORA_NUM_STEPS` | Forecast length in 6 h steps (1–60). | `20` = 120 h |
 | `AURORA_MODEL_NAME` | Which Aurora checkpoint. | `aurora-0.25-finetuned` |
-| `STORM_NAMES` | Optional labels for detected storms (strongest first). | `Hurricane Ida` |
+| `STORM_FILTER` | Which detected systems to publish: `nhc` (only NHC-tracked storms, named by position), `tropical` (equatorward of `TROPICAL_MAX_LAT`), or `none`. | `nhc` (default) |
+| `NHC_MATCH_KM` / `TROPICAL_MAX_LAT` | Max distance from an NHC storm to count as a match; latitude cutoff for the fallback filter. | `350` / `30` |
+| `STORM_NAMES` | Fallback labels (detection order) used only when the NHC feed is unavailable. | `Hurricane Ida` |
 | `AURORA_ENDPOINT` / `AURORA_ENDPOINT_TOKEN` | Endpoint URI + key. | scoring URI + secret |
 
 **Historical vs. live:** pin `ANALYSIS_TIME` to a past date to reproduce a known storm

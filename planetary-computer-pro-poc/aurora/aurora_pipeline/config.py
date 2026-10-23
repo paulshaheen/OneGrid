@@ -13,6 +13,8 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from .nhc import DEFAULT_NHC_URL
+
 log = logging.getLogger("aurora_pipeline")
 
 # Aurora's fine-tuned 0.25-degree model expects these 13 pressure levels, in hPa.
@@ -84,9 +86,18 @@ class Config:
 
     detection_bbox: BBox
 
-    # Optional operator-supplied names for detected systems, in intensity order
-    # (strongest first). Aurora only detects systems by genesis, so any official
-    # name is a label the operator attaches, not something the model infers.
+    # Which detected systems to forecast and how to name them:
+    #   "nhc"      - keep only systems NHC is advising on, named by position (default)
+    #   "tropical" - keep systems equatorward of TROPICAL_MAX_LAT
+    #   "none"     - keep every detected low (diagnostics only)
+    storm_filter: str
+    nhc_url: str
+    nhc_match_km: float
+    tropical_max_lat: float
+
+    # Fallback names when the NHC feed is unavailable, in detection order. Aurora
+    # only detects systems by genesis, so any official name is a label attached
+    # from outside the model, not something the model infers.
     storm_names: tuple[str, ...]
 
     output_container_url: str | None
@@ -140,6 +151,13 @@ def _parse_analysis_time(raw: str) -> datetime:
     if parsed.hour not in SYNOPTIC_HOURS:
         raise SystemExit("ANALYSIS_TIME hour must be one of 00, 06, 12, 18 UTC.")
     return parsed
+
+
+def _storm_filter() -> str:
+    mode = os.environ.get("STORM_FILTER", "nhc").strip().lower() or "nhc"
+    if mode not in {"nhc", "tropical", "none"}:
+        raise SystemExit("STORM_FILTER must be 'nhc' (default), 'tropical' or 'none'.")
+    return mode
 
 
 def load_config() -> Config:
@@ -207,6 +225,10 @@ def load_config() -> Config:
         static_name=os.environ.get("AURORA_STATIC_NAME", "").strip() or DEFAULT_STATIC_NAME,
         analysis_time=analysis_time,
         detection_bbox=_parse_bbox(os.environ.get("DETECTION_BBOX", "-125,7,-55,50")),
+        storm_filter=_storm_filter(),
+        nhc_url=os.environ.get("NHC_URL", "").strip() or DEFAULT_NHC_URL,
+        nhc_match_km=float(os.environ.get("NHC_MATCH_KM", "350")),
+        tropical_max_lat=float(os.environ.get("TROPICAL_MAX_LAT", "30")),
         storm_names=tuple(
             n.strip() for n in os.environ.get("STORM_NAMES", "").split(",") if n.strip()
         ),
