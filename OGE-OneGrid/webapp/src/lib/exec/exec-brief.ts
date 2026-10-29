@@ -77,6 +77,8 @@ export interface BriefInput {
   postures: AssetPosture[] | null;
   horizonHours: number;
   nowIso: string;
+  /** Data sources that failed to load (e.g. "equipment health"); shown instead of hiding gaps. */
+  dataGaps?: string[];
 }
 
 export interface Action {
@@ -154,6 +156,7 @@ export interface ExecBrief {
   monthly: OutageCostBasis["monthly"];
   sources: string[];
   asOfIso: string;
+  dataGaps: string[];
 }
 
 const EXPOSED = new Set(["elevated", "high", "critical"]);
@@ -504,8 +507,14 @@ export function buildExecBrief(input: BriefInput): ExecBrief {
       (x.risk.hoursToImpact ?? 999) <= 72,
   );
   const urgentEquip = equip.some((r) => failureProbability(r) >= 0.2);
+  const dataGaps = input.dataGaps ?? [];
+  const equipmentUnavailable = dataGaps.some((g) => /equipment/i.test(g));
   const status: BriefStatus =
-    urgentWeather || urgentEquip ? "act" : inPath.length || equip.length ? "watch" : "clear";
+    urgentWeather || urgentEquip
+      ? "act"
+      : inPath.length || equip.length || dataGaps.length
+        ? "watch"
+        : "clear";
   const count = (n: number) => WORDS[n] ?? String(n);
   const top = shownRisks[0];
 
@@ -528,6 +537,14 @@ export function buildExecBrief(input: BriefInput): ExecBrief {
       (event?.name
         ? `${stormName} poses no threat to the ${v.estate}.`
         : `No storm threat to the ${v.estate}.`);
+  } else if (equipmentUnavailable) {
+    // Never report "all clear" when the equipment data could not be loaded.
+    title = "Equipment data is unavailable";
+    summary = `Equipment health could not be loaded, so risks may be missing. ${
+      event?.name
+        ? `${stormName} poses no threat to the ${v.estate}.`
+        : `No storm threat to the ${v.estate}.`
+    }`;
   } else {
     title = "All clear";
     summary = `No storm threat and no critical equipment issues across the ${v.estate}.`;
@@ -572,6 +589,7 @@ export function buildExecBrief(input: BriefInput): ExecBrief {
     monthly: sap?.monthly ?? [],
     sources,
     asOfIso: input.nowIso,
+    dataGaps,
   };
 }
 

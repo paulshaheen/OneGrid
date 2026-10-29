@@ -137,7 +137,9 @@ export function ExecActions({
           </ol>
         ) : (
           <p className="px-6 py-8 text-center text-muted-foreground">
-            No decisions are needed this week.
+            {brief.dataGaps.length
+              ? "Some data could not be loaded, so this list may be incomplete."
+              : "No decisions are needed this week."}
           </p>
         )}
       </div>

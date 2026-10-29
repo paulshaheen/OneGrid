@@ -190,9 +190,19 @@ export function ExecBriefPage() {
   const snap = useOpsSnapshot(base, HORIZON_HOURS);
   const postures = useQuery(postureQuery(base));
   const exposure = useApi("/api/exposure") as { data: ExposureRow[] | null };
-  const fleet = useApi("/api/fleet-assets") as { data: FleetAssetRow[] | null; loading: boolean };
-  const fleetHealth = useApi("/api/fleet-health") as { data: FleetHealth | null };
-  const wo = useApi("/api/work-orders-summary") as { data: WorkOrderSummary | null };
+  const fleet = useApi("/api/fleet-assets") as {
+    data: FleetAssetRow[] | null;
+    loading: boolean;
+    error: string | null;
+  };
+  const fleetHealth = useApi("/api/fleet-health") as {
+    data: FleetHealth | null;
+    error: string | null;
+  };
+  const wo = useApi("/api/work-orders-summary") as {
+    data: WorkOrderSummary | null;
+    error: string | null;
+  };
   const sap = useQuery({
     queryKey: ["exec-sap-basis", solution],
     queryFn: async () => outageCostBasis((await loadSapDataset(solution)).outages),
@@ -216,6 +226,16 @@ export function ExecBriefPage() {
   const [question, setQuestion] = useState("");
 
   const loading = snap.isLoading || fleet.loading || sap.isLoading;
+  const dataGaps = useMemo(
+    () =>
+      [
+        fleet.error ? "equipment health" : null,
+        fleetHealth.error ? "fleet health score" : null,
+        wo.error ? "work orders" : null,
+        sap.isError ? "SAP outage history" : null,
+      ].filter((g): g is string => !!g),
+    [fleet.error, fleetHealth.error, wo.error, sap.isError],
+  );
   const brief = useMemo(
     () =>
       buildExecBrief({
@@ -231,6 +251,7 @@ export function ExecBriefPage() {
         postures: postures.data ?? null,
         horizonHours: HORIZON_HOURS,
         nowIso: new Date().toISOString(),
+        dataGaps,
       }),
     [
       solution,
@@ -243,6 +264,7 @@ export function ExecBriefPage() {
       wo.data,
       sap.data,
       postures.data,
+      dataGaps,
     ],
   );
 
@@ -255,6 +277,7 @@ export function ExecBriefPage() {
   }
 
   const st = STATUS[brief.status];
+  const equipmentGap = brief.dataGaps.some((g) => /equipment/i.test(g));
   const selected = brief.risks.find((r) => r.key === selectedKey) ?? brief.risks[0] ?? null;
   const placeholder = selected
     ? `Ask ${brand.name} — e.g. “${selected.action.question}”`
@@ -355,6 +378,20 @@ export function ExecBriefPage() {
           </div>
         </header>
 
+        {brief.dataGaps.length > 0 && (
+          <div
+            role="alert"
+            className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+            <div>
+              <span className="font-semibold">Some data couldn&apos;t be loaded: </span>
+              {brief.dataGaps.join(", ")}. Figures below may be incomplete — the operations team has
+              been alerted.
+            </div>
+          </div>
+        )}
+
         {layout === "actions" ? (
           <ExecActions brief={brief} brandName={brand.name} solution={solution} onAsk={ask} />
         ) : (
@@ -370,8 +407,9 @@ export function ExecBriefPage() {
                 </div>
                 <HealthBullet score={brief.strip.health.score} />
                 <div className="mt-1.5 text-xs text-muted-foreground">
-                  {brief.strip.health.critical} critical of {brief.strip.health.monitored} assets
-                  monitored
+                  {equipmentGap
+                    ? "Data unavailable"
+                    : `${brief.strip.health.critical} critical of ${brief.strip.health.monitored} assets monitored`}
                 </div>
               </StripCell>
               <StripCell
@@ -463,8 +501,13 @@ export function ExecBriefPage() {
                   </>
                 ) : (
                   <div className="mt-6 flex items-center gap-3 rounded-xl bg-emerald-500/8 p-4 text-sm">
-                    <IconChip icon={Activity} tone="good" />
-                    Nothing needs executive attention right now.
+                    <IconChip
+                      icon={equipmentGap ? AlertTriangle : Activity}
+                      tone={equipmentGap ? "warn" : "good"}
+                    />
+                    {equipmentGap
+                      ? "Equipment data is unavailable, so risks can't be ranked right now."
+                      : "Nothing needs executive attention right now."}
                   </div>
                 )}
               </Panel>
@@ -483,12 +526,16 @@ export function ExecBriefPage() {
                   <div className="mt-0.5 text-2xl font-semibold tabular-nums leading-8">
                     {brief.money
                       ? `${formatUsd(brief.money.low)} – ${formatUsd(brief.money.high)}`
-                      : "Minimal"}
+                      : equipmentGap
+                        ? "Unavailable"
+                        : "Minimal"}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {brief.money
                       ? "Typical to severe outcome · model estimate"
-                      : "No material exposure identified"}
+                      : equipmentGap
+                        ? "Equipment data could not be loaded"
+                        : "No material exposure identified"}
                     {brief.money && (
                       <button
                         onClick={() => setShowInfo(true)}
