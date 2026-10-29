@@ -21,6 +21,7 @@ import { Route as DeploymentRouteImport } from './routes/deployment'
 import { Route as DistributionNetworkRouteImport } from './routes/distribution-network'
 import { Route as EsuPlannerRouteImport } from './routes/esu-planner'
 import { Route as EventsRouteImport } from './routes/events'
+import { Route as ExecRouteImport } from './routes/exec'
 import { Route as GovernanceRouteImport } from './routes/governance'
 import { Route as InfrastructureRouteImport } from './routes/infrastructure'
 import { Route as MaintenanceRouteImport } from './routes/maintenance'
@@ -44,6 +45,7 @@ import { Route as AuthenticatedAppDeploymentRouteImport } from './routes/_authen
 import { Route as AuthenticatedAppDistributionNetworkRouteImport } from './routes/_authenticated/app.distribution-network'
 import { Route as AuthenticatedAppEsuPlannerRouteImport } from './routes/_authenticated/app.esu-planner'
 import { Route as AuthenticatedAppEventsRouteImport } from './routes/_authenticated/app.events'
+import { Route as AuthenticatedAppExecRouteImport } from './routes/_authenticated/app.exec'
 import { Route as AuthenticatedAppGovernanceRouteImport } from './routes/_authenticated/app.governance'
 import { Route as AuthenticatedAppInfrastructureRouteImport } from './routes/_authenticated/app.infrastructure'
 import { Route as AuthenticatedAppMaintenanceRouteImport } from './routes/_authenticated/app.maintenance'
@@ -114,6 +116,11 @@ const EsuPlannerRoute = EsuPlannerRouteImport.update({
 const EventsRoute = EventsRouteImport.update({
   id: '/events',
   path: '/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExecRoute = ExecRouteImport.update({
+  id: '/exec',
+  path: '/exec',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GovernanceRoute = GovernanceRouteImport.update({
@@ -236,6 +243,11 @@ const AuthenticatedAppEventsRoute = AuthenticatedAppEventsRouteImport.update({
   path: '/app/events',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppExecRoute = AuthenticatedAppExecRouteImport.update({
+  id: '/app/exec',
+  path: '/app/exec',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAppGovernanceRoute =
   AuthenticatedAppGovernanceRouteImport.update({
     id: '/app/governance',
@@ -317,6 +329,7 @@ export interface FileRoutesByFullPath {
   '/distribution-network': typeof DistributionNetworkRoute
   '/esu-planner': typeof EsuPlannerRoute
   '/events': typeof EventsRoute
+  '/exec': typeof ExecRoute
   '/governance': typeof GovernanceRoute
   '/infrastructure': typeof InfrastructureRoute
   '/maintenance': typeof MaintenanceRoute
@@ -339,6 +352,7 @@ export interface FileRoutesByFullPath {
   '/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
   '/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
   '/app/events': typeof AuthenticatedAppEventsRoute
+  '/app/exec': typeof AuthenticatedAppExecRoute
   '/app/governance': typeof AuthenticatedAppGovernanceRoute
   '/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
   '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
@@ -365,6 +379,7 @@ export interface FileRoutesByTo {
   '/distribution-network': typeof DistributionNetworkRoute
   '/esu-planner': typeof EsuPlannerRoute
   '/events': typeof EventsRoute
+  '/exec': typeof ExecRoute
   '/governance': typeof GovernanceRoute
   '/infrastructure': typeof InfrastructureRoute
   '/maintenance': typeof MaintenanceRoute
@@ -387,6 +402,7 @@ export interface FileRoutesByTo {
   '/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
   '/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
   '/app/events': typeof AuthenticatedAppEventsRoute
+  '/app/exec': typeof AuthenticatedAppExecRoute
   '/app/governance': typeof AuthenticatedAppGovernanceRoute
   '/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
   '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
@@ -415,6 +431,7 @@ export interface FileRoutesById {
   '/distribution-network': typeof DistributionNetworkRoute
   '/esu-planner': typeof EsuPlannerRoute
   '/events': typeof EventsRoute
+  '/exec': typeof ExecRoute
   '/governance': typeof GovernanceRoute
   '/infrastructure': typeof InfrastructureRoute
   '/maintenance': typeof MaintenanceRoute
@@ -437,6 +454,7 @@ export interface FileRoutesById {
   '/_authenticated/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
   '/_authenticated/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
   '/_authenticated/app/events': typeof AuthenticatedAppEventsRoute
+  '/_authenticated/app/exec': typeof AuthenticatedAppExecRoute
   '/_authenticated/app/governance': typeof AuthenticatedAppGovernanceRoute
   '/_authenticated/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
   '/_authenticated/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
@@ -465,6 +483,7 @@ export interface FileRouteTypes {
     | '/distribution-network'
     | '/esu-planner'
     | '/events'
+    | '/exec'
     | '/governance'
     | '/infrastructure'
     | '/maintenance'
@@ -487,6 +506,7 @@ export interface FileRouteTypes {
     | '/app/distribution-network'
     | '/app/esu-planner'
     | '/app/events'
+    | '/app/exec'
     | '/app/governance'
     | '/app/infrastructure'
     | '/app/maintenance'
@@ -513,6 +533,7 @@ export interface FileRouteTypes {
     | '/distribution-network'
     | '/esu-planner'
     | '/events'
+    | '/exec'
     | '/governance'
     | '/infrastructure'
     | '/maintenance'
@@ -535,6 +556,7 @@ export interface FileRouteTypes {
     | '/app/distribution-network'
     | '/app/esu-planner'
     | '/app/events'
+    | '/app/exec'
     | '/app/governance'
     | '/app/infrastructure'
     | '/app/maintenance'
@@ -562,6 +584,7 @@ export interface FileRouteTypes {
     | '/distribution-network'
     | '/esu-planner'
     | '/events'
+    | '/exec'
     | '/governance'
     | '/infrastructure'
     | '/maintenance'
@@ -584,6 +607,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/distribution-network'
     | '/_authenticated/app/esu-planner'
     | '/_authenticated/app/events'
+    | '/_authenticated/app/exec'
     | '/_authenticated/app/governance'
     | '/_authenticated/app/infrastructure'
     | '/_authenticated/app/maintenance'
@@ -612,6 +636,7 @@ export interface RootRouteChildren {
   DistributionNetworkRoute: typeof DistributionNetworkRoute
   EsuPlannerRoute: typeof EsuPlannerRoute
   EventsRoute: typeof EventsRoute
+  ExecRoute: typeof ExecRoute
   GovernanceRoute: typeof GovernanceRoute
   InfrastructureRoute: typeof InfrastructureRoute
   MaintenanceRoute: typeof MaintenanceRoute
@@ -710,6 +735,13 @@ declare module '@tanstack/react-router' {
       path: '/events'
       fullPath: '/events'
       preLoaderRoute: typeof EventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/exec': {
+      id: '/exec'
+      path: '/exec'
+      fullPath: '/exec'
+      preLoaderRoute: typeof ExecRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/governance': {
@@ -873,6 +905,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppEventsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/exec': {
+      id: '/_authenticated/app/exec'
+      path: '/app/exec'
+      fullPath: '/app/exec'
+      preLoaderRoute: typeof AuthenticatedAppExecRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/governance': {
       id: '/_authenticated/app/governance'
       path: '/app/governance'
@@ -971,6 +1010,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppDistributionNetworkRoute: typeof AuthenticatedAppDistributionNetworkRoute
   AuthenticatedAppEsuPlannerRoute: typeof AuthenticatedAppEsuPlannerRoute
   AuthenticatedAppEventsRoute: typeof AuthenticatedAppEventsRoute
+  AuthenticatedAppExecRoute: typeof AuthenticatedAppExecRoute
   AuthenticatedAppGovernanceRoute: typeof AuthenticatedAppGovernanceRoute
   AuthenticatedAppInfrastructureRoute: typeof AuthenticatedAppInfrastructureRoute
   AuthenticatedAppMaintenanceRoute: typeof AuthenticatedAppMaintenanceRoute
@@ -998,6 +1038,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedAppDistributionNetworkRoute,
   AuthenticatedAppEsuPlannerRoute: AuthenticatedAppEsuPlannerRoute,
   AuthenticatedAppEventsRoute: AuthenticatedAppEventsRoute,
+  AuthenticatedAppExecRoute: AuthenticatedAppExecRoute,
   AuthenticatedAppGovernanceRoute: AuthenticatedAppGovernanceRoute,
   AuthenticatedAppInfrastructureRoute: AuthenticatedAppInfrastructureRoute,
   AuthenticatedAppMaintenanceRoute: AuthenticatedAppMaintenanceRoute,
@@ -1029,6 +1070,7 @@ const rootRouteChildren: RootRouteChildren = {
   DistributionNetworkRoute: DistributionNetworkRoute,
   EsuPlannerRoute: EsuPlannerRoute,
   EventsRoute: EventsRoute,
+  ExecRoute: ExecRoute,
   GovernanceRoute: GovernanceRoute,
   InfrastructureRoute: InfrastructureRoute,
   MaintenanceRoute: MaintenanceRoute,

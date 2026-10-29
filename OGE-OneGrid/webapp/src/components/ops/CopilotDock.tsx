@@ -273,7 +273,16 @@ function twinAnswer(q: string, tw: TwinSummary): Msg {
   };
 }
 
-export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+export function CopilotDock({
+  open,
+  setOpen,
+  hideLauncher = false,
+}: {
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  /** Hide the floating "Ask the data" button (the page provides its own ask entry). */
+  hideLauncher?: boolean;
+}) {
   const base = useOpsBase();
 
   const [model, setModel] = useState("");
@@ -480,7 +489,9 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
     : ["Gathering live data — weather, exposure, outages, work orders…", `Asking ${currentModel?.name || "the model"}…`];
   const [agentStatus, setAgentStatus] = useState("");
 
-  const send = async (text?: string) => {
+  // `direct` skips the keyword shortcuts (manuals / canned twin answers) and always asks the
+  // grounded model — used by the executive brief's "Why?" buttons.
+  const send = async (text?: string, opts?: { direct?: boolean }) => {
     const t = (text ?? input).trim();
     if (!t || busy) return;
     // BYO Copilot selected but not connected → prompt to connect instead of sending.
@@ -497,7 +508,7 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
     // Advance to the "asking the model" step shortly after grounding kicks off.
     if (!useDataAgent) stageTimer.current = window.setTimeout(() => setStage(1), 900);
     let ai: Msg;
-    if (/manual|how\s+(?:do|to)\b.*(?:fix|resolv)|resolve work order/i.test(t)) {
+    if (!opts?.direct && /manual|how\s+(?:do|to)\b.*(?:fix|resolv)|resolve work order/i.test(t)) {
       // Ground "how to fix" questions in the Foundry-IQ equipment manuals.
       try {
         const r = await fetch(`/api/manuals/search?q=${encodeURIComponent(t)}&top=1`).then((res) =>
@@ -514,7 +525,7 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
       } catch {
         ai = { who: "ai", text: "The equipment manuals aren't available right now." };
       }
-    } else if (TWIN_RE.test(t) && twinRef.current) {
+    } else if (!opts?.direct && TWIN_RE.test(t) && twinRef.current) {
       ai = twinAnswer(t, twinRef.current);
     } else if (useDataAgent) {
       // Route to the published Fabric Data Agent (SSE: status updates + final reply).
@@ -584,8 +595,10 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
   useEffect(() => {
     const onAsk = (e: Event) => {
       setOpen(true);
-      const msg = (e as CustomEvent).detail?.message;
-      if (typeof msg === "string" && msg.trim()) setTimeout(() => sendRef.current(msg), 60);
+      const detail = (e as CustomEvent).detail as { message?: unknown; direct?: boolean } | null;
+      const msg = detail?.message;
+      if (typeof msg === "string" && msg.trim())
+        setTimeout(() => sendRef.current(msg, { direct: !!detail?.direct }), 60);
     };
     const onOpen = () => setOpen(true);
     window.addEventListener("onegrid-ask", onAsk);
@@ -599,6 +612,7 @@ export function CopilotDock({ open, setOpen }: { open: boolean; setOpen: (v: boo
   }, [setOpen]);
 
   if (!open) {
+    if (hideLauncher) return null;
     return (
       <button
         onClick={() => setOpen(true)}

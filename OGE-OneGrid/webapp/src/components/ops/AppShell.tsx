@@ -267,6 +267,7 @@ const RESOURCES: Group = {
 
 const GROUPS = [...NAV.filter((e): e is Group => e.kind === "group"), RESOURCES, ADMIN];
 const MOBILE_ROUTES = [
+  { to: "/exec", label: "Executive brief" },
   { to: "/", label: "Overview" },
   { to: "/asset-explorer", label: "Asset Explorer" },
   { to: "/control-room", label: "Control Room" },
@@ -335,14 +336,43 @@ function OneRigMark({ className }: { className?: string }) {
   );
 }
 
+/** Executive / Operations switch shown in the header of both experiences. */
+function ViewSwitch({ exec }: { exec: boolean }) {
+  const seg = (active: boolean) =>
+    cn(
+      "px-3 py-1 text-[12px] font-semibold transition-colors",
+      active
+        ? "og-primary-control bg-primary text-primary-foreground"
+        : "text-muted-foreground hover:text-foreground",
+    );
+  return (
+    <span
+      className="inline-flex overflow-hidden rounded-full border"
+      role="group"
+      aria-label="Experience"
+    >
+      <OpsLink to="/exec" className={seg(exec)} aria-current={exec ? "page" : undefined}>
+        Executive
+      </OpsLink>
+      <OpsLink to="/" className={seg(!exec)} aria-current={!exec ? "page" : undefined}>
+        Operations
+      </OpsLink>
+    </span>
+  );
+}
+
 export function AppShell({
   children,
   fullHeight = false,
+  variant = "ops",
 }: {
   children: ReactNode;
   /** Command-center pages fill the viewport and scroll inside their own panes. */
   fullHeight?: boolean;
+  /** "exec" = the one-page executive brief: no side menu, search or alert bell. */
+  variant?: "ops" | "exec";
 }) {
+  const exec = variant === "exec";
   const router = useRouter();
   const dark = useIsDark();
   const setDark = setThemeDark;
@@ -439,6 +469,7 @@ export function AppShell({
         className={cn(
           "og-sidebar-skin sticky top-0 hidden h-screen shrink-0 flex-col bg-sidebar transition-[width] duration-300 ease-in-out lg:flex",
           collapsed ? "w-16" : "w-60",
+          exec && "lg:hidden",
         )}
       >
         {!collapsed && (
@@ -574,10 +605,35 @@ export function AppShell({
         style={{ marginRight: copilotOpen && isDesktop ? 400 : 0 }}
       >
         <header className="og-header-skin sticky top-0 z-[70] flex h-14 items-center gap-3 border-b bg-surface/95 px-4 backdrop-blur">
+          {exec && (
+            <div className="flex items-center gap-2.5">
+              <span
+                className="grid size-8 place-items-center rounded-md"
+                style={{
+                  background:
+                    solution === "og"
+                      ? "linear-gradient(135deg, #f59e0b, #b45309)"
+                      : "linear-gradient(135deg, var(--color-primary), oklch(0.5 0.145 251))",
+                }}
+              >
+                {solution === "og" ? (
+                  <OneRigMark className="size-5" />
+                ) : (
+                  <OneGridMark className="size-5" />
+                )}
+              </span>
+              <div className="text-[13px] font-semibold tracking-tight">
+                ONE<span style={{ color: brand.accent }}>{brand.word}</span>
+              </div>
+            </div>
+          )}
           {/* Collapse the side menu (desktop) */}
           <button
             onClick={toggleCollapsed}
-            className="hidden size-8 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:grid"
+            className={cn(
+              "hidden size-8 place-items-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:grid",
+              exec && "lg:hidden",
+            )}
             aria-label={collapsed ? "Expand menu" : "Collapse menu"}
             title={collapsed ? "Expand menu" : "Collapse menu"}
           >
@@ -588,7 +644,7 @@ export function AppShell({
             )}
           </button>
           {/* Mobile nav */}
-          <div className="lg:hidden">
+          <div className={cn("lg:hidden", exec && "hidden")}>
             <select
               className="rounded-sm border bg-card px-2 py-1.5 text-xs"
               value={path}
@@ -603,10 +659,11 @@ export function AppShell({
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <GlobalSearch />
+            <ViewSwitch exec={exec} />
+            {!exec && <GlobalSearch />}
 
             {/* Alerts: quick dropdown of current notifications + link to the full page */}
-            <NotificationBell />
+            {!exec && <NotificationBell />}
 
             {/* Profile */}
             <div className="relative">
@@ -744,7 +801,7 @@ export function AppShell({
           {children}
         </main>
       </div>
-      <CopilotDock open={copilotOpen} setOpen={setCopilotOpen} />
+      <CopilotDock open={copilotOpen} setOpen={setCopilotOpen} hideLauncher={exec} />
     </div>
   );
 }
