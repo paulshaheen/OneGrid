@@ -294,8 +294,8 @@ export function ExecBriefPage() {
             >
               {(
                 [
-                  ["actions", "Actions", ListChecks],
                   ["dashboard", "Dashboard", LayoutDashboard],
+                  ["actions", "Actions", ListChecks],
                 ] as const
               ).map(([value, label, Icon]) => (
                 <button
