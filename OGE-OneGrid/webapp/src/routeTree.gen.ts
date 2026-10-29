@@ -56,6 +56,7 @@ import { Route as AuthenticatedAppPostureRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppRiskRouteImport } from './routes/_authenticated/app.risk'
 import { Route as AuthenticatedAppSapRouteImport } from './routes/_authenticated/app.sap'
 import { Route as AuthenticatedAppSimulationRouteImport } from './routes/_authenticated/app.simulation'
+import { Route as AuthenticatedAppSreRouteImport } from './routes/_authenticated/app.sre'
 import { Route as AuthenticatedAppThresholdsRouteImport } from './routes/_authenticated/app.thresholds'
 import { Route as AuthenticatedAppTimelineRouteImport } from './routes/_authenticated/app.timeline'
 
@@ -304,6 +305,11 @@ const AuthenticatedAppSimulationRoute =
     path: '/app/simulation',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAppSreRoute = AuthenticatedAppSreRouteImport.update({
+  id: '/app/sre',
+  path: '/app/sre',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAppThresholdsRoute =
   AuthenticatedAppThresholdsRouteImport.update({
     id: '/app/thresholds',
@@ -363,6 +369,7 @@ export interface FileRoutesByFullPath {
   '/app/risk': typeof AuthenticatedAppRiskRoute
   '/app/sap': typeof AuthenticatedAppSapRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
+  '/app/sre': typeof AuthenticatedAppSreRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
   '/app/': typeof AuthenticatedAppIndexRoute
@@ -413,6 +420,7 @@ export interface FileRoutesByTo {
   '/app/risk': typeof AuthenticatedAppRiskRoute
   '/app/sap': typeof AuthenticatedAppSapRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
+  '/app/sre': typeof AuthenticatedAppSreRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
   '/app': typeof AuthenticatedAppIndexRoute
@@ -465,6 +473,7 @@ export interface FileRoutesById {
   '/_authenticated/app/risk': typeof AuthenticatedAppRiskRoute
   '/_authenticated/app/sap': typeof AuthenticatedAppSapRoute
   '/_authenticated/app/simulation': typeof AuthenticatedAppSimulationRoute
+  '/_authenticated/app/sre': typeof AuthenticatedAppSreRoute
   '/_authenticated/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/_authenticated/app/timeline': typeof AuthenticatedAppTimelineRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
@@ -517,6 +526,7 @@ export interface FileRouteTypes {
     | '/app/risk'
     | '/app/sap'
     | '/app/simulation'
+    | '/app/sre'
     | '/app/thresholds'
     | '/app/timeline'
     | '/app/'
@@ -567,6 +577,7 @@ export interface FileRouteTypes {
     | '/app/risk'
     | '/app/sap'
     | '/app/simulation'
+    | '/app/sre'
     | '/app/thresholds'
     | '/app/timeline'
     | '/app'
@@ -618,6 +629,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/risk'
     | '/_authenticated/app/sap'
     | '/_authenticated/app/simulation'
+    | '/_authenticated/app/sre'
     | '/_authenticated/app/thresholds'
     | '/_authenticated/app/timeline'
     | '/_authenticated/app/'
@@ -982,6 +994,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppSimulationRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/sre': {
+      id: '/_authenticated/app/sre'
+      path: '/app/sre'
+      fullPath: '/app/sre'
+      preLoaderRoute: typeof AuthenticatedAppSreRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/thresholds': {
       id: '/_authenticated/app/thresholds'
       path: '/app/thresholds'
@@ -1021,6 +1040,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppRiskRoute: typeof AuthenticatedAppRiskRoute
   AuthenticatedAppSapRoute: typeof AuthenticatedAppSapRoute
   AuthenticatedAppSimulationRoute: typeof AuthenticatedAppSimulationRoute
+  AuthenticatedAppSreRoute: typeof AuthenticatedAppSreRoute
   AuthenticatedAppThresholdsRoute: typeof AuthenticatedAppThresholdsRoute
   AuthenticatedAppTimelineRoute: typeof AuthenticatedAppTimelineRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
@@ -1049,6 +1069,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppRiskRoute: AuthenticatedAppRiskRoute,
   AuthenticatedAppSapRoute: AuthenticatedAppSapRoute,
   AuthenticatedAppSimulationRoute: AuthenticatedAppSimulationRoute,
+  AuthenticatedAppSreRoute: AuthenticatedAppSreRoute,
   AuthenticatedAppThresholdsRoute: AuthenticatedAppThresholdsRoute,
   AuthenticatedAppTimelineRoute: AuthenticatedAppTimelineRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,

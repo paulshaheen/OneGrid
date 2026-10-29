@@ -23,6 +23,7 @@ import {
   PauseCircle,
   Server,
   ServerCog,
+  Siren,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -250,6 +251,7 @@ const ADMIN: Group = {
     { to: "/thresholds", label: "Thresholds", icon: SlidersHorizontal },
     { to: "/governance", label: "Governance & Security", icon: ShieldCheck },
     { to: "/deployment", label: "Deployment", icon: ServerCog },
+    { to: "/sre", label: "SRE Demo", icon: Siren },
   ],
 };
 
@@ -284,6 +286,7 @@ const MOBILE_ROUTES = [
   { to: "/thresholds", label: "Thresholds" },
   { to: "/governance", label: "Governance & Security" },
   { to: "/deployment", label: "Deployment" },
+  { to: "/sre", label: "SRE Demo" },
   { to: "/alerts", label: "Alerts" },
 ];
 

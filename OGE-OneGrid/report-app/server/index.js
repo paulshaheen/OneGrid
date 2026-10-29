@@ -17,6 +17,7 @@ import * as api from './dataApi.js';
 import * as gov from './governance.js';
 import * as manuals from './manuals.js';
 import * as aurora from './aurora.js';
+import * as sre from './sreDemo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.REPORT_PORT || 7700;
@@ -75,6 +76,7 @@ async function handleApi(req, res, url) {
     if (p === '/api/ontology') return json(res, 200, loadOntology());
     // ── Aurora forecast job: manual trigger + last-run status ─────────────────
     if (p === '/api/aurora/status') return json(res, 200, await aurora.auroraStatus());
+    if (p === '/api/sre/status') return json(res, 200, await sre.sreStatus());
     // ── Governance / OneLake-security review plane (read-only) ──────────────
     if (p.startsWith('/api/governance/')) {
       if (!gov.isAuthorized(req)) return json(res, 403, { error: 'forbidden: Governance.Reader required' });
@@ -188,6 +190,20 @@ const server = http.createServer((req, res) => {
         json(res, result.ok ? 200 : 400, result);
       } catch (e) { json(res, 500, { ok: false, message: String(e.message || e) }); }
     })();
+    return;
+  }
+  // SRE demo: inject / reset a scenario (requires the x-sre-demo-key header).
+  if ((url.pathname === '/api/sre/inject' || url.pathname === '/api/sre/reset') && req.method === 'POST') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        const action = url.pathname.endsWith('/inject') ? 'inject' : 'reset';
+        const r = await sre.sreControl(action, String(body.scenario || ''), req.headers['x-sre-demo-key'], !!body.force);
+        json(res, r.status, r.body);
+      } catch (e) { json(res, 500, { ok: false, message: String(e.message || e) }); }
+    });
     return;
   }
   if (url.pathname === '/api/feedback' && req.method === 'POST') {
