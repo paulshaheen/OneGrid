@@ -141,8 +141,8 @@ export function fleetHealth() {
     // health_score may be 0-1 or 0-100 — normalise to a 0-100 %.
     let avgH = num(h.avg_health);
     if (avgH !== null && avgH <= 1.5) avgH *= 100;
-    const alertBuckets = Object.fromEntries(predS.map((x) => [String(x.alert_level ?? 'unknown').toLowerCase(), num(x.n)]));
-    const riskBuckets = Object.fromEntries(predL.map((x) => [String(x.risk_level ?? 'unknown').toLowerCase(), num(x.n)]));
+    const alertBuckets = Object.fromEntries(predS.rows.map((x) => [String(x.alert_level ?? 'unknown').toLowerCase(), num(x.n)]));
+    const riskBuckets = Object.fromEntries(predL.rows.map((x) => [String(x.risk_level ?? 'unknown').toLowerCase(), num(x.n)]));
     const predHigh = (alertBuckets.critical || 0) + (alertBuckets.high || 0) + (riskBuckets.critical || 0) + (riskBuckets.high || 0);
     return {
       health: { avg: avgH, min: num(h.min_health) !== null ? (num(h.min_health) <= 1.5 ? num(h.min_health) * 100 : num(h.min_health)) : null, scoredAssets: num(h.scored_assets), totalAssets: num(h.total_assets) },
@@ -197,7 +197,7 @@ export function fleetAssets() {
       ]),
     ]);
     const idx = (rows, key) => Object.fromEntries(rows.map((r) => [r[key] ?? r.asset_id, r]));
-    const H = idx(health, 'asset_id'), W = idx(watch, 'asset_id'), A = idx(anom, 'asset_id'), PS = idx(predS, 'asset_id'), PL = idx(predL, 'asset_id');
+    const H = idx(health, 'asset_id'), W = idx(watch, 'asset_id'), A = idx(anom, 'asset_id'), PS = idx(predS.rows, 'asset_id'), PL = idx(predL.rows, 'asset_id');
     return assets.map((a) => {
       const id = a.asset_id;
       const h = H[id] || {}, w = W[id] || {}, an = A[id] || {}, ps = PS[id] || {}, pl = PL[id] || {};
