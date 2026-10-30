@@ -14,6 +14,7 @@ import * as api from './dataApi.js';
 import { kql } from './fabric.js';
 import { resolveTarget } from './target.js';
 import * as live from './liveIncident.js';
+import * as sre from './sreDemo.js';
 
 const SERVER_INFO = { name: 'onegrid', title: 'OneGrid operations', version: '1.0.0' };
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -24,7 +25,7 @@ const CLOCK_NOTE = 'OneGrid replays a historian dataset, so raw telemetry timest
   'The newest reading is the live one (now); use the relative ages in this response, not the replay dates.';
 
 const INSTRUCTIONS = 'OneGrid is the operations platform for a fleet of power plants and offshore assets. ' +
-  'Use get_active_alarms first, then get_sensor_trend and get_asset_context to diagnose. ' +
+  'For equipment alarms use get_active_alarms first; for sensor-fault alerts use get_sensor_health first. Then use get_sensor_trend and get_asset_context to diagnose. ' +
   'Submit your corrective work order with propose_work_order: a human approves or rejects it in OneGrid, so do not ask for approval in the conversation.';
 
 const TOOLS = [
@@ -32,6 +33,14 @@ const TOOLS = [
     name: 'get_active_alarms',
     title: 'Active equipment alarms',
     description: 'Equipment alarms currently active in OneGrid (live process alarms on sensors), with the latest readings, thresholds, when the alarm tripped, and any work order already raised.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: 'get_sensor_health',
+    title: 'Faulty (flatlined) sensors',
+    description: 'Sensor-health scan of the newest hour of telemetry: sensors that report a constant value (zero variance over 10+ readings), i.e. a dead transducer or signal channel. ' +
+      'For each faulty sensor: tag, asset, the flat value, how many readings and since when. This is what the sre-demo-04-sensor-fault alert checks.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
@@ -193,7 +202,7 @@ async function listWorkOrders({ asset_id }) {
 
 async function proposeWorkOrder(args) {
   const id = safeId(args.asset_id);
-  const d = await api.assetDetail(id);
+  const [d, belongsTo] = await Promise.all([api.assetDetail(id), sre.workOrderScenario()]);
   if (!d.asset) throw new Error(`Unknown asset id: ${id}`);
   const r = await live.proposeWorkOrder({
     assetId: id,
@@ -203,6 +212,7 @@ async function proposeWorkOrder(args) {
     evidence: String(args.evidence || '').slice(0, 3000),
     priority: args.priority,
     createdBy: 'Azure SRE Agent',
+    ...belongsTo,
   });
   const w = r.workOrder;
   const pending = w.wr_status === live.PENDING;
@@ -217,6 +227,7 @@ async function proposeWorkOrder(args) {
 
 const HANDLERS = {
   get_active_alarms: getActiveAlarms,
+  get_sensor_health: () => sre.sensorHealth(),
   get_sensor_trend: getSensorTrend,
   get_asset_context: getAssetContext,
   list_work_orders: listWorkOrders,

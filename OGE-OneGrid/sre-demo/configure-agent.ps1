@@ -5,10 +5,12 @@
 
   1. MCP connector "onegrid"        -> https://<pcpro>/mcp  (bearer = SRE_MCP_KEY)
   2. Sub-agent "onegrid-maintenance" -> uses onegrid/* tools; investigates equipment
-                                        alarms and proposes a work order that a human
-                                        approves or rejects on the OneGrid SRE page
-  3. Response plans                  -> sre-demo-01..04 alerts -> default agent (05's plan
-                                        is off: OneGrid pages the agent directly)
+                                        alarms (05) and sensor faults (04) and proposes a
+                                        work order that a human approves or rejects on the
+                                        OneGrid SRE page
+  3. Response plans                  -> sre-demo-04 alerts -> onegrid-maintenance
+                                        sre-demo-01..03    -> default agent
+                                        (05's plan is off: OneGrid pages the agent directly)
   4. HTTP trigger                    -> onegrid-equipment-alarm -> onegrid-maintenance
   All plans and the trigger run in Review mode: the agent asks before it changes anything.
 
@@ -65,14 +67,22 @@ $null = Invoke-Arm PUT "$agentId/DataConnectors/onegrid" @{
 Write-Host '2. Sub-agent onegrid-maintenance'
 $prompt = @'
 You are the OneGrid maintenance reliability specialist. OneGrid is the operations platform for a fleet of power plants and offshore assets.
-You handle equipment-condition alerts raised from OneGrid telemetry (for example sre-demo-05-bearing-vibration). These are equipment problems, not Azure infrastructure problems: do not change any Azure resource.
+You handle two kinds of alerts raised from OneGrid telemetry. Both are equipment problems, not Azure infrastructure problems: do not change any Azure resource.
 
-Procedure:
+A. Equipment alarms (sre-demo-05-bearing-vibration, or OneGrid paging you through the onegrid-equipment-alarm trigger):
 1. Call get_active_alarms to see the alarm, the asset and the current readings.
 2. Call get_sensor_trend for that asset (15 minutes). Quantify how fast each sensor is rising, which sensors moved together, and how far they are from their 6-hour baseline.
 3. Call get_asset_context for root cause, failure predictions and open work orders.
 4. Diagnose: state the failure mode, your confidence, and the consequence. Estimate time to trip at the current rate of rise.
-5. Propose exactly ONE corrective work order with propose_work_order: a one-line problem statement, priority (emergency, urgent, high or routine), the recommended work including interim operating limits (for example reduce load, increase monitoring), and the key evidence.
+
+B. Sensor faults (sre-demo-04-sensor-fault: the sensor-health check found a flatlined sensor):
+1. Call get_sensor_health to identify the faulty sensor, its asset, the flat value and since when.
+2. Call get_sensor_trend for that asset (60 minutes) to confirm the flatline and check whether companion sensors are still live (a single dead channel versus a whole-feed stall).
+3. Call get_asset_context: what risk is the dead sensor hiding (root cause, failure predictions, open work orders)?
+4. Diagnose the instrument failure (transducer, cabling, signal conditioner or control-system channel) and what is now unmonitored.
+
+Then, for both:
+5. Propose exactly ONE corrective work order with propose_work_order: a one-line problem statement, priority (emergency, urgent, high or routine), the recommended work including interim measures (for example reduce load, portable or manual readings, increased monitoring), and the key evidence. Always submit it, even if older work orders exist for the asset; if it reports a duplicate, report that work order instead.
 6. Do NOT ask for approval in this conversation. The proposal appears on the OneGrid SRE page as "Pending approval", where a human approves or rejects it; it becomes a real work order only when they approve.
 7. Report the work order id and tell the user it is waiting for their decision on the OneGrid SRE page (it then shows in OneGrid Maintenance and the executive brief).
 
@@ -82,7 +92,7 @@ $null = Invoke-Agent PUT '/api/v2/extendedAgent/agents/onegrid-maintenance' @{
   name = 'onegrid-maintenance'; type = 'ExtendedAgent'; tags = @(); owner = ''
   properties = @{
     instructions           = $prompt
-    handoffDescription     = 'Use for OneGrid equipment-condition alarms such as turbine vibration or bearing temperature, and for creating maintenance work orders.'
+    handoffDescription     = 'Use for OneGrid equipment-condition alarms (turbine vibration, bearing temperature) and sensor faults (flatlined sensors), and for proposing maintenance work orders.'
     tools                  = @()
     mcpTools               = @('onegrid/*')
     handoffs               = @()
@@ -100,7 +110,7 @@ $plans = @(
   @{ id = 'sre-demo-01-storage';  name = 'Storage access (demo 01)';  titleContains = 'sre-demo-01'; handlingAgent = '' }
   @{ id = 'sre-demo-02-deploy';   name = 'Bad deployment (demo 02)';  titleContains = 'sre-demo-02'; handlingAgent = '' }
   @{ id = 'sre-demo-03-capacity'; name = 'Fabric capacity (demo 03)'; titleContains = 'sre-demo-03'; handlingAgent = '' }
-  @{ id = 'sre-demo-04-sensor';   name = 'Faulty sensor (demo 04)';   titleContains = 'sre-demo-04'; handlingAgent = '' }
+  @{ id = 'sre-demo-04-sensor';   name = 'Faulty sensor (demo 04)';   titleContains = 'sre-demo-04'; handlingAgent = 'onegrid-maintenance' }
 )
 foreach ($p in $plans) {
   # No merging: every injection gets its own thread and a fresh investigation.

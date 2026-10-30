@@ -54,7 +54,12 @@ let syncing = null;
 // Fabric is throttling. A new run's writes wait for any clean-up queued before it.
 let cleanup = Promise.resolve();
 let knownClean = false;  // true once we know no demo rows remain
-let hideWoBefore = 0;    // agent work orders created before the last start/reset are hidden at once
+let hideWoBefore = 0;    // scenario 05 work orders created before its last start/reset are hidden at once
+// Each agent work order belongs to the demo scenario that was active when it was proposed.
+// Rows from before the column existed have no scenario and count as the live scenario (05).
+export const LIVE_SCENARIO = 'sre-demo-05';
+const scenarioOf = (w) => w.scenario || LIVE_SCENARIO;
+const visible = (w) => scenarioOf(w) !== LIVE_SCENARIO || new Date(w.create_date).getTime() >= hideWoBefore;
 let baselineCache = null;
 let baselinePending = null;
 
@@ -218,8 +223,9 @@ function scheduleCleanup(inflight) {
     await woPersist; // a work-order write must land before we delete it
     await deleteReadings();
     await ensureWoTable();
-    // Only work orders from before this start/reset: one created since then must survive.
-    await mgmt(`.delete table ${WO_TABLE} records <| ${WO_TABLE} | where Tier == "${MARK}" and create_date < datetime(${cutoff})`);
+    // Only scenario 05 work orders from before this start/reset: one created since then, or
+    // one belonging to another scenario, must survive.
+    await mgmt(`.delete table ${WO_TABLE} records <| ${WO_TABLE} | where Tier == "${MARK}" and create_date < datetime(${cutoff}) and (isempty(scenario) or scenario == "${LIVE_SCENARIO}")`);
     if (!run) knownClean = true;
   };
   cleanup = cleanup.then(job, job).catch((e) => console.warn('[sre-live] clean-up failed:', String(e.message || e).slice(0, 200)));
@@ -282,7 +288,7 @@ async function startLiveInner() {
     agentPagedAt: null, agentThreadId: null, agentPageError: null,
     gate: cleanup,
   };
-  if (woRows) woRows = woRows.filter((w) => new Date(w.create_date).getTime() >= hideWoBefore);
+  if (woRows) woRows = woRows.filter(visible);
   const r = run;
   r.tickTimer = setInterval(tick, 1000);
   r.flushTimer = setInterval(() => flush(r), 10_000);
@@ -297,7 +303,7 @@ export async function resetLive() {
   run = null;
   ownsRun = true;
   hideWoBefore = Date.now();
-  if (woRows) woRows = woRows.filter((w) => new Date(w.create_date).getTime() >= hideWoBefore);
+  if (woRows) woRows = woRows.filter(visible);
   scheduleCleanup(retire(prev, 'reset'));
 }
 
@@ -367,7 +373,7 @@ export async function liveState() {
 /** Public, read-only status for the SRE page chart. */
 export async function liveStatus(maxPoints = 240) {
   await syncFromEventhouse();
-  const records = await agentRecords().catch(() => []);
+  const records = (await agentRecords().catch(() => [])).filter((w) => scenarioOf(w) === LIVE_SCENARIO);
   const wos = records.filter((w) => w.wr_status !== PENDING && w.wr_status !== REJECTED);
   const r = run;
   const base = {
@@ -410,13 +416,13 @@ export const PENDING = 'Pending approval';
 const READY = 'Ready to schedule';
 const REJECTED = 'Rejected';
 const WO_COLS = ['wr_id', 'create_date', 'asset_id', 'asset_name', 'site_name', 'unit', 'problem_descr', 'recommendation', 'evidence',
-  'priority', 'priority_code', 'wr_type', 'wr_status', 'created_by', 'approved_by', 'Tier', 'decided_at'];
+  'priority', 'priority_code', 'wr_type', 'wr_status', 'created_by', 'approved_by', 'Tier', 'decided_at', 'scenario'];
 
 async function ensureWoTable() {
   if (woTableReady) return;
   await mgmt(`.create-merge table ${WO_TABLE} (wr_id:string, create_date:datetime, asset_id:string, asset_name:string, site_name:string, unit:string,
     problem_descr:string, recommendation:string, evidence:string, priority:string, priority_code:int, wr_type:string, wr_status:string,
-    created_by:string, approved_by:string, Tier:string, decided_at:datetime)`);
+    created_by:string, approved_by:string, Tier:string, decided_at:datetime, scenario:string)`);
   woTableReady = true;
 }
 
@@ -430,7 +436,7 @@ function shapeWo(r) {
     create_date: r.create_date, update_date: r.decided_at || r.create_date, decided_at: r.decided_at || null,
     open: r.wr_status !== PENDING && r.wr_status !== REJECTED, site: r.site_name,
     recommendation: r.recommendation, evidence: r.evidence, created_by: r.created_by, approved_by: r.approved_by,
-    source: 'sre-agent',
+    source: 'sre-agent', scenario: r.scenario || LIVE_SCENARIO,
   };
 }
 
@@ -438,7 +444,7 @@ const rawOf = (w) => ({
   wr_id: w.wr_id, create_date: w.create_date, asset_id: w.asset_id, asset_name: w.entity_descr, site_name: w.site_name, unit: w.unit,
   problem_descr: w.problem_descr, recommendation: w.recommendation, evidence: w.evidence, priority: w.priority,
   priority_code: w.priority_code, wr_type: w.wr_type, wr_status: w.wr_status, created_by: w.created_by, approved_by: w.approved_by,
-  Tier: MARK, decided_at: w.decided_at,
+  Tier: MARK, decided_at: w.decided_at, scenario: scenarioOf(w),
 });
 
 const csvField = (s) => `"${String(s ?? '').replace(/\r?\n/g, ' ').replace(/"/g, '""').slice(0, 4000)}"`;
@@ -458,8 +464,8 @@ function dedupe(list) {
  *  Held in memory and loaded from Eventhouse (so it survives restarts). While a run is in
  *  progress, or another process owns the scenario, it is re-read every SYNC_MS so proposals
  *  and decisions made through another process (e.g. the dev site's MCP endpoint) show up here. */
-async function agentRecords(force = false) {
-  const shared = !!run || !ownsRun;
+async function agentRecords(force = false, sync = false) {
+  const shared = !!run || !ownsRun || sync;
   if (force || ((!woRows || shared) && Date.now() - woLoadAt > (shared ? SYNC_MS : 60_000))) {
     woLoadAt = Date.now();
     try {
@@ -469,7 +475,7 @@ async function agentRecords(force = false) {
       woRows = dedupe([...(woRows || []).filter((w) => unpersisted.has(`${w.wr_id}|${w.wr_status}`) && !keys.has(`${w.wr_id}|${w.wr_status}`)), ...rows]);
     } catch { /* retry on a later call */ }
   }
-  return (woRows || []).filter((w) => new Date(w.create_date).getTime() >= hideWoBefore);
+  return (woRows || []).filter(visible);
 }
 
 /** Approved agent work orders (real, open work), newest first. */
@@ -477,9 +483,18 @@ export async function agentWorkOrders() {
   return (await agentRecords()).filter((w) => w.wr_status !== PENDING && w.wr_status !== REJECTED);
 }
 
-/** Every agent record (pending or decided) created at or after `ms`, newest first. */
-export async function agentRecordsSince(ms) {
-  return (await agentRecords()).filter((w) => new Date(w.create_date).getTime() >= ms);
+/** A scenario's agent records (pending or decided) created at or after `ms`, newest first.
+ *  Re-read from Eventhouse every SYNC_MS: the agent proposes through the dev site's MCP. */
+export async function agentRecordsSince(ms, scenario) {
+  return (await agentRecords(false, true)).filter((w) => scenarioOf(w) === scenario && new Date(w.create_date).getTime() >= ms);
+}
+
+/** Drop one scenario's agent work orders (on its inject/reset), here and in Eventhouse. */
+export async function clearScenarioWorkOrders(scenario) {
+  if (woRows) woRows = woRows.filter((w) => scenarioOf(w) !== scenario);
+  await woPersist; // a work-order write must land before we delete it
+  await ensureWoTable();
+  await mgmt(`.delete table ${WO_TABLE} records <| ${WO_TABLE} | where Tier == "${MARK}" and scenario == "${String(scenario).replace(/[^a-z0-9-]/g, '')}"`);
 }
 
 function persist(rec, after) {
@@ -499,9 +514,10 @@ function remember(wo) {
 const PRIORITIES = { emergency: [1, '1 - Emergency'], urgent: [2, '2 - Urgent'], high: [3, '3 - High'], routine: [4, '4 - Routine'] };
 
 /** Agent proposes a corrective work order; it waits for a human decision in OneGrid.
- *  `asset` = { name, plant, unit } resolved by the caller. */
-export async function proposeWorkOrder({ assetId, asset, problem, recommendation, evidence, priority, createdBy }) {
-  const records = await agentRecords(true);
+ *  `asset` = { name, plant, unit } resolved by the caller. `scenario` is the demo scenario it
+ *  belongs to and `since` that scenario's start: duplicates are only checked within that run. */
+export async function proposeWorkOrder({ assetId, asset, problem, recommendation, evidence, priority, createdBy, scenario = LIVE_SCENARIO, since = 0 }) {
+  const records = (await agentRecords(true)).filter((w) => scenarioOf(w) === scenario && new Date(w.create_date).getTime() >= since);
   const pending = records.find((w) => w.asset_id === assetId && w.wr_status === PENDING);
   if (pending) return { proposed: false, duplicate: true, workOrder: pending };
   const existing = records.find((w) => w.asset_id === assetId && w.wr_status === READY && Date.now() - new Date(w.create_date).getTime() < 2 * 3600_000);
@@ -513,13 +529,13 @@ export async function proposeWorkOrder({ assetId, asset, problem, recommendation
     create_date: now.toISOString(), asset_id: assetId, asset_name: asset?.name || assetId,
     site_name: asset?.plant || '', unit: asset?.unit || '', problem_descr: problem, recommendation, evidence,
     priority: label, priority_code: code, wr_type: 'Corrective', wr_status: PENDING,
-    created_by: createdBy || 'Azure SRE Agent', approved_by: '', Tier: MARK, decided_at: null,
+    created_by: createdBy || 'Azure SRE Agent', approved_by: '', Tier: MARK, decided_at: null, scenario,
   };
   const wo = shapeWo(rec);
   remember(wo);
   persist(rec);
   trackTrace(`Work order ${rec.wr_id} proposed by ${rec.created_by} for ${assetId} (${label}), awaiting approval in OneGrid: ${problem}`,
-    { assetId, workOrder: rec.wr_id, scenario: 'sre-demo-05' }, 1);
+    { assetId, workOrder: rec.wr_id, scenario }, 1);
   return { proposed: true, workOrder: wo };
 }
 
@@ -534,7 +550,7 @@ export async function decideWorkOrder(wrId, approve, decidedBy) {
   // Write the decision first, then drop the pending row, so no reader ever sees neither.
   persist(rec, () => mgmt(`.delete table ${WO_TABLE} records <| ${WO_TABLE} | where Tier == "${MARK}" and wr_id == "${wrId.replace(/[^A-Za-z0-9-]/g, '')}" and wr_status == "${PENDING}"`));
   trackTrace(`Work order ${wrId} ${approve ? 'approved' : 'rejected'} in OneGrid by ${decidedBy}: ${w.problem_descr}`,
-    { assetId: w.asset_id, workOrder: wrId, scenario: 'sre-demo-05' }, 1);
+    { assetId: w.asset_id, workOrder: wrId, scenario: scenarioOf(w) }, 1);
   return { status: 200, body: { ok: true, message: approve ? `Work order ${wrId} approved and raised.` : `Work order ${wrId} rejected.`, workOrder: decided } };
 }
 

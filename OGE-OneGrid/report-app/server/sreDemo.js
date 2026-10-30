@@ -83,7 +83,7 @@ export const SCENARIOS = [
     component: 'Grid telemetry (Eventhouse)',
     breaks: 'The vibration sensor on the Fairview steam turbine dies and reports a flat 0.0.',
     symptom: 'The turbine looks perfectly calm — the dead sensor hides the #1 equipment risk on the executive brief.',
-    fix: 'Agent reads the sensor-health findings, diagnoses a failed transducer and recommends quarantining the sensor and dispatching a crew.',
+    fix: 'Agent reads the sensor-health findings through the OneGrid MCP server, diagnoses a failed transducer and proposes a repair work order, which you approve or reject on this page.',
     alerts: ['sre-demo-04-sensor-fault'],
   },
   {
@@ -149,6 +149,25 @@ async function activeCached(c) {
   const val = await getActive(c).catch(() => null);
   activeCache = { at: Date.now(), val };
   return val;
+}
+
+/** Work-order tag of a scenario, e.g. "sre-demo-04". */
+const scenarioTag = (s) => `sre-demo-${s.number}`;
+
+/** The scenario an agent work order belongs to: the active non-live scenario (with its start,
+ *  so duplicates are only checked within this run), else the live scenario 05. */
+export async function workOrderScenario() {
+  const c = cfg();
+  const active = c.enabled ? await getActive(c).catch(() => null) : null;
+  const [id, at] = String(active || '').split('@');
+  const s = SCENARIOS.find((x) => x.id === id && !x.live);
+  return s ? { scenario: scenarioTag(s), since: at ? new Date(at).getTime() - 60_000 : 0 } : { scenario: live.LIVE_SCENARIO };
+}
+
+/** Drop scenario 04's agent work orders in the background (on its inject and reset). */
+function clearSensorWorkOrders() {
+  live.clearScenarioWorkOrders(scenarioTag(SCENARIOS.find((s) => s.id === 'sensor')))
+    .catch((e) => console.warn('[sre-demo] clearing scenario 04 work orders failed:', String(e.message || e).slice(0, 160)));
 }
 
 async function setActive(c, value) {
@@ -286,7 +305,7 @@ async function scenarioAgent(s, activeSince, alerts) {
       .filter((t) => s.alerts.some((n) => String(t.incidentDetails?.incidentTitle || t.title || '').includes(n)) && ts(t.createdTimestamp) >= since)
       .sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp))[0]
     : null;
-  const records = await live.agentRecordsSince(since).catch(() => []);
+  const records = await live.agentRecordsSince(since, scenarioTag(s)).catch(() => []);
   return {
     status: !thread ? 'waiting' : thread.incidentDetails?.investigationStatus === 'Complete' ? 'complete' : 'investigating',
     threadUrl: thread ? threadLink(agentId, thread.id) : null,
@@ -331,7 +350,7 @@ export async function sreControl(action, scenario, providedKey, force = false) {
     await setActive(c, `${scenario}@${new Date().toISOString().slice(0, 16)}Z`);
     if (scenario === 'storage') await arm('PATCH', c.storageId, { properties: { publicNetworkAccess: 'Disabled' } }, '2023-05-01');
     else if (scenario === 'deploy') await setPackage(c, c.badPkg);
-    else if (scenario === 'sensor') await injectSensorFault();
+    else if (scenario === 'sensor') { clearSensorWorkOrders(); await injectSensorFault(); }
     else if (scenario === 'bearing') await live.startLive();
     else await arm('POST', `${c.capacityId}/suspend`, undefined, '2023-11-01');
     return { status: 200, body: { ok: true, message: scenario === 'bearing' ? 'Live incident started — alarm in about 30 seconds.' : `Injected "${scenario}". Alerts usually fire within 5 minutes.` } };
@@ -339,7 +358,7 @@ export async function sreControl(action, scenario, providedKey, force = false) {
 
   for (const id of ids) {
     if (id === 'storage') await arm('PATCH', c.storageId, { properties: { publicNetworkAccess: 'Enabled' } }, '2023-05-01');
-    else if (id === 'sensor') await clearSensorFault();
+    else if (id === 'sensor') { clearSensorWorkOrders(); await clearSensorFault(); }
     else if (id === 'bearing') await live.resetLive();
     else if (id === 'deploy') {
       const pkg = (await appSettings(c)).WEBSITE_RUN_FROM_PACKAGE || '';
