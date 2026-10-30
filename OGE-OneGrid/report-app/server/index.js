@@ -80,7 +80,10 @@ async function handleApi(req, res, url) {
     if (p === '/api/aurora/status') return json(res, 200, await aurora.auroraStatus());
     if (p === '/api/sre/status') return json(res, 200, await sre.sreStatus());
     if (p === '/api/sre/sensor-health') return json(res, 200, await sre.sensorHealth());
-  if (p === '/api/sre/live') return json(res, 200, await live.liveStatus());
+  if (p === '/api/sre/live') {
+    const s = await live.liveStatus();
+    return json(res, 200, { ...s, agentThreadUrl: s.stage === 'idle' ? null : await sre.agentThreadUrl(s.startedAt) });
+  }
     // ── Governance / OneLake-security review plane (read-only) ──────────────
     if (p.startsWith('/api/governance/')) {
       if (!gov.isAuthorized(req)) return json(res, 403, { error: 'forbidden: Governance.Reader required' });
@@ -207,6 +210,19 @@ const server = http.createServer((req, res) => {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
         const action = url.pathname.endsWith('/inject') ? 'inject' : 'reset';
         const r = await sre.sreControl(action, String(body.scenario || ''), req.headers['x-sre-demo-key'], !!body.force);
+        json(res, r.status, r.body);
+      } catch (e) { json(res, 500, { ok: false, message: String(e.message || e) }); }
+    });
+    return;
+  }
+  // SRE demo: a human approves / rejects a work order the agent proposed.
+  if (url.pathname === '/api/sre/work-order/decide' && req.method === 'POST') {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        const r = await sre.decideWorkOrder(String(body.wr_id || ''), String(body.decision || ''), body.decided_by, req.headers['x-sre-demo-key']);
         json(res, r.status, r.body);
       } catch (e) { json(res, 500, { ok: false, message: String(e.message || e) }); }
     });

@@ -94,7 +94,7 @@ export const SCENARIOS = [
     live: true,
     breaks: 'Vibration and bearing temperature on the Fairview steam turbine start climbing in real time — alarm in about 30 seconds.',
     symptom: 'OneGrid raises a high-vibration alarm; the turbine is heading for a forced outage.',
-    fix: 'Agent pulls the sensor trend, root cause and asset history through the OneGrid MCP server, asks for approval, then creates a work order in OneGrid.',
+    fix: 'Agent pulls the sensor trend, root cause and asset history through the OneGrid MCP server and proposes a work order, which you approve or reject on this page.',
     alerts: ['sre-demo-05-bearing-vibration'],
   },
 ];
@@ -224,6 +224,54 @@ function keyOk(c, provided) {
   if (!c.key || !provided) return false;
   const a = Buffer.from(String(provided)), b = Buffer.from(c.key);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/** Approve / reject a work order the agent proposed (requires the demo key). */
+export async function decideWorkOrder(wrId, decision, decidedBy, providedKey) {
+  const c = cfg();
+  if (!c.enabled) return { status: 404, body: { ok: false, message: 'The SRE demo is not enabled on this deployment.' } };
+  if (!keyOk(c, providedKey)) return { status: 401, body: { ok: false, message: 'A valid demo key is required.' } };
+  const who = String(decidedBy || '').trim().slice(0, 120);
+  if (!/^WR-[0-9-]+$/.test(String(wrId || ''))) return { status: 400, body: { ok: false, message: 'Unknown work order id.' } };
+  if (decision !== 'approve' && decision !== 'reject') return { status: 400, body: { ok: false, message: 'Decision must be approve or reject.' } };
+  if (!who) return { status: 400, body: { ok: false, message: 'Enter your name to record the decision.' } };
+  return live.decideWorkOrder(wrId, decision === 'approve', who);
+}
+
+// ── Deep link to the agent's investigation thread ────────────────────────────
+// The SRE Agent portal opens a thread at views/thread/<id>; threads are listed through the
+// agent's data-plane API. Best effort: needs SRE_DEMO_AGENT_ID and read access to the agent.
+const SRE_AGENT_API = '2025-05-01-preview';
+let agentEndpoint = null;
+let threadCache = { at: 0, url: null };
+
+export async function agentThreadUrl(since) {
+  const agentId = process.env.SRE_DEMO_AGENT_ID || '';
+  if (!agentId) return null;
+  if (Date.now() - threadCache.at < 20_000) return threadCache.url;
+  threadCache.at = Date.now();
+  try {
+    agentEndpoint ||= String((await arm('GET', agentId, undefined, SRE_AGENT_API)).properties?.agentEndpoint || '').replace(/\/$/, '');
+    if (!agentEndpoint) return null;
+    const token = await getToken('https://azuresre.dev');
+    const res = await fetch(`${agentEndpoint}/api/v1/threads`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw new Error(`threads -> ${res.status}`);
+    const after = since ? new Date(since).getTime() - 60_000 : 0;
+    // Prefer a thread opened during this run. A new alert can also be merged into an earlier
+    // thread (which updates it), so fall back to the most recently updated one.
+    const ts = (v) => new Date(v || 0).getTime();
+    const demo = ((await res.json()).value || []).filter((t) => String(t.title || '').includes('sre-demo-05'));
+    const opened = demo.filter((t) => ts(t.createdTimestamp) >= after).sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp));
+    const touched = demo.filter((t) => ts(t.modifiedTimestamp) >= after).sort((a, b) => ts(b.modifiedTimestamp) - ts(a.modifiedTimestamp));
+    const thread = opened[0] || touched[0];
+    // New SRE Agent experience (sre.azure.com): /agents<agent resource id>/views/thread/<id>.
+    const portal = (process.env.SRE_DEMO_AGENT_URL || 'https://sre.azure.com').replace(/\/$/, '');
+    threadCache.url = thread ? `${portal}/agents${agentId}/views/thread/${encodeURIComponent(thread.id)}` : null;
+  } catch (e) {
+    console.warn('[sre-demo] agent thread lookup failed:', String(e.message || e).slice(0, 160));
+    threadCache.url = null;
+  }
+  return threadCache.url;
 }
 
 /** action: "inject" | "reset"; scenario: id or "all" (reset only). */

@@ -14,8 +14,9 @@
 //      the alarm trips;
 //    • the realtime WebSocket (3D twin) shows the live value via liveValue().
 //
-//  Work orders the Azure SRE Agent creates (via the OneGrid MCP server) land in
-//  Eventhouse table AgentWorkOrders and are merged into the work-order APIs.
+//  The Azure SRE Agent proposes a work order through the OneGrid MCP server; it waits in
+//  Eventhouse table AgentWorkOrders as "Pending approval" until a human approves or rejects
+//  it on the OneGrid SRE page. Approved ones are merged into the work-order APIs.
 //  resetLive() deletes every row this scenario wrote.
 // ---------------------------------------------------------------------------
 import { kql, kqlMgmt } from './fabric.js';
@@ -41,7 +42,14 @@ let woRows = null;       // agent work orders, in memory (see agentWorkOrders)
 let woLoadAt = 0;
 let woPersist = Promise.resolve(); // chain of background work-order writes
 let woTableReady = false;
-let restoreTried = false;
+const unpersisted = new Set(); // ids of work orders created here that are not yet in Eventhouse
+// The stream and the agent's MCP calls can run in different processes (e.g. the demo runs on
+// localhost while the SRE Agent calls the dev site), sharing state only through Eventhouse.
+// A process that has not started or reset the scenario itself keeps syncing from Eventhouse.
+const SYNC_MS = 15_000;
+let ownsRun = false;
+let lastSyncAt = 0;
+let syncing = null;
 // Eventhouse clean-up runs in the background so Start/Reset respond instantly even when
 // Fabric is throttling. A new run's writes wait for any clean-up queued before it.
 let cleanup = Promise.resolve();
@@ -140,7 +148,7 @@ function tick() {
   if (run.points.length > 2400) run.points.shift();
   run.pending.push(csvRow(ts, LIVE.vibTag, vib), csvRow(ts, LIVE.tempTag, temp));
 
-  const props = { assetId: LIVE.assetId, scenario: 'sre-demo-05' };
+  const props = { assetId: LIVE.assetId, scenario: 'sre-demo-05', runId: run.id };
   if (now - run.lastMetricAt >= 5000) {
     run.lastMetricAt = now;
     trackMetrics([
@@ -224,12 +232,15 @@ async function startLiveInner() {
   const b = await getBaseline();
   const prev = run;
   run = null;
-  restoreTried = true;
+  ownsRun = true;
   hideWoBefore = Date.now();
   const inflight = retire(prev, 'restarted');
   if (prev || !knownClean) scheduleCleanup(inflight);
   knownClean = false;
   run = {
+    // The alert rule splits by runId, so each run fires its own alert even while the
+    // previous run's alert has not resolved yet (it is stateful over a 5-minute window).
+    id: Date.now().toString(36),
     startedAt: Date.now(), anchorMs: b.anchorMs, baseVib: b.baseVib, baseTemp: b.baseTemp,
     tempAlarm: Math.max(107, Math.ceil(b.baseTemp + 15)),
     points: [], pending: [], flushed: 0, lastMetricAt: 0, lastAlarmTraceAt: 0,
@@ -249,7 +260,7 @@ export async function resetLive() {
   if (starting) await starting.catch(() => {});
   const prev = run;
   run = null;
-  restoreTried = true;
+  ownsRun = true;
   hideWoBefore = Date.now();
   if (woRows) woRows = woRows.filter((w) => new Date(w.create_date).getTime() >= hideWoBefore);
   scheduleCleanup(retire(prev, 'reset'));
@@ -260,24 +271,33 @@ export function prefetchLive() {
   getBaseline().catch(() => {});
 }
 
-/** After an app restart the in-memory run is gone; rebuild the chart from Eventhouse. */
-async function restoreFromEventhouse() {
-  if (run || restoreTried) return;
-  restoreTried = true;
-  const rows = await kq(`PiEvents | where Tier == "${MARK}"
-    | summarize vib = take_anyif(Value, Tag == "${LIVE.vibTag}"), temp = take_anyif(Value, Tag == "${LIVE.tempTag}") by Timestamp
-    | order by Timestamp asc | take 2400`).catch(() => null);
-  if (rows && !rows.length) knownClean = true;
-  if (!rows?.length || run) return;
-  const t0 = new Date(rows[0].Timestamp).getTime();
-  const points = rows.map((r) => ({ e: (new Date(r.Timestamp).getTime() - t0) / 1000, ts: r.Timestamp, vib: Number(r.vib), temp: Number(r.temp) }));
-  const firstAlarm = points.find((p) => p.vib >= LIVE.vibAlarm);
-  const startedAt = Date.now() - points[points.length - 1].e * 1000;
-  run = {
-    startedAt, anchorMs: t0, baseVib: points[0].vib, baseTemp: points[0].temp,
-    tempAlarm: 107, points, pending: [], flushed: rows.length * 2, alarmAt: firstAlarm ? startedAt + firstAlarm.e * 1000 : null,
-    stoppedAt: Date.now(), stopReason: 'restored after app restart', restored: true,
-  };
+/** Rebuild the chart from Eventhouse when this process does not own the run: after an app
+ *  restart, or while the stream runs in another process. Refreshed at most every SYNC_MS. */
+async function syncFromEventhouse() {
+  if (ownsRun || (run && !run.restored) || Date.now() - lastSyncAt < SYNC_MS) return syncing;
+  syncing ||= (async () => {
+    lastSyncAt = Date.now();
+    const rows = await kq(`PiEvents | where Tier == "${MARK}"
+      | summarize vib = take_anyif(Value, Tag == "${LIVE.vibTag}"), temp = take_anyif(Value, Tag == "${LIVE.tempTag}"), ing = min(ingestion_time()) by Timestamp
+      | order by Timestamp asc | take 2400`).catch(() => null);
+    if (!rows || ownsRun || (run && !run.restored)) return;
+    if (!rows.length) { knownClean = true; run = null; return; }
+    const t0 = new Date(rows[0].Timestamp).getTime();
+    const points = rows.map((r) => ({ e: (new Date(r.Timestamp).getTime() - t0) / 1000, ts: r.Timestamp, vib: Number(r.vib), temp: Number(r.temp) }));
+    const firstAlarm = points.find((p) => p.vib >= LIVE.vibAlarm);
+    // Readings carry historian timestamps; ingestion time gives the real wall clock. The first
+    // batch lands one flush interval (10 s) after the run starts.
+    const ing = rows.map((r) => new Date(r.ing).getTime()).filter(Number.isFinite);
+    const lastIngest = ing.length ? Math.max(...ing) : Date.now();
+    const startedAt = ing.length ? Math.min(...ing) - 10_000 : Date.now() - points[points.length - 1].e * 1000;
+    const streaming = Date.now() - lastIngest < 30_000; // still being written by another process
+    run = {
+      startedAt, anchorMs: t0, baseVib: points[0].vib, baseTemp: points[0].temp,
+      tempAlarm: 107, points, pending: [], flushed: rows.length * 2, alarmAt: firstAlarm ? startedAt + firstAlarm.e * 1000 : null,
+      stoppedAt: streaming ? null : lastIngest, stopReason: streaming ? null : 'synced from Eventhouse', restored: true,
+    };
+  })().finally(() => { syncing = null; });
+  return syncing;
 }
 
 /** Latest live value for a tag (used by the realtime WebSocket), else null. */
@@ -297,7 +317,7 @@ function stageOf(r, wos) {
 }
 
 export async function liveState() {
-  if (!run) await restoreFromEventhouse();
+  await syncFromEventhouse();
   const r = run;
   if (!r) return { running: false, readings: 0, detail: 'Turbine running normally — no live incident' };
   const last = r.points[r.points.length - 1];
@@ -311,14 +331,17 @@ export async function liveState() {
 
 /** Public, read-only status for the SRE page chart. */
 export async function liveStatus(maxPoints = 240) {
-  if (!run) await restoreFromEventhouse();
-  const wos = await agentWorkOrders().catch(() => []);
+  await syncFromEventhouse();
+  const records = await agentRecords().catch(() => []);
+  const wos = records.filter((w) => w.wr_status !== PENDING && w.wr_status !== REJECTED);
   const r = run;
   const base = {
     asset: { id: LIVE.assetId, name: LIVE.assetName },
     tags: { vibration: LIVE.vibTag, bearingTemp: LIVE.tempTag },
     thresholds: { vibAlarm: LIVE.vibAlarm, vibTrip: LIVE.vibTrip, tempAlarm: r?.tempAlarm ?? 107 },
     workOrders: wos,
+    proposal: records.find((w) => w.wr_status === PENDING) || null,
+    rejected: records.find((w) => w.wr_status === REJECTED) || null,
     checkedAt: new Date().toISOString(),
   };
   if (!r) { prefetchLive(); return { ...base, running: false, stage: 'idle', points: [] }; }
@@ -341,69 +364,135 @@ export async function liveStatus(maxPoints = 240) {
   };
 }
 
-// ── Agent-created work orders (Eventhouse table AgentWorkOrders) ─────────────
+// ── Agent work orders (Eventhouse table AgentWorkOrders) ─────────────────────
+// The agent proposes a work order through MCP; it waits as "Pending approval" until a
+// human approves or rejects it in OneGrid. A decision is written as a new row for the same
+// wr_id (then the pending row is deleted), so readers always prefer the decided row.
+export const PENDING = 'Pending approval';
+const READY = 'Ready to schedule';
+const REJECTED = 'Rejected';
+const WO_COLS = ['wr_id', 'create_date', 'asset_id', 'asset_name', 'site_name', 'unit', 'problem_descr', 'recommendation', 'evidence',
+  'priority', 'priority_code', 'wr_type', 'wr_status', 'created_by', 'approved_by', 'Tier', 'decided_at'];
+
 async function ensureWoTable() {
   if (woTableReady) return;
   await mgmt(`.create-merge table ${WO_TABLE} (wr_id:string, create_date:datetime, asset_id:string, asset_name:string, site_name:string, unit:string,
     problem_descr:string, recommendation:string, evidence:string, priority:string, priority_code:int, wr_type:string, wr_status:string,
-    created_by:string, approved_by:string, Tier:string)`);
+    created_by:string, approved_by:string, Tier:string, decided_at:datetime)`);
   woTableReady = true;
 }
 
 function shapeWo(r) {
   return {
     wr_id: r.wr_id, problem_descr: r.problem_descr, entity_descr: r.asset_name, parent_descr: r.asset_name,
-    location: [r.site_name, r.unit].filter(Boolean).join(' · '), site_name: r.site_name, asset_id: r.asset_id,
+    location: [r.site_name, r.unit].filter(Boolean).join(' · '), site_name: r.site_name, unit: r.unit, asset_id: r.asset_id,
     wr_type: r.wr_type, wr_status: r.wr_status, wr_status_id: 'READY', status: r.wr_status, status_id: 'READY',
     type: r.wr_type, problem: r.problem_descr, entity: r.asset_name,
     priority: r.priority, priority_code: Number(r.priority_code), priority_rank: Number(r.priority_code),
-    create_date: r.create_date, update_date: r.create_date, open: true, site: r.site_name,
+    create_date: r.create_date, update_date: r.decided_at || r.create_date, decided_at: r.decided_at || null,
+    open: r.wr_status !== PENDING && r.wr_status !== REJECTED, site: r.site_name,
     recommendation: r.recommendation, evidence: r.evidence, created_by: r.created_by, approved_by: r.approved_by,
     source: 'sre-agent',
   };
 }
 
-/** Open work orders created by the agent since the last start/reset, newest first.
- *  Held in memory: loaded from Eventhouse once per process (so they survive restarts),
- *  then updated on create/reset — status polling never queries Eventhouse. */
-export async function agentWorkOrders() {
-  if (!woRows && Date.now() - woLoadAt > 60_000) {
+const rawOf = (w) => ({
+  wr_id: w.wr_id, create_date: w.create_date, asset_id: w.asset_id, asset_name: w.entity_descr, site_name: w.site_name, unit: w.unit,
+  problem_descr: w.problem_descr, recommendation: w.recommendation, evidence: w.evidence, priority: w.priority,
+  priority_code: w.priority_code, wr_type: w.wr_type, wr_status: w.wr_status, created_by: w.created_by, approved_by: w.approved_by,
+  Tier: MARK, decided_at: w.decided_at,
+});
+
+const csvField = (s) => `"${String(s ?? '').replace(/\r?\n/g, ' ').replace(/"/g, '""').slice(0, 4000)}"`;
+const csvRowOf = (rec) => WO_COLS.map((k) => (k === 'create_date' || k === 'decided_at' || k === 'priority_code' ? String(rec[k] ?? '') : csvField(rec[k]))).join(',');
+
+/** One record per wr_id: a decided row wins over the pending row it replaces. */
+function dedupe(list) {
+  const by = new Map();
+  for (const w of list) {
+    const prev = by.get(w.wr_id);
+    if (!prev || (prev.wr_status === PENDING && w.wr_status !== PENDING)) by.set(w.wr_id, w);
+  }
+  return [...by.values()].sort((a, b) => String(b.create_date).localeCompare(String(a.create_date)));
+}
+
+/** Every agent record (pending, approved, rejected) since the last start/reset, newest first.
+ *  Held in memory and loaded from Eventhouse (so it survives restarts). While a run is in
+ *  progress, or another process owns the scenario, it is re-read every SYNC_MS so proposals
+ *  and decisions made through another process (e.g. the dev site's MCP endpoint) show up here. */
+async function agentRecords(force = false) {
+  const shared = !!run || !ownsRun;
+  if (force || ((!woRows || shared) && Date.now() - woLoadAt > (shared ? SYNC_MS : 60_000))) {
     woLoadAt = Date.now();
     try {
       await ensureWoTable();
-      const rows = await kq(`${WO_TABLE} | where Tier == "${MARK}" | order by create_date desc | take 50`);
-      woRows ||= rows.map(shapeWo);
+      const rows = (await kq(`${WO_TABLE} | where Tier == "${MARK}" | order by create_date desc | take 100`)).map(shapeWo);
+      const keys = new Set(rows.map((w) => `${w.wr_id}|${w.wr_status}`));
+      woRows = dedupe([...(woRows || []).filter((w) => unpersisted.has(`${w.wr_id}|${w.wr_status}`) && !keys.has(`${w.wr_id}|${w.wr_status}`)), ...rows]);
     } catch { /* retry on a later call */ }
   }
   return (woRows || []).filter((w) => new Date(w.create_date).getTime() >= hideWoBefore);
 }
 
-const PRIORITIES = { emergency: [1, '1 - Emergency'], urgent: [2, '2 - Urgent'], high: [3, '3 - High'], routine: [4, '4 - Routine'] };
-const csvField = (s) => `"${String(s ?? '').replace(/\r?\n/g, ' ').replace(/"/g, '""').slice(0, 4000)}"`;
+/** Approved agent work orders (real, open work), newest first. */
+export async function agentWorkOrders() {
+  return (await agentRecords()).filter((w) => w.wr_status !== PENDING && w.wr_status !== REJECTED);
+}
 
-/** Create a corrective work order. `asset` = { name, plant, unit } resolved by the caller. */
-export async function createWorkOrder({ assetId, asset, problem, recommendation, evidence, priority, approvedBy, createdBy }) {
-  const existing = (await agentWorkOrders()).find((w) => w.asset_id === assetId && Date.now() - new Date(w.create_date).getTime() < 2 * 3600_000);
-  if (existing) return { created: false, duplicate: true, workOrder: existing };
+function persist(rec, after) {
+  const key = `${rec.wr_id}|${rec.wr_status}`;
+  unpersisted.add(key);
+  // Visible immediately; persisted in the background (retries ride out Fabric throttling).
+  woPersist = woPersist.then(() => ensureWoTable())
+    .then(() => mgmt(`.ingest inline into table ${WO_TABLE} with (format="csv") <|\n${csvRowOf(rec)}`))
+    .then(() => { unpersisted.delete(key); return after?.(); })
+    .catch((e) => console.warn('[sre-live] work order not persisted:', String(e.message || e).slice(0, 200)));
+}
+
+function remember(wo) {
+  woRows = dedupe([wo, ...(woRows || []).filter((w) => w.wr_id !== wo.wr_id)]);
+}
+
+const PRIORITIES = { emergency: [1, '1 - Emergency'], urgent: [2, '2 - Urgent'], high: [3, '3 - High'], routine: [4, '4 - Routine'] };
+
+/** Agent proposes a corrective work order; it waits for a human decision in OneGrid.
+ *  `asset` = { name, plant, unit } resolved by the caller. */
+export async function proposeWorkOrder({ assetId, asset, problem, recommendation, evidence, priority, createdBy }) {
+  const records = await agentRecords(true);
+  const pending = records.find((w) => w.asset_id === assetId && w.wr_status === PENDING);
+  if (pending) return { proposed: false, duplicate: true, workOrder: pending };
+  const existing = records.find((w) => w.asset_id === assetId && w.wr_status === READY && Date.now() - new Date(w.create_date).getTime() < 2 * 3600_000);
+  if (existing) return { proposed: false, duplicate: true, workOrder: existing };
   const [code, label] = PRIORITIES[String(priority || 'urgent').toLowerCase()] || PRIORITIES.urgent;
   const now = new Date();
   const rec = {
     wr_id: `WR-${now.toISOString().slice(2, 10).replace(/-/g, '')}-${String(now.getTime()).slice(-4)}`,
     create_date: now.toISOString(), asset_id: assetId, asset_name: asset?.name || assetId,
     site_name: asset?.plant || '', unit: asset?.unit || '', problem_descr: problem, recommendation, evidence,
-    priority: label, priority_code: code, wr_type: 'Corrective', wr_status: 'Ready to schedule',
-    created_by: createdBy || 'Azure SRE Agent', approved_by: approvedBy, Tier: MARK,
+    priority: label, priority_code: code, wr_type: 'Corrective', wr_status: PENDING,
+    created_by: createdBy || 'Azure SRE Agent', approved_by: '', Tier: MARK, decided_at: null,
   };
-  const row = Object.entries(rec).map(([k, v]) => (k === 'create_date' || k === 'priority_code' ? String(v) : csvField(v))).join(',');
   const wo = shapeWo(rec);
-  woRows = [wo, ...(woRows || [])];
-  // Visible immediately; persisted in the background (retries ride out Fabric throttling).
-  woPersist = woPersist.then(() => ensureWoTable())
-    .then(() => mgmt(`.ingest inline into table ${WO_TABLE} with (format="csv") <|\n${row}`))
-    .catch((e) => console.warn('[sre-live] work order not persisted:', String(e.message || e).slice(0, 200)));
-  trackTrace(`Work order ${rec.wr_id} created by ${rec.created_by} for ${assetId} (${label}), approved by ${approvedBy}: ${problem}`,
+  remember(wo);
+  persist(rec);
+  trackTrace(`Work order ${rec.wr_id} proposed by ${rec.created_by} for ${assetId} (${label}), awaiting approval in OneGrid: ${problem}`,
     { assetId, workOrder: rec.wr_id, scenario: 'sre-demo-05' }, 1);
-  return { created: true, workOrder: wo };
+  return { proposed: true, workOrder: wo };
+}
+
+/** Human decision on a proposed work order: approve → it becomes a real work order. */
+export async function decideWorkOrder(wrId, approve, decidedBy) {
+  const w = (await agentRecords(true)).find((x) => x.wr_id === wrId);
+  if (!w) return { status: 404, body: { ok: false, message: 'That proposed work order no longer exists.' } };
+  if (w.wr_status !== PENDING) return { status: 409, body: { ok: false, message: `Already ${w.wr_status === REJECTED ? 'rejected' : 'approved'} by ${w.approved_by || 'someone'}.`, workOrder: w } };
+  const rec = { ...rawOf(w), wr_status: approve ? READY : REJECTED, approved_by: decidedBy, decided_at: new Date().toISOString() };
+  const decided = shapeWo(rec);
+  remember(decided);
+  // Write the decision first, then drop the pending row, so no reader ever sees neither.
+  persist(rec, () => mgmt(`.delete table ${WO_TABLE} records <| ${WO_TABLE} | where Tier == "${MARK}" and wr_id == "${wrId.replace(/[^A-Za-z0-9-]/g, '')}" and wr_status == "${PENDING}"`));
+  trackTrace(`Work order ${wrId} ${approve ? 'approved' : 'rejected'} in OneGrid by ${decidedBy}: ${w.problem_descr}`,
+    { assetId: w.asset_id, workOrder: wrId, scenario: 'sre-demo-05' }, 1);
+  return { status: 200, body: { ok: true, message: approve ? `Work order ${wrId} approved and raised.` : `Work order ${wrId} rejected.`, workOrder: decided } };
 }
 
 // ── Merge helpers for the existing work-order endpoints ──────────────────────

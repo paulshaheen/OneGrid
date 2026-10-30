@@ -5,7 +5,8 @@
 
   1. MCP connector "onegrid"        -> https://<pcpro>/mcp  (bearer = SRE_MCP_KEY)
   2. Sub-agent "onegrid-maintenance" -> uses onegrid/* tools; investigates equipment
-                                        alarms and raises work orders after approval
+                                        alarms and proposes a work order that a human
+                                        approves or rejects on the OneGrid SRE page
   3. Response plans                  -> sre-demo-05 alerts -> onegrid-maintenance
                                         sre-demo-01..04    -> default agent
   All plans run in Review mode: the agent asks before it changes anything.
@@ -70,9 +71,9 @@ Procedure:
 2. Call get_sensor_trend for that asset (15 minutes). Quantify how fast each sensor is rising, which sensors moved together, and how far they are from their 6-hour baseline.
 3. Call get_asset_context for root cause, failure predictions and open work orders.
 4. Diagnose: state the failure mode, your confidence, and the consequence. Estimate time to trip at the current rate of rise.
-5. Propose exactly ONE corrective work order: a one-line problem statement, priority (emergency, urgent, high or routine), the recommended work including interim operating limits (for example reduce load, increase monitoring), and the key evidence.
-6. Ask the user to approve it. Do NOT call create_work_order until a human explicitly approves in this conversation. Pass the approver's name as approved_by.
-7. After it is created, report the work order id and that it is visible in OneGrid Maintenance and the executive brief.
+5. Propose exactly ONE corrective work order with propose_work_order: a one-line problem statement, priority (emergency, urgent, high or routine), the recommended work including interim operating limits (for example reduce load, increase monitoring), and the key evidence.
+6. Do NOT ask for approval in this conversation. The proposal appears on the OneGrid SRE page as "Pending approval", where a human approves or rejects it; it becomes a real work order only when they approve.
+7. Report the work order id and tell the user it is waiting for their decision on the OneGrid SRE page (it then shows in OneGrid Maintenance and the executive brief).
 
 Keep the report short and plain: what we see, what it means, what it costs if ignored, what to do.
 '@
@@ -99,8 +100,12 @@ $plans = @(
   @{ id = 'sre-demo-04-sensor';   name = 'Faulty sensor (demo 04)';   titleContains = 'sre-demo-04'; handlingAgent = '' }
 )
 foreach ($p in $plans) {
-  $body = $p + @{ priorities = @('Sev0', 'Sev1', 'Sev2', 'Sev3', 'Sev4'); agentMode = 'review' }
-  $null = Invoke-Agent PUT "/api/v1/incidentPlayground/filters/$($p.id)" $body
+  # No merging: every injection gets its own thread and a fresh investigation.
+  $body = $p + @{ priorities = @('Sev0', 'Sev1', 'Sev2', 'Sev3', 'Sev4'); agentMode = 'review'; mergeEnabled = $false }
+  # PUT creates a plan; an existing plan must be updated with POST.
+  try { $null = Invoke-Agent PUT "/api/v1/incidentPlayground/filters/$($p.id)" $body }
+  catch { if ([int]$_.Exception.Response.StatusCode -ne 409 -and $_.ErrorDetails.Message -notmatch 'already exists') { throw }
+          $null = Invoke-Agent POST "/api/v1/incidentPlayground/filters/$($p.id)" $body }
   Write-Host "   $($p.id) -> $(if ($p.handlingAgent) { $p.handlingAgent } else { 'default agent' })"
 }
 

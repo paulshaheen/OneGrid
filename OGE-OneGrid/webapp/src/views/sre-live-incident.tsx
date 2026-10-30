@@ -11,7 +11,11 @@ import {
   Play,
   RotateCcw,
   Thermometer,
+  ThumbsDown,
+  ThumbsUp,
   TrendingUp,
+  UserCheck,
+  XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -36,6 +40,7 @@ interface AgentWorkOrder {
   site_name?: string;
   asset_id: string;
   create_date: string;
+  decided_at?: string | null;
   created_by?: string;
   approved_by?: string;
 }
@@ -56,6 +61,9 @@ interface LiveStatus {
   alarmAt?: string | null;
   alarmAfterSec?: number | null;
   workOrders: AgentWorkOrder[];
+  proposal?: AgentWorkOrder | null;
+  rejected?: AgentWorkOrder | null;
+  agentThreadUrl?: string | null;
   writeError?: string | null;
 }
 
@@ -80,17 +88,25 @@ export function LiveIncidentPanel({
   agentUrl,
   busy,
   otherActive,
+  defaultApprover,
   onStart,
   onReset,
+  onDecide,
 }: {
   alertEvents: LiveAlertEvent[];
   agentUrl?: string | undefined;
   busy: string | null;
   otherActive: boolean;
+  defaultApprover: string;
   onStart: () => void;
   onReset: () => void;
+  onDecide: (wrId: string, decision: "approve" | "reject", name: string) => void;
 }) {
   const [live, setLive] = useState<LiveStatus | null>(null);
+  const [approver, setApprover] = useState(defaultApprover);
+  useEffect(() => {
+    if (defaultApprover) setApprover((v) => v || defaultApprover);
+  }, [defaultApprover]);
 
   const load = useCallback(async () => {
     try {
@@ -116,19 +132,25 @@ export function LiveIncidentPanel({
     (a) => a.state === "Fired" && (!a.firedAt || new Date(a.firedAt).getTime() >= runStart),
   );
   const wo = live?.workOrders?.[0] ?? null;
+  const proposal = !wo ? (live?.proposal ?? null) : null;
+  const rejected = !wo && !proposal ? (live?.rejected ?? null) : null;
+  const threadUrl = live?.agentThreadUrl ?? agentUrl;
   const stageIdx =
     !live || live.stage === "idle"
       ? -1
       : live.stage === "work-order"
         ? 4
-        : live.stage === "alarm"
-          ? alertFiring
-            ? 3
-            : 2
-          : live.stage === "rising"
-            ? 1
-            : 0;
+        : proposal
+          ? 3
+          : live.stage === "alarm"
+            ? alertFiring
+              ? 3
+              : 2
+            : live.stage === "rising"
+              ? 1
+              : 0;
   const working = busy === "inject:bearing" || busy === "reset:bearing" || busy === "reset:all";
+  const deciding = busy?.startsWith("decide:") ?? false;
   const latest = live?.latest;
   const th = live?.thresholds;
   const vibHot = !!latest && !!th && latest.vib >= th.vibAlarm;
@@ -162,8 +184,8 @@ export function LiveIncidentPanel({
           </div>
           <div className="text-xs text-muted-foreground">
             Vibration and bearing temperature climb together; the alarm trips in about 30 seconds.
-            Azure SRE Agent investigates through the OneGrid MCP server, asks you to approve, then
-            creates the work order.
+            Azure SRE Agent investigates through the OneGrid MCP server and proposes a work order;
+            you approve or reject it right here.
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -171,7 +193,7 @@ export function LiveIncidentPanel({
             onClick={onStart}
             disabled={!!busy || otherActive || (!!live && live.running)}
             title={otherActive ? "Another scenario is active — reset it first." : undefined}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="og-primary-control inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy === "inject:bearing" ? (
               <Loader2 className="size-4 animate-spin" />
@@ -200,7 +222,8 @@ export function LiveIncidentPanel({
         {STAGES.map((s, i) => {
           const done = stageIdx > i;
           const current = stageIdx === i;
-          const hot = current && (s.id === "alarm" || s.id === "agent");
+          const awaiting = current && s.id === "agent" && !!proposal;
+          const hot = current && !awaiting && (s.id === "alarm" || s.id === "agent");
           return (
             <li
               key={s.id}
@@ -213,14 +236,16 @@ export function LiveIncidentPanel({
                 !done && !current && "text-muted-foreground ring-border",
               )}
             >
-              {current && s.id === "agent" ? (
+              {awaiting ? (
+                <UserCheck className="size-3.5 shrink-0 animate-pulse" />
+              ) : current && s.id === "agent" ? (
                 <Loader2 className="size-3.5 shrink-0 animate-spin" />
               ) : done ? (
                 <CheckCircle2 className="size-3.5 shrink-0" />
               ) : (
                 <s.icon className={cn("size-3.5 shrink-0", hot && "animate-pulse")} />
               )}
-              <span className="truncate">{s.label}</span>
+              <span className="truncate">{awaiting ? "Awaiting your approval" : s.label}</span>
             </li>
           );
         })}
@@ -301,8 +326,8 @@ export function LiveIncidentPanel({
                 {wo.wr_status}
               </span>
               <span className="ml-auto text-xs text-muted-foreground">
-                Created by {wo.created_by ?? "Azure SRE Agent"} · approved by{" "}
-                {wo.approved_by ?? "—"} · {relativeTime(wo.create_date)}
+                Proposed by {wo.created_by ?? "Azure SRE Agent"} · approved by{" "}
+                {wo.approved_by ?? "—"} · {relativeTime(wo.decided_at ?? wo.create_date)}
               </span>
             </div>
             <div className="mt-2 text-sm font-semibold">{wo.problem_descr}</div>
@@ -325,32 +350,120 @@ export function LiveIncidentPanel({
               >
                 Executive brief <ArrowUpRight className="size-3" />
               </Link>
+              {threadUrl && <ThreadLink href={threadUrl} boxed />}
             </div>
+          </div>
+        ) : proposal ? (
+          <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 ring-1 ring-inset ring-primary/20">
+            <div className="flex flex-wrap items-center gap-2">
+              <Bot className="size-4 text-primary" />
+              <span className="text-sm font-semibold">Proposed work order</span>
+              <span className="font-mono text-xs text-muted-foreground">{proposal.wr_id}</span>
+              <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-500 ring-1 ring-inset ring-red-500/20">
+                {proposal.priority}
+              </span>
+              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/25 dark:text-amber-400">
+                Awaiting your approval
+              </span>
+              <span className="ml-auto text-xs text-muted-foreground">
+                From {proposal.created_by ?? "Azure SRE Agent"} ·{" "}
+                {relativeTime(proposal.create_date)}
+              </span>
+            </div>
+            <div className="mt-2 text-sm font-semibold">{proposal.problem_descr}</div>
+            {proposal.recommendation && (
+              <p className="mt-1 whitespace-pre-line text-sm leading-5">
+                {proposal.recommendation}
+              </p>
+            )}
+            {proposal.evidence && (
+              <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                Evidence: {proposal.evidence}
+              </p>
+            )}
+            <form
+              className="mt-3 flex flex-wrap items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (approver.trim()) onDecide(proposal.wr_id, "approve", approver.trim());
+              }}
+            >
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Decision by
+                <input
+                  value={approver}
+                  onChange={(e) => setApprover(e.target.value)}
+                  placeholder="Your name"
+                  className="w-44 rounded-lg border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary/60"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={!approver.trim() || !!busy}
+                className="og-primary-control inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {busy === "decide:approve" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ThumbsUp className="size-4" />
+                )}
+                Approve &amp; raise
+              </button>
+              <button
+                type="button"
+                disabled={!approver.trim() || !!busy}
+                onClick={() => onDecide(proposal.wr_id, "reject", approver.trim())}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {busy === "decide:reject" ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ThumbsDown className="size-4" />
+                )}
+                Reject
+              </button>
+              {threadUrl && (
+                <span className="ml-auto">
+                  <ThreadLink href={threadUrl} />
+                </span>
+              )}
+            </form>
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
-              <ClipboardCheck className="size-4" />
-              {stageIdx >= 2
-                ? alertFiring
-                  ? "Alert fired — the agent is investigating. Approve its proposed work order in the SRE Agent chat."
-                  : "Alarm tripped — Azure Monitor raises the alert within 1–3 minutes."
-                : "No agent work order yet."}
+              {rejected ? <XCircle className="size-4" /> : <ClipboardCheck className="size-4" />}
+              {rejected
+                ? `Proposed work order ${rejected.wr_id} was rejected by ${rejected.approved_by || "a reviewer"}.`
+                : stageIdx >= 2
+                  ? alertFiring
+                    ? "Alert fired — the agent is investigating. Its proposed work order will appear here for your approval."
+                    : "Alarm tripped — Azure Monitor raises the alert within 1–3 minutes."
+                  : "No agent work order yet."}
             </span>
-            {agentUrl && stageIdx >= 2 && (
-              <a
-                href={agentUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-              >
-                Open SRE Agent <ArrowUpRight className="size-3" />
-              </a>
-            )}
+            {threadUrl && stageIdx >= 2 && !deciding && <ThreadLink href={threadUrl} />}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function ThreadLink({ href, boxed = false }: { href: string; boxed?: boolean }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "inline-flex items-center gap-1 font-semibold",
+        boxed
+          ? "rounded-lg border px-2.5 py-1.5 font-medium hover:bg-accent"
+          : "text-xs text-primary hover:underline",
+      )}
+    >
+      View agent investigation <ArrowUpRight className="size-3" />
+    </a>
   );
 }
 

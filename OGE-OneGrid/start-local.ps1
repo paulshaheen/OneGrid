@@ -10,11 +10,14 @@
     ./start-local.ps1            # start (assumes webapp is already built)
     ./start-local.ps1 -Build     # rebuild the webapp first, then start
     ./start-local.ps1 -NoChat    # start without the Foundry AI env (BYO GitHub Copilot only)
+    ./start-local.ps1 -SreDemo   # also enable the SRE demo page, wired to the dev site's
+                                 # Eventhouse, App Insights and alerts (read from pcpro at launch)
 #>
 [CmdletBinding()]
 param(
   [switch]$Build,
-  [switch]$NoChat
+  [switch]$NoChat,
+  [switch]$SreDemo
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +66,27 @@ if (-not $NoChat) {
   }
 }
 
+# ── SRE demo: share the dev site's Eventhouse, App Insights and alert config ─
+# Scenario 05 needs localhost and pcpro on the same data: the alert reads pcpro's App
+# Insights, and the SRE Agent investigates (and creates the work order) through pcpro's
+# MCP server, which reads pcpro's Eventhouse. Settings are read at launch, never stored.
+if ($SreDemo) {
+  $sreApp = "pcpro-onegrid-app-ujcb2qv6vi2ts"; $sreRg = "rg-onegrid-test"
+  $wanted = @("SRE_DEMO_ENABLED", "SRE_DEMO_KEY", "SRE_DEMO_SUBSCRIPTION", "SRE_DEMO_RESOURCE_GROUP", "SRE_DEMO_APP",
+    "SRE_DEMO_DATA_STORAGE", "SRE_DEMO_GOOD_PACKAGE", "SRE_DEMO_BAD_PACKAGE", "SRE_DEMO_CAPACITY_ID", "SRE_DEMO_AGENT_URL",
+    "APPLICATIONINSIGHTS_CONNECTION_STRING", "KUSTO_CLUSTER", "KUSTO_DATABASE", "PBI_WORKSPACE", "PBI_DATASET")
+  $settings = az webapp config appsettings list -g $sreRg -n $sreApp -o json | ConvertFrom-Json
+  if ($LASTEXITCODE -ne 0 -or -not $settings) { throw "Could not read $sreApp app settings (az login with access to $sreRg is required)." }
+  foreach ($s in $settings) { if ($wanted -contains $s.name -and $s.value) { Set-Item -Path "env:$($s.name)" -Value $s.value } }
+  $missing = $wanted | Where-Object { -not (Test-Path "env:$_") }
+  if ($missing) { throw "pcpro is missing SRE demo settings: $($missing -join ', ')" }
+  # Lets the SRE page link straight to the agent's investigation thread.
+  $agentSetting = $settings | Where-Object name -eq "SRE_DEMO_AGENT_ID" | Select-Object -First 1
+  $env:SRE_DEMO_AGENT_ID = if ($agentSetting.value) { $agentSetting.value } else {
+    "/subscriptions/$env:SRE_DEMO_SUBSCRIPTION/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent" }
+  Write-Host "SRE demo: wired to $sreApp (Eventhouse $env:KUSTO_CLUSTER)" -ForegroundColor DarkGray
+}
+
 # ── optional rebuild ────────────────────────────────────────────────────────
 if ($Build) {
   Write-Host "Building webapp…" -ForegroundColor Cyan
@@ -107,6 +131,7 @@ if ($ready) {
   Write-Host "  Asset Explorer:        http://localhost:7700/webapp/app/asset-explorer"
   Write-Host "  Control Room:          http://localhost:7700/webapp/app/control-room"
   Write-Host "  Report app:            http://localhost:7700/"
+  if ($SreDemo) { Write-Host "  SRE demo:              http://localhost:7700/webapp/app/sre" }
 } else {
   Write-Host "report-app did not report ready on :7700 within ~80s. Check the process output." -ForegroundColor Red
   exit 1

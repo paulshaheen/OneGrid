@@ -7,7 +7,7 @@
 //
 //  Tools give the agent the operational context an SRE has in OneGrid: active
 //  equipment alarms, sensor trends, asset health/root cause/history, open work,
-//  and — after a human approves — creating a corrective work order.
+//  and proposing a corrective work order that a human approves in OneGrid.
 // ---------------------------------------------------------------------------
 import crypto from 'node:crypto';
 import * as api from './dataApi.js';
@@ -25,7 +25,7 @@ const CLOCK_NOTE = 'OneGrid replays a historian dataset, so raw telemetry timest
 
 const INSTRUCTIONS = 'OneGrid is the operations platform for a fleet of power plants and offshore assets. ' +
   'Use get_active_alarms first, then get_sensor_trend and get_asset_context to diagnose. ' +
-  'Never call create_work_order until a human has explicitly approved the proposed work order in the conversation.';
+  'Submit your corrective work order with propose_work_order: a human approves or rejects it in OneGrid, so do not ask for approval in the conversation.';
 
 const TOOLS = [
   {
@@ -75,11 +75,11 @@ const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
-    name: 'create_work_order',
-    title: 'Create a corrective work order',
-    description: 'Raise a corrective maintenance work order in OneGrid. It appears immediately on the Maintenance page, the executive brief and the SRE demo page. ' +
-      'ONLY call this after a human has explicitly approved the proposed work order in this conversation, and pass their name/alias as approved_by. ' +
-      'If an open agent work order already exists for the asset it is returned instead of creating a duplicate.',
+    name: 'propose_work_order',
+    title: 'Propose a corrective work order',
+    description: 'Submit a corrective maintenance work order for human approval. It appears at once on the OneGrid SRE page as "Pending approval" with Approve / Reject buttons; ' +
+      'only once a human approves it there does it become a real work order (Maintenance page, executive brief). Do not ask for approval in the conversation. ' +
+      'If a proposal is already pending, or an approved agent work order already exists for the asset, that one is returned instead of creating a duplicate.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -88,9 +88,8 @@ const TOOLS = [
         recommendation: { type: 'string', description: 'The corrective work to perform and any interim operating limits' },
         evidence: { type: 'string', description: 'Key evidence: readings, rates of change, thresholds, history' },
         priority: { type: 'string', enum: ['emergency', 'urgent', 'high', 'routine'], default: 'urgent' },
-        approved_by: { type: 'string', description: 'Name or alias of the human who approved this work order' },
       },
-      required: ['asset_id', 'problem', 'recommendation', 'approved_by'],
+      required: ['asset_id', 'problem', 'recommendation'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -117,7 +116,7 @@ async function getActiveAlarms() {
       ],
       reading_time: s.running ? new Date().toISOString() : s.stoppedAt,
       seconds_since_trip: s.alarmAt ? Math.round((Date.now() - new Date(s.alarmAt).getTime()) / 1000) : null,
-      work_orders: s.workOrders.filter((w) => w.asset_id === s.asset.id).map((w) => ({ wr_id: w.wr_id, problem: w.problem_descr, status: w.wr_status, priority: w.priority })),
+      work_orders: [...(s.proposal ? [s.proposal] : []), ...s.workOrders].filter((w) => w.asset_id === s.asset.id).map((w) => ({ wr_id: w.wr_id, problem: w.problem_descr, status: w.wr_status, priority: w.priority, approved_by: w.approved_by || null })),
     });
   }
   return { alarm_count: alarms.length, alarms, checked_at: s.checkedAt };
@@ -192,26 +191,27 @@ async function listWorkOrders({ asset_id }) {
   };
 }
 
-async function createWorkOrder(args) {
+async function proposeWorkOrder(args) {
   const id = safeId(args.asset_id);
-  if (!String(args.approved_by || '').trim()) throw new Error('approved_by is required: ask a human to approve the work order first.');
   const d = await api.assetDetail(id);
   if (!d.asset) throw new Error(`Unknown asset id: ${id}`);
-  const r = await live.createWorkOrder({
+  const r = await live.proposeWorkOrder({
     assetId: id,
     asset: { name: d.asset.name || d.asset.asset_display_name, plant: d.asset.plant, unit: d.asset.unit },
     problem: String(args.problem).slice(0, 300),
     recommendation: String(args.recommendation).slice(0, 3000),
     evidence: String(args.evidence || '').slice(0, 3000),
     priority: args.priority,
-    approvedBy: String(args.approved_by).slice(0, 120),
     createdBy: 'Azure SRE Agent',
   });
   const w = r.workOrder;
+  const pending = w.wr_status === live.PENDING;
   return {
-    created: r.created, duplicate: !!r.duplicate,
-    work_order: { wr_id: w.wr_id, asset_id: id, problem: w.problem_descr, priority: w.priority, status: w.wr_status, site: w.site_name, created: w.create_date, approved_by: w.approved_by },
-    message: r.duplicate ? `An open agent work order already exists for ${id}: ${w.wr_id}.` : `Work order ${w.wr_id} created and visible in OneGrid Maintenance.`,
+    proposed: r.proposed, duplicate: !!r.duplicate,
+    work_order: { wr_id: w.wr_id, asset_id: id, problem: w.problem_descr, priority: w.priority, status: w.wr_status, site: w.site_name, created: w.create_date, approved_by: w.approved_by || null },
+    message: r.duplicate
+      ? `${pending ? 'A proposal is already awaiting approval' : 'An approved agent work order already exists'} for ${id}: ${w.wr_id}.`
+      : `Work order ${w.wr_id} is pending approval on the OneGrid SRE page. Tell the user it is ready for them to approve or reject in OneGrid; it is raised only when they approve.`,
   };
 }
 
@@ -220,7 +220,7 @@ const HANDLERS = {
   get_sensor_trend: getSensorTrend,
   get_asset_context: getAssetContext,
   list_work_orders: listWorkOrders,
-  create_work_order: createWorkOrder,
+  propose_work_order: proposeWorkOrder,
 };
 
 async function handleMessage(msg) {

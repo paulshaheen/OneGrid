@@ -5,6 +5,7 @@ import {
   BellRing,
   Bot,
   CheckCircle2,
+  ChevronDown,
   Database,
   Eye,
   Gauge,
@@ -25,6 +26,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/ops/AppShell";
 import { relativeTime } from "@/lib/format";
+import { useAuth } from "@/lib/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { LiveIncidentPanel } from "@/views/sre-live-incident";
 
@@ -82,6 +84,11 @@ const ALERT_LABEL: Record<string, string> = {
 /** Activity-log alerts are one-off events: they never resolve, so don't show them as "firing". */
 const isEvent = (a: AlertEvent) => a.name.includes("config-change");
 
+/** Scenarios shown on the page, in order. The others stay available via sre-demo.ps1. */
+const VISIBLE: Scenario["id"][] = ["sensor", "bearing"];
+const PRIMARY_BUTTON =
+  "og-primary-control inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40";
+
 function readKey(): string {
   try {
     return sessionStorage.getItem(KEY_STORAGE) ?? "";
@@ -128,8 +135,12 @@ export function SreDemoPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirm, setConfirm] = useState<Scenario | null>(null);
+  // While one scenario is running the others collapse to a one-line summary.
+  const [peek, setPeek] = useState<string | null>(null);
   const [keyPrompt, setKeyPrompt] = useState<null | (() => void)>(null);
   const [keyInput, setKeyInput] = useState("");
+  const { displayName } = useAuth();
+  const approverName = displayName && displayName !== "Signed in" ? displayName : "";
 
   const load = useCallback(async () => {
     try {
@@ -185,8 +196,38 @@ export function SreDemoPage() {
     }
   };
 
+  const decide = async (wrId: string, decision: "approve" | "reject", name: string) => {
+    const key = readKey();
+    if (!key) {
+      setKeyPrompt(() => () => void decide(wrId, decision, name));
+      return;
+    }
+    setBusy(`decide:${decision}`);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/sre/work-order/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-sre-demo-key": key },
+        body: JSON.stringify({ wr_id: wrId, decision, decided_by: name }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      if (res.status === 401) {
+        sessionStorage.removeItem(KEY_STORAGE);
+        setKeyPrompt(() => () => void decide(wrId, decision, name));
+        setMessage({ ok: false, text: "That demo key was not accepted." });
+      } else {
+        setMessage({ ok: !!body.ok, text: body.message ?? `Failed (${res.status}).` });
+      }
+    } catch {
+      setMessage({ ok: false, text: "Could not reach OneGrid — try again." });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const active = status?.active?.split("@")[0] ?? null;
   const activeSince = status?.active?.split("@")[1];
+  useEffect(() => setPeek(null), [active]);
   const activeScenario = status?.scenarios.find((s) => s.id === active);
   const firing = (activeScenario?.alertEvents ?? []).some((a) => a.state === "Fired");
   const stage = !active ? -1 : firing ? 2 : 1;
@@ -320,23 +361,25 @@ export function SreDemoPage() {
           </Panel>
         ) : (
           <div className="space-y-4">
-            {status.scenarios
-              .filter((s) => s.live)
-              .map((s) => (
-                <LiveIncidentPanel
-                  key={s.id}
-                  alertEvents={s.alertEvents ?? []}
-                  agentUrl={status.agentUrl}
-                  busy={busy}
-                  otherActive={!!active && active !== s.id}
-                  onStart={() => void call("inject", s.id)}
-                  onReset={() => void call("reset", s.id)}
-                />
-              ))}
-            <div className="grid gap-4 lg:grid-cols-2">
-              {status.scenarios
-                .filter((s) => !s.live)
-                .map((s) => (
+            {VISIBLE.map((id) => status.scenarios.find((s) => s.id === id))
+              .filter((s): s is Scenario => !!s)
+              .sort((a, b) => Number(b.id === active) - Number(a.id === active))
+              .map((s) =>
+                active && active !== s.id && peek !== s.id ? (
+                  <CollapsedScenario key={s.id} s={s} onExpand={() => setPeek(s.id)} />
+                ) : s.live ? (
+                  <LiveIncidentPanel
+                    key={s.id}
+                    alertEvents={s.alertEvents ?? []}
+                    agentUrl={status.agentUrl}
+                    busy={busy}
+                    otherActive={!!active && active !== s.id}
+                    defaultApprover={approverName}
+                    onStart={() => void call("inject", s.id)}
+                    onReset={() => void call("reset", s.id)}
+                    onDecide={(wrId, decision, name) => void decide(wrId, decision, name)}
+                  />
+                ) : (
                   <ScenarioCard
                     key={s.id}
                     s={s}
@@ -346,8 +389,8 @@ export function SreDemoPage() {
                     onBreak={() => setConfirm(s)}
                     onReset={() => void call("reset", s.id)}
                   />
-                ))}
-            </div>
+                ),
+              )}
           </div>
         )}
         {status?.alertsError && (
@@ -379,7 +422,7 @@ export function SreDemoPage() {
                 setConfirm(null);
                 void call("inject", s.id);
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500"
+              className={PRIMARY_BUTTON}
             >
               <Zap className="size-4" /> Break it
             </button>
@@ -423,6 +466,30 @@ export function SreDemoPage() {
         </Modal>
       )}
     </AppShell>
+  );
+}
+
+function CollapsedScenario({ s, onExpand }: { s: Scenario; onExpand: () => void }) {
+  const Icon = ICON[s.id];
+  return (
+    <Panel className="flex items-center gap-3 px-5 py-3">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground ring-1 ring-inset ring-border">
+        <Icon className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1 text-sm">
+        <span className="text-xs text-muted-foreground">Scenario {s.number} · </span>
+        <span className="font-medium">{s.name}</span>
+        <span className="ml-2 text-xs text-muted-foreground">
+          Paused while another scenario runs
+        </span>
+      </div>
+      <button
+        onClick={onExpand}
+        className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+      >
+        Show <ChevronDown className="size-3.5" />
+      </button>
+    </Panel>
   );
 }
 
@@ -551,7 +618,7 @@ function ScenarioCard({
           onClick={onBreak}
           disabled={!!busy || otherActive || state === "broken"}
           title={otherActive ? "Another scenario is active — reset it first." : undefined}
-          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className={cn(PRIMARY_BUTTON, "flex-1")}
         >
           {working && busy?.startsWith("inject") ? (
             <Loader2 className="size-4 animate-spin" />
