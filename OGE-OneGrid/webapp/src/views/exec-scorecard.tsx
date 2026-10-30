@@ -75,13 +75,18 @@ interface Selection {
 
 const DAY = 86_400_000;
 const AS_OF_MS = new Date(`${AS_OF}T00:00:00Z`).getTime();
+// Status palette shared with the Operations overview (command-center.tsx `C`).
+const OK = "#2fd07a";
+const AMBER = "#f5b942";
+const RED = "#ff5470";
 const TYPES = [
-  { key: "FORCED", label: "Forced", color: "#ef4444" },
-  { key: "DERATE", label: "Derate", color: "#f59e0b" },
+  { key: "FORCED", label: "Forced", color: RED },
+  { key: "DERATE", label: "Derate", color: AMBER },
   { key: "WEATHER", label: "Weather", color: "#38bdf8" },
-  { key: "PLANNED", label: "Planned", color: "#34d399" },
+  { key: "PLANNED", label: "Planned", color: OK },
 ] as const;
-const REGION_COLORS = ["#3b82f6", "#f97316", "#14b8a6", "#a855f7", "#eab308", "#ec4899", "#1d4ed8"];
+// Regions are categories, not status, so they stay in the cool brand family (no red/amber/green).
+const REGION_COLORS = ["#3b82f6", "#38bdf8", "#a855f7", "#6366f1", "#22d3ee", "#c084fc", "#60a5fa"];
 const STATUS_RANK: Record<Status, number> = { critical: 2, watch: 1, ok: 0 };
 
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
@@ -616,9 +621,9 @@ function Panel({ className, children }: { className?: string; children: ReactNod
 }
 
 const KPI_TONE = {
-  good: "text-emerald-500",
-  warn: "text-amber-500",
-  bad: "text-red-500",
+  good: "text-[#2fd07a]",
+  warn: "text-[#f5b942]",
+  bad: "text-[#ff5470]",
   neutral: "text-foreground",
 } as const;
 
@@ -774,23 +779,23 @@ function Th({
 
 function StatusIcon({ status }: { status: Status }) {
   return status === "critical" ? (
-    <span className="inline-grid size-5 place-items-center rounded-full bg-red-500/15 text-red-500 ring-1 ring-red-500/60">
+    <span className="inline-grid size-5 place-items-center rounded-full bg-[#ff5470]/12 text-[#ff5470] ring-1 ring-[#ff5470]/50">
       <X className="size-3" strokeWidth={3} />
     </span>
   ) : status === "watch" ? (
-    <span className="inline-grid size-5 place-items-center rounded-full bg-amber-500/15 text-amber-500 ring-1 ring-amber-500/60">
+    <span className="inline-grid size-5 place-items-center rounded-full bg-[#f5b942]/12 text-[#f5b942] ring-1 ring-[#f5b942]/50">
       <CircleAlert className="size-3.5" strokeWidth={2.5} />
     </span>
   ) : (
-    <Check className="inline size-4 text-emerald-500" strokeWidth={3} />
+    <Check className="inline size-4 text-[#2fd07a]" strokeWidth={3} />
   );
 }
 
 function dateCell(iso: string | null, kind: "repair" | "outage") {
   if (!iso) return "";
   const ageDays = (AS_OF_MS - new Date(iso).getTime()) / DAY;
-  if (kind === "repair") return ageDays <= 180 ? "bg-emerald-500/15" : "";
-  return ageDays <= 90 ? "bg-red-500/20" : ageDays <= 365 ? "bg-amber-500/15" : "";
+  if (kind === "repair") return ageDays <= 180 ? "bg-[#2fd07a]/10" : "";
+  return ageDays <= 90 ? "bg-[#ff5470]/12" : ageDays <= 365 ? "bg-[#f5b942]/10" : "";
 }
 
 function Row({
