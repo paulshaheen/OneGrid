@@ -40,7 +40,11 @@ function Invoke-Agent([string]$Method, [string]$Path, $Body) {
   if ($null -ne $Body) { $p.Body = ($Body | ConvertTo-Json -Depth 20 -Compress) }
   for ($i = 1; $i -le 4; $i++) {
     try { return Invoke-RestMethod @p }
-    catch { if ($i -eq 4) { throw }; Write-Host "  retry $i ($($_.Exception.Message))"; Start-Sleep 15 }
+    catch {
+      $code = [int]$_.Exception.Response.StatusCode
+      if ($i -eq 4 -or ($code -ge 400 -and $code -lt 500 -and $code -ne 429)) { throw }
+      Write-Host "  retry $i ($($_.Exception.Message))"; Start-Sleep 15
+    }
   }
 }
 
@@ -73,14 +77,15 @@ Procedure:
 Keep the report short and plain: what we see, what it means, what it costs if ignored, what to do.
 '@
 $null = Invoke-Agent PUT '/api/v2/extendedAgent/agents/onegrid-maintenance' @{
-  name = 'onegrid-maintenance'; type = 'ExtendedAgent'; tags = @()
+  name = 'onegrid-maintenance'; type = 'ExtendedAgent'; tags = @(); owner = ''
   properties = @{
-    description         = 'Investigates OneGrid equipment alarms (vibration, temperature) and raises corrective work orders after human approval.'
-    handoff_description = 'Use for OneGrid equipment-condition alarms such as turbine vibration or bearing temperature, and for creating maintenance work orders.'
-    system_prompt       = $prompt
-    tools               = @()
-    mcp_tools           = @('onegrid/*')
-    handoffs            = @()
+    instructions           = $prompt
+    handoffDescription     = 'Use for OneGrid equipment-condition alarms such as turbine vibration or bearing temperature, and for creating maintenance work orders.'
+    tools                  = @()
+    mcpTools               = @('onegrid/*')
+    handoffs               = @()
+    allowParallelToolCalls = $true
+    enableSkills           = $true
   }
 }
 
@@ -94,7 +99,7 @@ $plans = @(
   @{ id = 'sre-demo-04-sensor';   name = 'Faulty sensor (demo 04)';   titleContains = 'sre-demo-04'; handlingAgent = '' }
 )
 foreach ($p in $plans) {
-  $body = $p + @{ priorities = @('Sev0', 'Sev1', 'Sev2', 'Sev3', 'Sev4'); agentMode = 'review'; maxAttempts = 3 }
+  $body = $p + @{ priorities = @('Sev0', 'Sev1', 'Sev2', 'Sev3', 'Sev4'); agentMode = 'review' }
   $null = Invoke-Agent PUT "/api/v1/incidentPlayground/filters/$($p.id)" $body
   Write-Host "   $($p.id) -> $(if ($p.handlingAgent) { $p.handlingAgent } else { 'default agent' })"
 }
