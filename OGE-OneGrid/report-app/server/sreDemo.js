@@ -1,21 +1,28 @@
 // ---------------------------------------------------------------------------
-//  SRE demo control plane: break / reset the three platform scenarios used to
-//  demonstrate Azure SRE Agent against the OneGrid dev site (pcpro).
+//  SRE demo control plane: break / reset the scenarios used to demonstrate
+//  Azure SRE Agent against the OneGrid dev site (pcpro).
 //
 //    storage   public network access on the OneGrid storage account is disabled
 //              (what the MCAPS StorageAccount_PublicNetwork_Modify policy does)
 //    deploy    the site is switched to a known-bad build (run-from-package)
 //    capacity  the Fabric capacity backing the workspace is suspended
+//    sensor    a turbine vibration sensor flatlines at 0.0 (rows injected into
+//              Eventhouse PiEvents, marked Tier == "sre-demo")
 //
 //  Read-only status is public; inject/reset require the SRE_DEMO_KEY header.
 //  All Azure calls use the app's identity (managed identity in Azure, `az` locally).
 //  Mirrors sre-demo/sre-demo.ps1 — keep the two in sync.
 // ---------------------------------------------------------------------------
 import crypto from 'node:crypto';
-import { getToken } from './fabric.js';
+import { getToken, kql, kqlMgmt } from './fabric.js';
+import { resolveTarget } from './target.js';
 
 const ARM = 'https://management.azure.com';
 const ACTIVE_TAG = 'sre-demo-active';
+// Injected telemetry is marked with this Tier so it can be found and deleted exactly.
+const SENSOR_MARK = 'sre-demo';
+const SENSOR_TAG = process.env.SRE_DEMO_SENSOR_TAG || 'FV1:STM.VIBR';
+const SENSOR_ASSET = process.env.SRE_DEMO_SENSOR_ASSET || 'FV_U1_Steam_Turbine';
 
 function cfg() {
   const e = process.env;
@@ -67,6 +74,16 @@ export const SCENARIOS = [
     alerts: ['sre-demo-03-capacity-paused'],
     warning: 'Affects every workspace on ogestu (including production OneGrid and customer demos) until reset.',
   },
+  {
+    id: 'sensor',
+    number: '04',
+    name: 'Faulty sensor',
+    component: 'Grid telemetry (Eventhouse)',
+    breaks: 'The vibration sensor on the Fairview steam turbine dies and reports a flat 0.0.',
+    symptom: 'The turbine looks perfectly calm — the dead sensor hides the #1 equipment risk on the executive brief.',
+    fix: 'Agent reads the sensor-health findings, diagnoses a failed transducer and recommends quarantining the sensor and dispatching a crew.',
+    alerts: ['sre-demo-04-sensor-fault'],
+  },
 ];
 
 async function arm(method, path, body, apiVersion) {
@@ -114,6 +131,10 @@ async function setActive(c, value) {
 }
 
 async function scenarioState(c, id) {
+  if (id === 'sensor') {
+    const n = await injectedSensorRows();
+    return { broken: n > 0, detail: n > 0 ? `${SENSOR_TAG} reporting a flat 0.0 (${n} injected readings)` : `${SENSOR_TAG} reporting normally` };
+  }
   if (id === 'storage') {
     const pna = (await arm('GET', c.storageId, undefined, '2023-05-01')).properties?.publicNetworkAccess || 'Unknown';
     return { broken: pna !== 'Enabled', detail: `Public network access: ${pna}` };
@@ -187,12 +208,14 @@ export async function sreControl(action, scenario, providedKey, force = false) {
     await setActive(c, `${scenario}@${new Date().toISOString().slice(0, 16)}Z`);
     if (scenario === 'storage') await arm('PATCH', c.storageId, { properties: { publicNetworkAccess: 'Disabled' } }, '2023-05-01');
     else if (scenario === 'deploy') await setPackage(c, c.badPkg);
+    else if (scenario === 'sensor') await injectSensorFault();
     else await arm('POST', `${c.capacityId}/suspend`, undefined, '2023-11-01');
     return { status: 200, body: { ok: true, message: `Injected "${scenario}". Alerts usually fire within 5 minutes.` } };
   }
 
   for (const id of ids) {
     if (id === 'storage') await arm('PATCH', c.storageId, { properties: { publicNetworkAccess: 'Enabled' } }, '2023-05-01');
+    else if (id === 'sensor') await clearSensorFault();
     else if (id === 'deploy') {
       const pkg = (await appSettings(c)).WEBSITE_RUN_FROM_PACKAGE || '';
       if (pkg !== c.goodPkg) await setPackage(c, c.goodPkg);
@@ -201,4 +224,82 @@ export async function sreControl(action, scenario, providedKey, force = false) {
   const active = await getActive(c).catch(() => null);
   if (active && (scenario === 'all' || active.startsWith(`${scenario}@`))) await setActive(c, '');
   return { status: 200, body: { ok: true, message: scenario === 'all' ? 'Everything reset.' : `Reset "${scenario}".` } };
+}
+
+// ── Scenario 04: faulty sensor (grid telemetry in Eventhouse) ────────────────
+function kusto() {
+  const t = resolveTarget();
+  if (!t.kustoUri || !t.kqlDatabase) throw new Error('Eventhouse is not configured for this deployment.');
+  return t;
+}
+
+async function injectedSensorRows() {
+  const t = kusto();
+  const rows = await kql(t.kustoUri, t.kqlDatabase, `PiEvents | where Tier == "${SENSOR_MARK}" | count`);
+  return Number(rows?.[0]?.Count ?? 0);
+}
+
+/** Append 60 one-minute readings of a flat 0.0 just after the newest real reading:
+ *  the sensor "died an hour ago". Every injected row carries Tier == "sre-demo". */
+async function injectSensorFault() {
+  const t = kusto();
+  await clearSensorFault();
+  const rows = await kql(t.kustoUri, t.kqlDatabase, 'PiEvents | summarize a = max(Timestamp)');
+  const anchor = new Date(rows?.[0]?.a ?? Date.now()).getTime();
+  const lines = [];
+  for (let i = 1; i <= 60; i++) {
+    lines.push(`${new Date(anchor + i * 60_000).toISOString()},${SENSOR_TAG},${SENSOR_ASSET},0,${SENSOR_MARK}`);
+  }
+  await kqlMgmt(t.kustoUri, t.kqlDatabase, `.ingest inline into table PiEvents with (format="csv") <|\n${lines.join('\n')}`);
+}
+
+async function clearSensorFault() {
+  const t = kusto();
+  await kqlMgmt(t.kustoUri, t.kqlDatabase, `.delete table PiEvents records <| PiEvents | where Tier == "${SENSOR_MARK}"`);
+}
+
+const lastTrace = new Map(); // tag -> epoch ms, throttles App Insights traces
+
+/** Send a warning trace straight to Application Insights (the agent reads these). */
+async function trackTrace(message, properties) {
+  const cs = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || '';
+  const parts = Object.fromEntries(cs.split(';').filter(Boolean).map((p) => { const i = p.indexOf('='); return [p.slice(0, i), p.slice(i + 1)]; }));
+  if (!parts.InstrumentationKey || !parts.IngestionEndpoint) return;
+  const envelope = [{
+    name: 'Microsoft.ApplicationInsights.Message',
+    time: new Date().toISOString(),
+    iKey: parts.InstrumentationKey,
+    tags: { 'ai.cloud.role': 'onegrid-sensor-monitor' },
+    data: { baseType: 'MessageData', baseData: { ver: 2, message, severityLevel: 2, properties } },
+  }];
+  try {
+    await fetch(`${parts.IngestionEndpoint.replace(/\/$/, '')}/v2.1/track`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envelope),
+    });
+  } catch { /* telemetry is best-effort */ }
+}
+
+/** Flatline detector: any sensor with 10+ readings in the newest hour and zero variance.
+ *  Public + read-only; the availability test alerts when faultySensors > 0. */
+export async function sensorHealth() {
+  const t = kusto();
+  const rows = await kql(t.kustoUri, t.kqlDatabase, `let a = toscalar(PiEvents | summarize max(Timestamp));
+    PiEvents | where Timestamp > a - 60m
+    | summarize n = count(), sd = stdev(Value), v = avg(Value), since = min(Timestamp), latest = max(Timestamp) by Tag, AssetId
+    | where n >= 10 and sd == 0`);
+  const sensors = (rows || []).map((r) => ({
+    tag: r.Tag, assetId: r.AssetId, value: Number(r.v), readings: Number(r.n), since: r.since, latest: r.latest,
+  }));
+  for (const s of sensors) {
+    const prev = lastTrace.get(s.tag) || 0;
+    if (Date.now() - prev < 5 * 60_000) continue;
+    lastTrace.set(s.tag, Date.now());
+    await trackTrace(
+      `Sensor fault: ${s.tag} on ${s.assetId} has been flatlined at ${s.value.toFixed(2)} for ${s.readings} consecutive readings (since ${s.since}). ` +
+        'A healthy vibration signal is never perfectly constant, so this indicates a failed transducer, cable or I/O card. ' +
+        'The equipment is effectively unmonitored: its vibration-based failure risk cannot be trusted until the sensor is repaired.',
+      { sensorTag: s.tag, assetId: s.assetId, flatValue: String(s.value), readings: String(s.readings), since: String(s.since), scenario: 'sre-demo-04' },
+    );
+  }
+  return { faultySensors: sensors.length, sensors, checkedAt: new Date().toISOString() };
 }

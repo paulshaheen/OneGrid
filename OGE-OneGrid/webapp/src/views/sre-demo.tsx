@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertTriangle,
   ArrowUpRight,
   BellRing,
@@ -34,7 +35,7 @@ interface AlertEvent {
 }
 
 interface Scenario {
-  id: "storage" | "deploy" | "capacity";
+  id: "storage" | "deploy" | "capacity" | "sensor";
   number: string;
   name: string;
   component: string;
@@ -62,6 +63,7 @@ const ICON: Record<Scenario["id"], LucideIcon> = {
   storage: Database,
   deploy: PackageX,
   capacity: Zap,
+  sensor: Activity,
 };
 
 const ALERT_LABEL: Record<string, string> = {
@@ -69,6 +71,7 @@ const ALERT_LABEL: Record<string, string> = {
   "sre-demo-01-storage-failed-requests": "Storage requests rejected",
   "sre-demo-02-pcpro-http-5xx": "HTTP 5xx errors",
   "sre-demo-03-capacity-paused": "Capacity status check failing",
+  "sre-demo-04-sensor-fault": "Sensor health check failing",
 };
 
 /** Activity-log alerts are one-off events: they never resolve, so don't show them as "firing". */
@@ -311,7 +314,7 @@ export function SreDemoPage() {
             The SRE demo isn&apos;t enabled on this deployment. It runs on the dev site only.
           </Panel>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-2">
             {status.scenarios.map((s) => (
               <ScenarioCard
                 key={s.id}

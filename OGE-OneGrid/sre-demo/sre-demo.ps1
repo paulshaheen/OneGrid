@@ -29,7 +29,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)][ValidateSet("status", "inject", "reset", "reset-all")][string]$Action = "status",
-  [Parameter(Position = 1)][ValidateSet("storage", "deploy", "capacity")][string]$Scenario,
+  [Parameter(Position = 1)][ValidateSet("storage", "deploy", "capacity", "sensor")][string]$Scenario,
   [switch]$Force   # inject even if another scenario is active
 )
 $ErrorActionPreference = "Stop"
@@ -45,6 +45,10 @@ $BadPkg      = "$PkgBase/onegrid-bad.zip"
 $CapacityId  = "/subscriptions/$Sub/resourceGroups/rgpoc/providers/Microsoft.Fabric/capacities/ogestu"
 $AppId       = "/subscriptions/$Sub/resourceGroups/$Rg/providers/Microsoft.Web/sites/$App"
 $ActiveTag   = "sre-demo-active"
+$KustoUri    = "https://trd-src2n4nbb4xvtak60v.z3.kusto.fabric.microsoft.com"
+$KustoDb     = "OneGridEH"
+$SensorTag   = "FV1:STM.VIBR"
+$SensorAsset = "FV_U1_Steam_Turbine"
 
 function Log($m, $c = "Cyan") { Write-Host "[$(Get-Date -f HH:mm:ss)] $m" -ForegroundColor $c }
 
@@ -72,6 +76,13 @@ function Get-CapacityState {
   (az rest --method get --url "https://management.azure.com$($CapacityId)?api-version=2023-11-01" --query properties.state -o tsv)
 }
 
+function Invoke-Kusto([string]$csl, [switch]$Mgmt) {
+  $tok = az account get-access-token --resource https://kusto.kusto.windows.net --query accessToken -o tsv
+  $ep = if ($Mgmt) { "/v1/rest/mgmt" } else { "/v1/rest/query" }
+  $r = Invoke-RestMethod -Method Post "$KustoUri$ep" -Headers @{ Authorization = "Bearer $tok" } -ContentType "application/json; charset=utf-8" -Body (@{ db = $KustoDb; csl = $csl } | ConvertTo-Json)
+  return , $r.Tables[0].Rows
+}
+
 # ── per-scenario state ────────────────────────────────────────────────────────
 function Get-ScenarioState([string]$s) {
   switch ($s) {
@@ -80,6 +91,8 @@ function Get-ScenarioState([string]$s) {
     "deploy"   { $pkg = az webapp config appsettings list -n $App -g $Rg --query "[?name=='WEBSITE_RUN_FROM_PACKAGE'].value | [0]" -o tsv
                  $which = if ($pkg -eq $BadPkg) { "BAD build" } elseif ($pkg -eq $GoodPkg) { "good build" } else { "uploaded package ($pkg)" }
                  return @{ broken = ($pkg -eq $BadPkg); detail = $which } }
+    "sensor"   { $n = [int](Invoke-Kusto 'PiEvents | where Tier == "sre-demo" | count')[0][0]
+                 return @{ broken = ($n -gt 0); detail = $(if ($n) { "$SensorTag flat at 0.0 ($n injected readings)" } else { "$SensorTag reporting normally" }) } }
     "capacity" { $state = Get-CapacityState
                  return @{ broken = ($state -ne "Active"); detail = "ogestu=$state" } }
   }
@@ -100,6 +113,13 @@ function Invoke-Inject([string]$s) {
     "capacity" {
       Log "Suspending Fabric capacity ogestu (affects every workspace on it)..." Yellow
       az rest --method post --url "https://management.azure.com$CapacityId/suspend?api-version=2023-11-01" -o none
+    }
+    "sensor" {
+      Log "Flatlining $SensorTag at 0.0 (60 injected readings in Eventhouse)..." Yellow
+      Invoke-Kusto '.delete table PiEvents records <| PiEvents | where Tier == "sre-demo"' -Mgmt | Out-Null
+      $anchor = [datetime](Invoke-Kusto 'PiEvents | summarize max(Timestamp)')[0][0]
+      $lines = 1..60 | ForEach-Object { "{0},{1},{2},0,sre-demo" -f $anchor.ToUniversalTime().AddMinutes($_).ToString("yyyy-MM-ddTHH:mm:ssZ"), $SensorTag, $SensorAsset }
+      Invoke-Kusto (".ingest inline into table PiEvents with (format=""csv"") <|`n" + ($lines -join "`n")) -Mgmt | Out-Null
     }
   }
 }
@@ -122,12 +142,17 @@ function Invoke-Reset([string]$s) {
         az rest --method post --url "https://management.azure.com$CapacityId/resume?api-version=2023-11-01" -o none
       }
     }
+    "sensor" {
+      Log "Removing the injected sensor readings..."
+      Invoke-Kusto '.delete table PiEvents records <| PiEvents | where Tier == "sre-demo"' -Mgmt | Out-Null
+    }
   }
 }
 
 function Test-Recovered([string]$s) {
   switch ($s) {
     "storage"  { return -not (Get-ScenarioState "storage").broken }
+    "sensor"   { return -not (Get-ScenarioState "sensor").broken }
     "deploy"   { return (Get-HttpStatus "/api/fleet-health") -eq 200 -and (Get-HttpStatus "/api/fleet-assets") -eq 200 }
     "capacity" {
       if ((Get-CapacityState) -ne "Active") { return $false }
@@ -139,7 +164,7 @@ function Test-Recovered([string]$s) {
 function Show-Status {
   $active = Get-Active
   Log ("Active scenario: " + ($(if ($active) { $active } else { "none" })))
-  foreach ($s in "storage", "deploy", "capacity") {
+  foreach ($s in "storage", "deploy", "capacity", "sensor") {
     $st = Get-ScenarioState $s
     $mark = if ($st.broken) { "BROKEN " } else { "healthy" }
     Write-Host ("  {0,-9} {1}  {2}" -f $s, $mark, $st.detail) -ForegroundColor $(if ($st.broken) { "Red" } else { "Green" })
@@ -176,7 +201,7 @@ switch ($Action) {
     if ($active -and $active.StartsWith("$Scenario@")) { Set-Active "" }
   }
   "reset-all" {
-    foreach ($s in "storage", "deploy", "capacity") { Invoke-Reset $s }
+    foreach ($s in "storage", "deploy", "capacity", "sensor") { Invoke-Reset $s }
     Set-Active ""
     Start-Sleep 20
     Show-Status

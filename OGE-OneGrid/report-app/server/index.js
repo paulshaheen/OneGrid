@@ -77,6 +77,7 @@ async function handleApi(req, res, url) {
     // ── Aurora forecast job: manual trigger + last-run status ─────────────────
     if (p === '/api/aurora/status') return json(res, 200, await aurora.auroraStatus());
     if (p === '/api/sre/status') return json(res, 200, await sre.sreStatus());
+    if (p === '/api/sre/sensor-health') return json(res, 200, await sre.sensorHealth());
     // ── Governance / OneLake-security review plane (read-only) ──────────────
     if (p.startsWith('/api/governance/')) {
       if (!gov.isAuthorized(req)) return json(res, 403, { error: 'forbidden: Governance.Reader required' });
