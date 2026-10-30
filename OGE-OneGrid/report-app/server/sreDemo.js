@@ -16,6 +16,8 @@
 import crypto from 'node:crypto';
 import { getToken, kql, kqlMgmt } from './fabric.js';
 import { resolveTarget } from './target.js';
+import { trackTrace } from './aiTelemetry.js';
+import * as live from './liveIncident.js';
 
 const ARM = 'https://management.azure.com';
 const ACTIVE_TAG = 'sre-demo-active';
@@ -84,19 +86,37 @@ export const SCENARIOS = [
     fix: 'Agent reads the sensor-health findings, diagnoses a failed transducer and recommends quarantining the sensor and dispatching a crew.',
     alerts: ['sre-demo-04-sensor-fault'],
   },
+  {
+    id: 'bearing',
+    number: '05',
+    name: 'Live: bearing failure → work order',
+    component: 'Grid telemetry + OneGrid MCP',
+    live: true,
+    breaks: 'Vibration and bearing temperature on the Fairview steam turbine start climbing in real time — alarm in about 30 seconds.',
+    symptom: 'OneGrid raises a high-vibration alarm; the turbine is heading for a forced outage.',
+    fix: 'Agent pulls the sensor trend, root cause and asset history through the OneGrid MCP server, asks for approval, then creates a work order in OneGrid.',
+    alerts: ['sre-demo-05-bearing-vibration'],
+  },
 ];
 
 async function arm(method, path, body, apiVersion) {
   const token = await getToken(ARM);
   const sep = path.includes('?') ? '&' : '?';
-  const res = await fetch(`${ARM}${path}${apiVersion ? `${sep}api-version=${apiVersion}` : ''}`, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
+  for (let attempt = 1; ; attempt += 1) {
+    const res = await fetch(`${ARM}${path}${apiVersion ? `${sep}api-version=${apiVersion}` : ''}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    // App Service returns 429/409 while another operation holds the site lock; back off and retry.
+    if ((res.status === 429 || res.status === 409) && attempt < 5) {
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      continue;
+  }
   if (!res.ok) throw new Error(`${method} ${path.split('/providers/').pop()} -> ${res.status} ${text.slice(0, 240)}`);
   return text ? JSON.parse(text) : {};
+  }
 }
 
 async function appSettings(c) {
@@ -122,7 +142,17 @@ async function getActive(c) {
   return r.properties?.tags?.[ACTIVE_TAG] || null;
 }
 
+// Cached active-scenario lookup for hot paths (health checks, status polling).
+let activeCache = { at: 0, val: null };
+async function activeCached(c) {
+  if (Date.now() - activeCache.at < 60_000) return activeCache.val;
+  const val = await getActive(c).catch(() => null);
+  activeCache = { at: Date.now(), val };
+  return val;
+}
+
 async function setActive(c, value) {
+  activeCache = { at: 0, val: null };
   const op = value
     ? { operation: 'Merge', properties: { tags: { [ACTIVE_TAG]: value } } }
     : { operation: 'Delete', properties: { tags: { [ACTIVE_TAG]: (await getActive(c)) || '' } } };
@@ -131,6 +161,10 @@ async function setActive(c, value) {
 }
 
 async function scenarioState(c, id) {
+  if (id === 'bearing') {
+    const s = await live.liveState();
+    return { broken: s.running || s.readings > 0, detail: s.detail };
+  }
   if (id === 'sensor') {
     const n = await injectedSensorRows();
     return { broken: n > 0, detail: n > 0 ? `${SENSOR_TAG} reporting a flat 0.0 (${n} injected readings)` : `${SENSOR_TAG} reporting normally` };
@@ -209,13 +243,15 @@ export async function sreControl(action, scenario, providedKey, force = false) {
     if (scenario === 'storage') await arm('PATCH', c.storageId, { properties: { publicNetworkAccess: 'Disabled' } }, '2023-05-01');
     else if (scenario === 'deploy') await setPackage(c, c.badPkg);
     else if (scenario === 'sensor') await injectSensorFault();
+    else if (scenario === 'bearing') await live.startLive();
     else await arm('POST', `${c.capacityId}/suspend`, undefined, '2023-11-01');
-    return { status: 200, body: { ok: true, message: `Injected "${scenario}". Alerts usually fire within 5 minutes.` } };
+    return { status: 200, body: { ok: true, message: scenario === 'bearing' ? 'Live incident started — alarm in about 30 seconds.' : `Injected "${scenario}". Alerts usually fire within 5 minutes.` } };
   }
 
   for (const id of ids) {
     if (id === 'storage') await arm('PATCH', c.storageId, { properties: { publicNetworkAccess: 'Enabled' } }, '2023-05-01');
     else if (id === 'sensor') await clearSensorFault();
+    else if (id === 'bearing') await live.resetLive();
     else if (id === 'deploy') {
       const pkg = (await appSettings(c)).WEBSITE_RUN_FROM_PACKAGE || '';
       if (pkg !== c.goodPkg) await setPackage(c, c.goodPkg);
@@ -233,10 +269,13 @@ function kusto() {
   return t;
 }
 
-async function injectedSensorRows() {
+let sensorRowsCache = { at: 0, n: 0 };
+async function injectedSensorRows(fresh = false) {
+  if (!fresh && Date.now() - sensorRowsCache.at < 60_000) return sensorRowsCache.n;
   const t = kusto();
   const rows = await kql(t.kustoUri, t.kqlDatabase, `PiEvents | where Tier == "${SENSOR_MARK}" | count`);
-  return Number(rows?.[0]?.Count ?? 0);
+  sensorRowsCache = { at: Date.now(), n: Number(rows?.[0]?.Count ?? 0) };
+  return sensorRowsCache.n;
 }
 
 /** Append 60 one-minute readings of a flat 0.0 just after the newest real reading:
@@ -251,37 +290,28 @@ async function injectSensorFault() {
     lines.push(`${new Date(anchor + i * 60_000).toISOString()},${SENSOR_TAG},${SENSOR_ASSET},0,${SENSOR_MARK}`);
   }
   await kqlMgmt(t.kustoUri, t.kqlDatabase, `.ingest inline into table PiEvents with (format="csv") <|\n${lines.join('\n')}`);
+  sensorRowsCache = { at: 0, n: 0 };
 }
 
 async function clearSensorFault() {
   const t = kusto();
   await kqlMgmt(t.kustoUri, t.kqlDatabase, `.delete table PiEvents records <| PiEvents | where Tier == "${SENSOR_MARK}"`);
+  sensorRowsCache = { at: 0, n: 0 };
 }
 
 const lastTrace = new Map(); // tag -> epoch ms, throttles App Insights traces
 
-/** Send a warning trace straight to Application Insights (the agent reads these). */
-async function trackTrace(message, properties) {
-  const cs = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || '';
-  const parts = Object.fromEntries(cs.split(';').filter(Boolean).map((p) => { const i = p.indexOf('='); return [p.slice(0, i), p.slice(i + 1)]; }));
-  if (!parts.InstrumentationKey || !parts.IngestionEndpoint) return;
-  const envelope = [{
-    name: 'Microsoft.ApplicationInsights.Message',
-    time: new Date().toISOString(),
-    iKey: parts.InstrumentationKey,
-    tags: { 'ai.cloud.role': 'onegrid-sensor-monitor' },
-    data: { baseType: 'MessageData', baseData: { ver: 2, message, severityLevel: 2, properties } },
-  }];
-  try {
-    await fetch(`${parts.IngestionEndpoint.replace(/\/$/, '')}/v2.1/track`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(envelope),
-    });
-  } catch { /* telemetry is best-effort */ }
-}
-
 /** Flatline detector: any sensor with 10+ readings in the newest hour and zero variance.
- *  Public + read-only; the availability test alerts when faultySensors > 0. */
+ *  Public + read-only; the availability test alerts when faultySensors > 0. The scan only
+ *  runs while scenario 04 is active, so the 5-minute health probes don't load the Eventhouse. */
 export async function sensorHealth() {
+  const c = cfg();
+  if (c.enabled) {
+    const active = await activeCached(c);
+    if (!active || !active.startsWith('sensor@')) {
+      return { faultySensors: 0, sensors: [], checkedAt: new Date().toISOString(), note: 'Scan runs only while the faulty-sensor scenario is active.' };
+    }
+  }
   const t = kusto();
   const rows = await kql(t.kustoUri, t.kqlDatabase, `let a = toscalar(PiEvents | summarize max(Timestamp));
     PiEvents | where Timestamp > a - 60m

@@ -14,6 +14,12 @@
                 Symptom: dashboards show "capacity paused".
                 !! ogestu hosts ~19 workspaces (incl. production OneGrid and customer
                    demos). Pausing it affects all of them until reset.
+   04 sensor    FV1:STM.VIBR flatlines at 0.0 (rows injected into Eventhouse PiEvents).
+   05 bearing   LIVE: vibration + bearing temperature on the Fairview turbine climb in
+                real time (alarm in ~30 s). The agent investigates through the OneGrid
+                MCP server and creates a work order after approval. The stream runs
+                inside the app, so inject/reset go through the app API (needs the demo
+                key: -DemoKey or $env:SRE_DEMO_KEY).
 
  Safety: one scenario at a time (tracked by the tag sre-demo-active on the pcpro
  App Service, so it is visible to anyone, including the agent); every reset is safe
@@ -29,8 +35,9 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)][ValidateSet("status", "inject", "reset", "reset-all")][string]$Action = "status",
-  [Parameter(Position = 1)][ValidateSet("storage", "deploy", "capacity", "sensor")][string]$Scenario,
-  [switch]$Force   # inject even if another scenario is active
+  [Parameter(Position = 1)][ValidateSet("storage", "deploy", "capacity", "sensor", "bearing")][string]$Scenario,
+  [switch]$Force,  # inject even if another scenario is active
+  [string]$DemoKey = $env:SRE_DEMO_KEY   # needed for the app-hosted live scenario (bearing)
 )
 $ErrorActionPreference = "Stop"
 
@@ -83,6 +90,12 @@ function Invoke-Kusto([string]$csl, [switch]$Mgmt) {
   return , $r.Tables[0].Rows
 }
 
+function Invoke-AppControl([string]$action, [string]$s) {
+  if (-not $DemoKey) { throw "The '$s' scenario runs inside the app: pass -DemoKey or set `$env:SRE_DEMO_KEY." }
+  Invoke-RestMethod -Method Post "$SiteUrl/api/sre/$action" -Headers @{ "x-sre-demo-key" = $DemoKey } `
+    -ContentType "application/json" -Body (@{ scenario = $s; force = [bool]$Force } | ConvertTo-Json) -TimeoutSec 120
+}
+
 # ── per-scenario state ────────────────────────────────────────────────────────
 function Get-ScenarioState([string]$s) {
   switch ($s) {
@@ -93,6 +106,9 @@ function Get-ScenarioState([string]$s) {
                  return @{ broken = ($pkg -eq $BadPkg); detail = $which } }
     "sensor"   { $n = [int](Invoke-Kusto 'PiEvents | where Tier == "sre-demo" | count')[0][0]
                  return @{ broken = ($n -gt 0); detail = $(if ($n) { "$SensorTag flat at 0.0 ($n injected readings)" } else { "$SensorTag reporting normally" }) } }
+    "bearing"  { $l = Invoke-RestMethod "$SiteUrl/api/sre/live" -TimeoutSec 120
+                 $v = if ($l.latest) { "vibration $([math]::Round($l.latest.vib, 2)) mm/s, bearing $([math]::Round($l.latest.temp, 1)) C" } else { "no live readings" }
+                 return @{ broken = ($l.stage -ne "idle"); detail = "stage=$($l.stage) running=$($l.running) $v; agent work orders=$(@($l.workOrders).Count)" } }
     "capacity" { $state = Get-CapacityState
                  return @{ broken = ($state -ne "Active"); detail = "ogestu=$state" } }
   }
@@ -121,6 +137,10 @@ function Invoke-Inject([string]$s) {
       $lines = 1..60 | ForEach-Object { "{0},{1},{2},0,sre-demo" -f $anchor.ToUniversalTime().AddMinutes($_).ToString("yyyy-MM-ddTHH:mm:ssZ"), $SensorTag, $SensorAsset }
       Invoke-Kusto (".ingest inline into table PiEvents with (format=""csv"") <|`n" + ($lines -join "`n")) -Mgmt | Out-Null
     }
+    "bearing" {
+      Log "Starting the live bearing-failure stream on $SensorAsset (alarm in ~30 s)..." Yellow
+      Log (Invoke-AppControl "inject" "bearing").message
+    }
   }
 }
 
@@ -146,6 +166,16 @@ function Invoke-Reset([string]$s) {
       Log "Removing the injected sensor readings..."
       Invoke-Kusto '.delete table PiEvents records <| PiEvents | where Tier == "sre-demo"' -Mgmt | Out-Null
     }
+    "bearing" {
+      Log "Stopping the live stream and removing its readings + agent work orders..."
+      try { Log (Invoke-AppControl "reset" "bearing").message }
+      catch {
+        # App unreachable: clean Eventhouse directly (the stream stops when the app restarts).
+        Log "App reset failed ($($_.Exception.Message)); cleaning Eventhouse directly." Yellow
+        Invoke-Kusto '.delete table PiEvents records <| PiEvents | where Tier == "sre-live"' -Mgmt | Out-Null
+        Invoke-Kusto '.delete table AgentWorkOrders records <| AgentWorkOrders | where Tier == "sre-live"' -Mgmt | Out-Null
+      }
+    }
   }
 }
 
@@ -153,6 +183,7 @@ function Test-Recovered([string]$s) {
   switch ($s) {
     "storage"  { return -not (Get-ScenarioState "storage").broken }
     "sensor"   { return -not (Get-ScenarioState "sensor").broken }
+    "bearing"  { return -not (Get-ScenarioState "bearing").broken }
     "deploy"   { return (Get-HttpStatus "/api/fleet-health") -eq 200 -and (Get-HttpStatus "/api/fleet-assets") -eq 200 }
     "capacity" {
       if ((Get-CapacityState) -ne "Active") { return $false }
@@ -164,7 +195,7 @@ function Test-Recovered([string]$s) {
 function Show-Status {
   $active = Get-Active
   Log ("Active scenario: " + ($(if ($active) { $active } else { "none" })))
-  foreach ($s in "storage", "deploy", "capacity", "sensor") {
+  foreach ($s in "storage", "deploy", "capacity", "sensor", "bearing") {
     $st = Get-ScenarioState $s
     $mark = if ($st.broken) { "BROKEN " } else { "healthy" }
     Write-Host ("  {0,-9} {1}  {2}" -f $s, $mark, $st.detail) -ForegroundColor $(if ($st.broken) { "Red" } else { "Green" })
@@ -182,7 +213,7 @@ az account set --subscription $Sub | Out-Null
 switch ($Action) {
   "status" { Show-Status }
   "inject" {
-    if (-not $Scenario) { throw "Specify a scenario: storage | deploy | capacity" }
+    if (-not $Scenario) { throw "Specify a scenario: storage | deploy | capacity | sensor | bearing" }
     $active = Get-Active
     if ($active -and -not $active.StartsWith("$Scenario@") -and -not $Force) {
       throw "Scenario '$active' is already active. Reset it first (./sre-demo.ps1 reset-all) or pass -Force."
@@ -192,7 +223,7 @@ switch ($Action) {
     Log "Injected '$Scenario'. Alerts typically fire within 5 minutes. Reset with: ./sre-demo.ps1 reset $Scenario" Green
   }
   "reset" {
-    if (-not $Scenario) { throw "Specify a scenario: storage | deploy | capacity" }
+    if (-not $Scenario) { throw "Specify a scenario: storage | deploy | capacity | sensor | bearing" }
     Invoke-Reset $Scenario
     $ok = $false
     for ($i = 0; $i -lt 30 -and -not $ok; $i++) { Start-Sleep 10; $ok = Test-Recovered $Scenario }
@@ -201,7 +232,9 @@ switch ($Action) {
     if ($active -and $active.StartsWith("$Scenario@")) { Set-Active "" }
   }
   "reset-all" {
-    foreach ($s in "storage", "deploy", "capacity", "sensor") { Invoke-Reset $s }
+    foreach ($s in "storage", "deploy", "capacity", "sensor", "bearing") {
+      try { Invoke-Reset $s } catch { Log "reset $s failed: $($_.Exception.Message)" Yellow }
+    }
     Set-Active ""
     Start-Sleep 20
     Show-Status

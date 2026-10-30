@@ -18,6 +18,8 @@ import * as gov from './governance.js';
 import * as manuals from './manuals.js';
 import * as aurora from './aurora.js';
 import * as sre from './sreDemo.js';
+import * as live from './liveIncident.js';
+import { handleMcp } from './mcp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.REPORT_PORT || 7700;
@@ -67,17 +69,18 @@ async function handleApi(req, res, url) {
     if (p === '/api/facility-model') return json(res, 200, await api.facilityModel());
     if (p === '/api/watchlist') return json(res, 200, await api.watchlistTop(Number(url.searchParams.get('limit')) || 60));
     if (p === '/api/anomalies') return json(res, 200, await api.anomaliesTop(Number(url.searchParams.get('limit')) || 60));
-    if (p === '/api/work-orders') return json(res, 200, await api.workOrders(Number(url.searchParams.get('limit')) || 80));
-    if (p === '/api/work-orders-summary') return json(res, 200, await api.workOrdersSummary());
+    if (p === '/api/work-orders') return json(res, 200, await live.mergeWorkOrders(await api.workOrders(Number(url.searchParams.get('limit')) || 80)));
+    if (p === '/api/work-orders-summary') return json(res, 200, await live.mergeWorkOrdersSummary(await api.workOrdersSummary()));
     if (p === '/api/outages') return json(res, 200, await api.outages());
     if (p === '/api/predictions') return json(res, 200, await api.predictionsDetail());
-    if (p.startsWith('/api/asset-workorders/')) return json(res, 200, await api.assetWorkOrders(decodeURIComponent(p.split('/api/asset-workorders/')[1])));
+    if (p.startsWith('/api/asset-workorders/')) { const id = decodeURIComponent(p.split('/api/asset-workorders/')[1]); return json(res, 200, await live.mergeAssetWorkOrders(id, await api.assetWorkOrders(id))); }
     if (p === '/api/narrative') return json(res, 200, await api.narrative());
     if (p === '/api/ontology') return json(res, 200, loadOntology());
     // ── Aurora forecast job: manual trigger + last-run status ─────────────────
     if (p === '/api/aurora/status') return json(res, 200, await aurora.auroraStatus());
     if (p === '/api/sre/status') return json(res, 200, await sre.sreStatus());
     if (p === '/api/sre/sensor-health') return json(res, 200, await sre.sensorHealth());
+  if (p === '/api/sre/live') return json(res, 200, await live.liveStatus());
     // ── Governance / OneLake-security review plane (read-only) ──────────────
     if (p.startsWith('/api/governance/')) {
       if (!gov.isAuthorized(req)) return json(res, 403, { error: 'forbidden: Governance.Reader required' });
@@ -169,6 +172,8 @@ const server = http.createServer((req, res) => {
   // Embedded Planetary-Compute-Pro web app (the "Explorer" tab) — reverse-proxy
   // everything under /webapp to its SSR child process, streaming both ways.
   if (url.pathname === '/webapp' || url.pathname.startsWith('/webapp/')) return proxyWebapp(req, res);
+  // OneGrid MCP server for the Azure SRE Agent (Streamable HTTP, key-protected).
+  if (url.pathname === '/mcp') return handleMcp(req, res);
   // Chat agent proxy (streamed SSE) — collect body then forward.
   if (url.pathname === '/api/chat' && req.method === 'POST') {
     const chunks = [];

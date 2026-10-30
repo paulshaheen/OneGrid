@@ -9,6 +9,7 @@
 // real data every 60s so the stream tracks genuine drift/anomalies over time.
 import { WebSocketServer } from 'ws';
 import { tagStats, realtimePulse } from './dataApi.js';
+import { liveValue } from './liveIncident.js';
 
 const TICK_MS = 1000;      // 1-second live resolution
 const RESEED_MS = 60000;   // re-anchor to real last-known values every minute
@@ -91,7 +92,11 @@ export function attachRealtime(server) {
     const all = activeTags();
     if (!all.size) return;
     const snap = {};
-    for (const t of all) { const st = sim.get(t); if (st) snap[t] = { tag: t, value: round(tick(st)), ts: new Date().toISOString() }; }
+    for (const t of all) {
+      const ov = liveValue(t); // SRE demo live incident overrides the simulator
+      if (ov !== null) { snap[t] = { tag: t, value: round(ov), ts: new Date().toISOString() }; continue; }
+      const st = sim.get(t); if (st) snap[t] = { tag: t, value: round(tick(st)), ts: new Date().toISOString() };
+    }
     for (const [ws, set] of subs.entries()) {
       if (ws.readyState !== ws.OPEN || !set.size) continue;
       const values = [...set].map((t) => snap[t]).filter((x) => x && x.value != null);
@@ -102,10 +107,14 @@ export function attachRealtime(server) {
   const reseed = () => { const all = activeTags(); for (const t of all) pending.add(t); seedPending(); };
 
   const pushPulse = async () => {
+    // Only query when a browser is actually connected — the pulse used to scan the
+    // Eventhouse every 5 s on every server even with nobody watching.
+    const open = [...subs.keys()].filter((ws) => ws.readyState === ws.OPEN);
+    if (!open.length) return;
     try {
       const pulse = await realtimePulse();
       const msg = JSON.stringify({ type: 'pulse', ts: Date.now(), pulse });
-      for (const ws of subs.keys()) if (ws.readyState === ws.OPEN) ws.send(msg);
+      for (const ws of open) if (ws.readyState === ws.OPEN) ws.send(msg);
     } catch { /* transient */ }
   };
 

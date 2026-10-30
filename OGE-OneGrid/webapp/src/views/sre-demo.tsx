@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Database,
   Eye,
+  Gauge,
   KeyRound,
   Loader2,
   PackageX,
@@ -25,6 +26,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/ops/AppShell";
 import { relativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { LiveIncidentPanel } from "@/views/sre-live-incident";
 
 interface AlertEvent {
   name: string;
@@ -35,10 +37,11 @@ interface AlertEvent {
 }
 
 interface Scenario {
-  id: "storage" | "deploy" | "capacity" | "sensor";
+  id: "storage" | "deploy" | "capacity" | "sensor" | "bearing";
   number: string;
   name: string;
   component: string;
+  live?: boolean;
   breaks: string;
   symptom: string;
   fix: string;
@@ -64,6 +67,7 @@ const ICON: Record<Scenario["id"], LucideIcon> = {
   deploy: PackageX,
   capacity: Zap,
   sensor: Activity,
+  bearing: Gauge,
 };
 
 const ALERT_LABEL: Record<string, string> = {
@@ -72,6 +76,7 @@ const ALERT_LABEL: Record<string, string> = {
   "sre-demo-02-pcpro-http-5xx": "HTTP 5xx errors",
   "sre-demo-03-capacity-paused": "Capacity status check failing",
   "sre-demo-04-sensor-fault": "Sensor health check failing",
+  "sre-demo-05-bearing-vibration": "Turbine vibration above alarm",
 };
 
 /** Activity-log alerts are one-off events: they never resolve, so don't show them as "firing". */
@@ -314,18 +319,35 @@ export function SreDemoPage() {
             The SRE demo isn&apos;t enabled on this deployment. It runs on the dev site only.
           </Panel>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {status.scenarios.map((s) => (
-              <ScenarioCard
-                key={s.id}
-                s={s}
-                active={active === s.id}
-                otherActive={!!active && active !== s.id}
-                busy={busy}
-                onBreak={() => setConfirm(s)}
-                onReset={() => void call("reset", s.id)}
-              />
-            ))}
+          <div className="space-y-4">
+            {status.scenarios
+              .filter((s) => s.live)
+              .map((s) => (
+                <LiveIncidentPanel
+                  key={s.id}
+                  alertEvents={s.alertEvents ?? []}
+                  agentUrl={status.agentUrl}
+                  busy={busy}
+                  otherActive={!!active && active !== s.id}
+                  onStart={() => void call("inject", s.id)}
+                  onReset={() => void call("reset", s.id)}
+                />
+              ))}
+            <div className="grid gap-4 lg:grid-cols-2">
+              {status.scenarios
+                .filter((s) => !s.live)
+                .map((s) => (
+                  <ScenarioCard
+                    key={s.id}
+                    s={s}
+                    active={active === s.id}
+                    otherActive={!!active && active !== s.id}
+                    busy={busy}
+                    onBreak={() => setConfirm(s)}
+                    onReset={() => void call("reset", s.id)}
+                  />
+                ))}
+            </div>
           </div>
         )}
         {status?.alertsError && (
