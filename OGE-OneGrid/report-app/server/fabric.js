@@ -58,9 +58,19 @@ export async function getToken(resource) {
   const cached = tokenCache.get(resource);
   if (cached && cached.exp > now + 60_000) return cached.token;
   const token = await acquireToken(resource);
-  // az tokens last ~60-90 min; cache for 45 min to be safe.
-  tokenCache.set(resource, { token, exp: now + 45 * 60_000 });
+  // az tokens last ~60-90 min; cache for 45 min to be safe, but never past the token's own
+  // expiry (the az CLI can hand back a cached token that has only minutes left).
+  tokenCache.set(resource, { token, exp: Math.min(now + 45 * 60_000, jwtExpiry(token) ?? Infinity) });
   return token;
+}
+
+function jwtExpiry(token) {
+  try {
+    const exp = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString()).exp;
+    return Number.isFinite(exp) ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
 }
 
 // Real tokens can expire before our cache TTL (or be revoked). Detect an auth failure so
