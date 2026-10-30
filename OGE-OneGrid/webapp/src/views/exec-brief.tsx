@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   CalendarClock,
   ChevronDown,
   CircleDollarSign,
@@ -30,7 +31,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 import { AppShell } from "@/components/ops/AppShell";
@@ -58,7 +59,10 @@ import { solutionBrand, useSolution, type Solution } from "@/lib/solution";
 import { cn } from "@/lib/utils";
 import { useApi } from "@/report/lib/api.js";
 import { ExecActions } from "@/views/exec-actions";
+import { subjectFromRow, type EvidenceSubject } from "@/lib/exec/evidence";
+import { EvidenceModal } from "@/views/exec-evidence-modal";
 import { RiskDetail } from "@/views/exec-risk-detail";
+import { ExecScorecard } from "@/views/exec-scorecard";
 
 const HORIZON_HOURS = 120;
 
@@ -110,17 +114,6 @@ function equipmentIcon(text: string): LucideIcon {
   if (/separator|skid|metering|process|vessel|tank|column|static/.test(s)) return Container;
   if (/motor|drive|gear|bearing|rotating/.test(s)) return Cog;
   return Gauge;
-}
-
-type ConsoleLinkProps = Omit<ComponentPropsWithoutRef<"a">, "href"> & {
-  to: string;
-  search?: Record<string, string> | undefined;
-};
-
-function ConsoleLink({ to, search, ...rest }: ConsoleLinkProps) {
-  const base = useOpsBase();
-  const AnyLink = Link as unknown as (props: Record<string, unknown>) => ReactElement;
-  return <AnyLink to={to === "/" ? base : `${base}${to}`} search={search} {...rest} />;
 }
 
 function ask(message: string) {
@@ -211,16 +204,21 @@ export function ExecBriefPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const search = useSearch({ strict: false }) as { layout?: string };
   const navigate = useNavigate();
-  const layout: "actions" | "dashboard" = search.layout === "actions" ? "actions" : "dashboard";
-  const setLayout = (next: "actions" | "dashboard") =>
+  const layout: Layout =
+    search.layout === "actions" || search.layout === "scorecard" ? search.layout : "dashboard";
+  const setLayout = (next: Layout) =>
     void navigate({
       to: ".",
       search: (prev: Record<string, unknown>) => ({
         ...prev,
-        layout: next === "actions" ? "actions" : undefined,
+        layout: next === "dashboard" ? undefined : next,
       }),
       replace: true,
     } as never);
+  const [evidence, setEvidence] = useState<{
+    subject: EvidenceSubject;
+    action?: Action | null;
+  } | null>(null);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [question, setQuestion] = useState("");
@@ -319,6 +317,7 @@ export function ExecBriefPage() {
                 [
                   ["dashboard", "Dashboard", LayoutDashboard],
                   ["actions", "Actions", ListChecks],
+                  ["scorecard", "Scorecard", BarChart3],
                 ] as const
               ).map(([value, label, Icon]) => (
                 <button
@@ -394,6 +393,13 @@ export function ExecBriefPage() {
 
         {layout === "actions" ? (
           <ExecActions brief={brief} brandName={brand.name} solution={solution} onAsk={ask} />
+        ) : layout === "scorecard" ? (
+          <ExecScorecard
+            solution={solution}
+            fleet={fleet.data ?? []}
+            healthScore={brief.strip.health.score}
+            onEvidence={(subject) => setEvidence({ subject })}
+          />
         ) : (
           <>
             {/* ── status strip ───────────────────────────────────────── */}
@@ -495,6 +501,9 @@ export function ExecBriefPage() {
                             setSelectedKey(r.key);
                             setExpandedKey((k) => (k === r.key ? null : r.key));
                           }}
+                          onEvidence={() =>
+                            setEvidence({ subject: subjectFromRow(r), action: r.action })
+                          }
                         />
                       ))}
                     </ul>
@@ -512,7 +521,12 @@ export function ExecBriefPage() {
                 )}
               </Panel>
 
-              <ActionPanel row={selected} followUp={brief.followUp} brandName={brand.name} />
+              <ActionPanel
+                row={selected}
+                followUp={brief.followUp}
+                brandName={brand.name}
+                onEvidence={(subject, action) => setEvidence({ subject, action })}
+              />
             </div>
 
             {/* ── financial context ─────────────────────────────────── */}
@@ -588,9 +602,20 @@ export function ExecBriefPage() {
           </>
         )}
       </div>
+      {evidence && (
+        <EvidenceModal
+          subject={evidence.subject}
+          action={evidence.action}
+          solution={solution}
+          onAsk={ask}
+          onClose={() => setEvidence(null)}
+        />
+      )}
     </AppShell>
   );
 }
+
+type Layout = "dashboard" | "actions" | "scorecard";
 
 function StripCell({
   icon,
@@ -670,12 +695,14 @@ function RiskRowView({
   expanded,
   solution,
   onSelect,
+  onEvidence,
 }: {
   row: RiskRow;
   selected: boolean;
   expanded: boolean;
   solution: Solution;
   onSelect: () => void;
+  onEvidence: () => void;
 }) {
   const Icon = equipmentIcon(row.category);
   return (
@@ -740,7 +767,7 @@ function RiskRowView({
           )}
         />
       </button>
-      {expanded && <RiskDetail row={row} solution={solution} />}
+      {expanded && <RiskDetail row={row} solution={solution} onEvidence={onEvidence} />}
     </li>
   );
 }
@@ -749,10 +776,12 @@ function ActionPanel({
   row,
   followUp,
   brandName,
+  onEvidence,
 }: {
   row: RiskRow | null;
   followUp: Action | null;
   brandName: string;
+  onEvidence: (subject: EvidenceSubject, action: Action | null) => void;
 }) {
   const action = row?.action ?? followUp;
   return (
@@ -778,13 +807,12 @@ function ActionPanel({
             <Fact icon={CircleDollarSign} label="Benefit" value={action.benefit} />
           </dl>
           <div className="mt-5 flex flex-wrap gap-2">
-            <ConsoleLink
-              to={action.to}
-              search={action.search}
+            <button
+              onClick={() => onEvidence(row ? subjectFromRow(row) : { kind: "work" }, action)}
               className="og-primary-control inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
             >
               See the evidence <ArrowRight className="size-4" />
-            </ConsoleLink>
+            </button>
             <button
               onClick={() => ask(action.question)}
               className="inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
@@ -793,9 +821,9 @@ function ActionPanel({
             </button>
           </div>
           {row && followUp && (
-            <ConsoleLink
-              to={followUp.to}
-              className="mt-auto flex items-center gap-3 border-t pt-3 text-sm transition-colors hover:text-primary"
+            <button
+              onClick={() => onEvidence({ kind: "work" }, followUp)}
+              className="mt-auto flex items-center gap-3 border-t pt-3 text-left text-sm transition-colors hover:text-primary"
             >
               <Wrench className="size-4 text-muted-foreground" />
               <span className="flex-1">
@@ -803,7 +831,7 @@ function ActionPanel({
                 <span className="font-medium">{followUp.title}</span>
               </span>
               <ArrowRight className="size-4 text-muted-foreground" />
-            </ConsoleLink>
+            </button>
           )}
         </div>
       ) : (
