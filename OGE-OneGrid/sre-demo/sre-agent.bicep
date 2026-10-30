@@ -28,6 +28,9 @@ param appInsightsConnectionString string
 @description('Object ID granted SRE Agent Administrator so the agent UI is reachable.')
 param deployerObjectId string
 
+@description('Resource groups the agent manages; Azure Monitor alerts from these flow to the agent.')
+param managedResourceGroupIds array = []
+
 param tags object = {
   purpose: 'onegrid-sre-demo'
 }
@@ -62,6 +65,16 @@ resource agent 'Microsoft.App/agents@2026-01-01' = {
         appId: appInsightsAppId
         connectionString: appInsightsConnectionString
       }
+    }
+    // Azure Monitor as the incident platform: alerts in the managed resource groups
+    // reach the agent automatically (no credentials needed).
+    incidentManagementConfiguration: {
+      type: 'AzMonitor'
+      connectionName: 'azmonitor'
+    }
+    knowledgeGraphConfiguration: {
+      identity: agentIdentity.id
+      managedResources: managedResourceGroupIds
     }
   }
 }
