@@ -705,11 +705,15 @@ export async function tagStats(tags) {
 
 // Live fleet pulse for the realtime page header. Reports last data timestamp + whether
 // a live stream is currently flowing (seeding active) vs. showing historical last-knowns.
+// The table-wide stats scan every row, so they are cached for 5 minutes (the historian
+// changes rarely); the cheap "last 5 minutes" count is cached for 30 seconds.
 export function realtimePulse() {
   return cached('rtpulse', 5_000, async () => {
     if (!T().kustoUri) return { lastTs: null, live: false, totalTags: 0, plants: 0, events5m: 0, liveTags: 0, eventsPerMin: 0 };
-    const rows = await kq('PiEvents | summarize lastTs=max(Timestamp), totalTags=dcount(Tag), plants=dcount(tostring(split(AssetId, "_")[0]))');
-    const recent = await kq('PiEvents | where Timestamp > ago(5m) | summarize c=count(), tags=dcount(Tag)');
+    const [rows, recent] = await Promise.all([
+      cached('rtpulse:stats', 300_000, () => kq('PiEvents | summarize lastTs=max(Timestamp), totalTags=dcount(Tag), plants=dcount(tostring(split(AssetId, "_")[0]))')),
+      cached('rtpulse:recent', 30_000, () => kq('PiEvents | where Timestamp > ago(5m) | summarize c=count(), tags=dcount(Tag)')),
+    ]);
     const r = rows[0] || {}, rc = recent[0] || {};
     const lastTs = r.lastTs ? new Date(r.lastTs).getTime() : null;
     const live = lastTs !== null && Date.now() - lastTs < 5 * 60_000;

@@ -102,10 +102,14 @@ export function attachRealtime(server) {
   const reseed = () => { const all = activeTags(); for (const t of all) pending.add(t); seedPending(); };
 
   const pushPulse = async () => {
+    // Only query when a browser is actually connected — the pulse used to scan the
+    // Eventhouse every 5 s on every server even with nobody watching.
+    const open = [...subs.keys()].filter((ws) => ws.readyState === ws.OPEN);
+    if (!open.length) return;
     try {
       const pulse = await realtimePulse();
       const msg = JSON.stringify({ type: 'pulse', ts: Date.now(), pulse });
-      for (const ws of subs.keys()) if (ws.readyState === ws.OPEN) ws.send(msg);
+      for (const ws of open) if (ws.readyState === ws.OPEN) ws.send(msg);
     } catch { /* transient */ }
   };
 
