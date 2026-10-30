@@ -9,7 +9,8 @@
              -> apply the three fixes after a human approves them (Review mode)
 
   pcpro app identity (system-assigned): the same three write scopes plus read on the
-  resource group and Tag Contributor on itself -> powers the in-app SRE demo page.
+  resource group, Tag Contributor on itself and SRE Agent Reader on the agent (to deep-link
+  the SRE page to the agent's investigation thread) -> powers the in-app SRE demo page.
 #>
 $ErrorActionPreference = "Stop"
 $Sub = "87bc8fc7-c4b7-4466-80b8-a7d5004b4f14"
@@ -44,3 +45,4 @@ Grant $AppPrincipal "Website Contributor"            $AppId
 Grant $AppPrincipal "Tag Contributor"                $AppId
 Grant $AppPrincipal "Storage Account Contributor"    $StorageId
 Grant $AppPrincipal "Contributor"                    $CapacityId
+Grant $AppPrincipal "SRE Agent Reader"               "/subscriptions/$Sub/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent"
