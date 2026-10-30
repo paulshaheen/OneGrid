@@ -7,9 +7,10 @@
   2. Sub-agent "onegrid-maintenance" -> uses onegrid/* tools; investigates equipment
                                         alarms and proposes a work order that a human
                                         approves or rejects on the OneGrid SRE page
-  3. Response plans                  -> sre-demo-05 alerts -> onegrid-maintenance
-                                        sre-demo-01..04    -> default agent
-  All plans run in Review mode: the agent asks before it changes anything.
+  3. Response plans                  -> sre-demo-01..04 alerts -> default agent (05's plan
+                                        is off: OneGrid pages the agent directly)
+  4. HTTP trigger                    -> onegrid-equipment-alarm -> onegrid-maintenance
+  All plans and the trigger run in Review mode: the agent asks before it changes anything.
 
 .EXAMPLE
   ./configure-agent.ps1 -McpKey (Get-Content mcp-key.txt -Raw).Trim()
@@ -93,7 +94,9 @@ $null = Invoke-Agent PUT '/api/v2/extendedAgent/agents/onegrid-maintenance' @{
 # 3. Response plans -------------------------------------------------------------
 Write-Host '3. Response plans'
 $plans = @(
-  @{ id = 'sre-demo-05-equipment'; name = 'OneGrid equipment alarms (demo 05)'; titleContains = 'sre-demo-05'; handlingAgent = 'onegrid-maintenance' }
+  # Demo 05 is paged directly by OneGrid through the HTTP trigger below, so its alert plan is
+  # off to avoid a second investigation (the Azure alert still fires and shows on the page).
+  @{ id = 'sre-demo-05-equipment'; name = 'OneGrid equipment alarms (demo 05)'; titleContains = 'sre-demo-05'; handlingAgent = 'onegrid-maintenance'; isEnabled = $false }
   @{ id = 'sre-demo-01-storage';  name = 'Storage access (demo 01)';  titleContains = 'sre-demo-01'; handlingAgent = '' }
   @{ id = 'sre-demo-02-deploy';   name = 'Bad deployment (demo 02)';  titleContains = 'sre-demo-02'; handlingAgent = '' }
   @{ id = 'sre-demo-03-capacity'; name = 'Fabric capacity (demo 03)'; titleContains = 'sre-demo-03'; handlingAgent = '' }
@@ -108,6 +111,27 @@ foreach ($p in $plans) {
           $null = Invoke-Agent POST "/api/v1/incidentPlayground/filters/$($p.id)" $body }
   Write-Host "   $($p.id) -> $(if ($p.handlingAgent) { $p.handlingAgent } else { 'default agent' })"
 }
+
+# 4. HTTP trigger ----------------------------------------------------------------
+# OneGrid calls this the moment a live equipment alarm trips (demo 05), so the investigation
+# starts in seconds instead of waiting ~2 minutes for the Azure Monitor alert. Each call opens
+# a new thread. pcpro needs SRE Agent Standard User on the agent (grant-access.ps1).
+Write-Host '4. HTTP trigger onegrid-equipment-alarm'
+$triggerPrompt = @'
+OneGrid has raised a live equipment alarm (scenario sre-demo-05). The JSON payload in this request has the asset, the sensor readings, thresholds and when the alarm tripped.
+Investigate it as the OneGrid maintenance reliability specialist: call get_active_alarms, then get_sensor_trend (15 minutes) and get_asset_context for the asset, diagnose the failure mode with your confidence and time to trip, then submit exactly ONE corrective work order with propose_work_order. Do not ask for approval in this conversation: a human approves or rejects the proposal on the OneGrid SRE page. Do not change any Azure resource. Keep the report short: what we see, what it means, what it costs if ignored, what to do.
+'@
+$triggerBody = @{ name = 'onegrid-equipment-alarm'; description = 'OneGrid pages the agent the moment a live equipment alarm trips (SRE demo 05).'
+  agentPrompt = $triggerPrompt; agent = 'onegrid-maintenance'; agentMode = 'review' }
+$trigger = @(Invoke-Agent GET '/api/v1/httptriggers' $null) | Where-Object { $_.name -eq 'onegrid-equipment-alarm' } | Select-Object -First 1
+if ($trigger) {
+  $triggerUrl = $trigger.triggerUrl
+  try { $null = Invoke-Agent PUT "/api/v1/httptriggers/$($trigger.id)" $triggerBody }
+  catch { Write-Warning "   could not update the existing trigger ($($_.Exception.Message)); keeping it as is" }
+}
+else { $triggerUrl = (Invoke-Agent POST '/api/v1/httptriggers/create' $triggerBody).triggerUrl }
+Write-Host "   trigger URL: $triggerUrl"
+Write-Host "   set it on pcpro: az webapp config appsettings set -g rg-onegrid-test -n pcpro-onegrid-app-ujcb2qv6vi2ts --settings SRE_DEMO_AGENT_TRIGGER_URL=$triggerUrl"
 
 # Verify ------------------------------------------------------------------------
 Start-Sleep 10

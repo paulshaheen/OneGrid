@@ -19,7 +19,7 @@
 //  it on the OneGrid SRE page. Approved ones are merged into the work-order APIs.
 //  resetLive() deletes every row this scenario wrote.
 // ---------------------------------------------------------------------------
-import { kql, kqlMgmt } from './fabric.js';
+import { getToken, kql, kqlMgmt } from './fabric.js';
 import { resolveTarget } from './target.js';
 import { trackTrace, trackMetrics } from './aiTelemetry.js';
 
@@ -136,6 +136,40 @@ function alarmMessage(pt) {
     'Use the OneGrid MCP tools to confirm the trend and asset history, then propose a corrective work order for approval.';
 }
 
+/** Page Azure SRE Agent the moment the alarm trips, through its HTTP trigger, so the
+ *  investigation starts in seconds instead of waiting for the Azure Monitor alert. Best
+ *  effort: without SRE_DEMO_AGENT_TRIGGER_URL the alert-driven path still applies. */
+async function pageAgent(r, pt) {
+  const url = process.env.SRE_DEMO_AGENT_TRIGGER_URL || '';
+  if (!url || r.agentPagedAt) return;
+  r.agentPagedAt = Date.now();
+  try {
+    const token = await getToken('https://azuresre.dev');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: 'OneGrid', scenario: 'sre-demo-05', run_id: r.id,
+        alarm: 'High vibration', asset_id: LIVE.assetId, asset_name: LIVE.assetName,
+        tripped_at: new Date(r.alarmAt).toISOString(),
+        readings: [
+          { tag: LIVE.vibTag, value: pt.vib, units: 'mm/s', alarm: LIVE.vibAlarm, trip: LIVE.vibTrip, baseline: r.baseVib },
+          { tag: LIVE.tempTag, value: pt.temp, units: 'degC', alarm: r.tempAlarm, baseline: r.baseTemp },
+        ],
+        message: alarmMessage(pt),
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`trigger -> ${res.status} ${JSON.stringify(body).slice(0, 160)}`);
+    r.agentThreadId = body.threadId || null;
+    trackTrace(`OneGrid paged Azure SRE Agent for ${LIVE.assetId} (thread ${r.agentThreadId}).`, { assetId: LIVE.assetId, scenario: 'sre-demo-05', runId: r.id }, 1);
+  } catch (e) {
+    r.agentPageError = String(e.message || e).slice(0, 200);
+    console.warn('[sre-live] paging the agent failed:', r.agentPageError);
+  }
+}
+
 function tick() {
   if (!run || run.stoppedAt) return;
   const now = Date.now();
@@ -157,7 +191,7 @@ function tick() {
     ]);
   }
   if (vib >= LIVE.vibAlarm && (!run.alarmAt || now - run.lastAlarmTraceAt > 120_000)) {
-    if (!run.alarmAt) run.alarmAt = now;
+    if (!run.alarmAt) { run.alarmAt = now; pageAgent(run, pt); }
     run.lastAlarmTraceAt = now;
     trackTrace(alarmMessage(pt), { ...props, sensorTag: LIVE.vibTag, value: String(vib), bearingTemp: String(temp), alarm: String(LIVE.vibAlarm) }, 3);
   }
@@ -245,6 +279,7 @@ async function startLiveInner() {
     tempAlarm: Math.max(107, Math.ceil(b.baseTemp + 15)),
     points: [], pending: [], flushed: 0, lastMetricAt: 0, lastAlarmTraceAt: 0,
     alarmAt: null, tempAlarmAt: null, stoppedAt: null, stopReason: null, lastError: null,
+    agentPagedAt: null, agentThreadId: null, agentPageError: null,
     gate: cleanup,
   };
   if (woRows) woRows = woRows.filter((w) => new Date(w.create_date).getTime() >= hideWoBefore);
@@ -361,6 +396,9 @@ export async function liveStatus(maxPoints = 240) {
     points: pts,
     written: r.flushed,
     writeError: r.lastError || null,
+    agentPagedAt: r.agentPagedAt ? new Date(r.agentPagedAt).toISOString() : null,
+    agentThreadId: r.agentThreadId || null,
+    agentPageError: r.agentPageError || null,
   };
 }
 

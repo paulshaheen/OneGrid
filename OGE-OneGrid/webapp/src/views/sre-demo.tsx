@@ -28,7 +28,7 @@ import { AppShell } from "@/components/ops/AppShell";
 import { relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { LiveIncidentPanel } from "@/views/sre-live-incident";
+import { LiveIncidentPanel, type LiveStep } from "@/views/sre-live-incident";
 
 interface AlertEvent {
   name: string;
@@ -129,6 +129,23 @@ const STEPS: Array<{ icon: LucideIcon; title: string; text: string }> = [
   },
 ];
 
+/** The live scenario pages the agent directly from OneGrid instead of waiting for an alert. */
+const STEPS_LIVE = STEPS.map((s, i) =>
+  i === 1
+    ? {
+        ...s,
+        title: "OneGrid pages the agent",
+        text: "The alarm calls Azure SRE Agent directly — seconds, not minutes.",
+      }
+    : i === 3
+      ? {
+          ...s,
+          title: "You approve the work order",
+          text: "Approve or reject it right on this page.",
+        }
+      : s,
+);
+
 export function SreDemoPage() {
   const [status, setStatus] = useState<SreStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +154,7 @@ export function SreDemoPage() {
   const [confirm, setConfirm] = useState<Scenario | null>(null);
   // While one scenario is running the others collapse to a one-line summary.
   const [peek, setPeek] = useState<string | null>(null);
+  const [liveStep, setLiveStep] = useState<LiveStep>("idle");
   const [keyPrompt, setKeyPrompt] = useState<null | (() => void)>(null);
   const [keyInput, setKeyInput] = useState("");
   const { displayName } = useAuth();
@@ -230,7 +248,15 @@ export function SreDemoPage() {
   useEffect(() => setPeek(null), [active]);
   const activeScenario = status?.scenarios.find((s) => s.id === active);
   const firing = (activeScenario?.alertEvents ?? []).some((a) => a.state === "Fired");
-  const stage = !active ? -1 : firing ? 2 : 1;
+  // The live scenario knows its own progress (alert for this run, proposal, approval).
+  const LIVE_STAGE: Record<LiveStep, number> = {
+    idle: 0,
+    running: 1,
+    investigating: 2,
+    awaiting: 3,
+    done: 4,
+  };
+  const stage = !active ? -1 : activeScenario?.live ? LIVE_STAGE[liveStep] : firing ? 2 : 1;
 
   return (
     <AppShell>
@@ -297,7 +323,7 @@ export function SreDemoPage() {
 
         {/* flow */}
         <Panel className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
-          {STEPS.map((s, i) => {
+          {(activeScenario?.live ? STEPS_LIVE : STEPS).map((s, i) => {
             const done = stage > i;
             const current = stage === i;
             return (
@@ -371,13 +397,13 @@ export function SreDemoPage() {
                   <LiveIncidentPanel
                     key={s.id}
                     alertEvents={s.alertEvents ?? []}
-                    agentUrl={status.agentUrl}
                     busy={busy}
                     otherActive={!!active && active !== s.id}
                     defaultApprover={approverName}
                     onStart={() => void call("inject", s.id)}
                     onReset={() => void call("reset", s.id)}
                     onDecide={(wrId, decision, name) => void decide(wrId, decision, name)}
+                    onProgress={setLiveStep}
                   />
                 ) : (
                   <ScenarioCard

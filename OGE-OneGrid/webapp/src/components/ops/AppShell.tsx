@@ -251,7 +251,6 @@ const ADMIN: Group = {
     { to: "/thresholds", label: "Thresholds", icon: SlidersHorizontal },
     { to: "/governance", label: "Governance & Security", icon: ShieldCheck },
     { to: "/deployment", label: "Deployment", icon: ServerCog },
-    { to: "/sre", label: "SRE Demo", icon: Siren },
   ],
 };
 
@@ -263,6 +262,7 @@ const RESOURCES: Group = {
   children: [
     { to: "/esu-planner", label: "ESU Planner", icon: Calculator },
     { to: "/sap", label: "SAP S/4HANA", icon: Landmark },
+    { to: "/sre", label: "SRE Demo", icon: Siren },
     { label: "Nuclear Permitting", icon: Atom, soon: true },
   ],
 };
@@ -282,11 +282,11 @@ const MOBILE_ROUTES = [
   { to: "/ontology", label: "Ontology" },
   { to: "/esu-planner", label: "ESU Planner" },
   { to: "/sap", label: "SAP S/4HANA" },
+  { to: "/sre", label: "SRE Demo" },
   { to: "/infrastructure", label: "Infrastructure" },
   { to: "/thresholds", label: "Thresholds" },
   { to: "/governance", label: "Governance & Security" },
   { to: "/deployment", label: "Deployment" },
-  { to: "/sre", label: "SRE Demo" },
   { to: "/alerts", label: "Alerts" },
 ];
 

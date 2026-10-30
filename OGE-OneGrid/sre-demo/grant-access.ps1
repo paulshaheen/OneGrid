@@ -46,3 +46,5 @@ Grant $AppPrincipal "Tag Contributor"                $AppId
 Grant $AppPrincipal "Storage Account Contributor"    $StorageId
 Grant $AppPrincipal "Contributor"                    $CapacityId
 Grant $AppPrincipal "SRE Agent Reader"               "/subscriptions/$Sub/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent"
+# Calling the agent's HTTP trigger needs Microsoft.App/agents/threads/write on the agent.
+Grant $AppPrincipal "SRE Agent Standard User"        "/subscriptions/$Sub/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent"

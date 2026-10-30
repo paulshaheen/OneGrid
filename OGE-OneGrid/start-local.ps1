@@ -80,10 +80,12 @@ if ($SreDemo) {
   foreach ($s in $settings) { if ($wanted -contains $s.name -and $s.value) { Set-Item -Path "env:$($s.name)" -Value $s.value } }
   $missing = $wanted | Where-Object { -not (Test-Path "env:$_") }
   if ($missing) { throw "pcpro is missing SRE demo settings: $($missing -join ', ')" }
-  # Lets the SRE page link straight to the agent's investigation thread.
+  # Lets the SRE page link straight to the agent's investigation thread, and page the agent.
   $agentSetting = $settings | Where-Object name -eq "SRE_DEMO_AGENT_ID" | Select-Object -First 1
   $env:SRE_DEMO_AGENT_ID = if ($agentSetting.value) { $agentSetting.value } else {
     "/subscriptions/$env:SRE_DEMO_SUBSCRIPTION/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent" }
+  $triggerSetting = $settings | Where-Object name -eq "SRE_DEMO_AGENT_TRIGGER_URL" | Select-Object -First 1
+  if ($triggerSetting.value) { $env:SRE_DEMO_AGENT_TRIGGER_URL = $triggerSetting.value }
   Write-Host "SRE demo: wired to $sreApp (Eventhouse $env:KUSTO_CLUSTER)" -ForegroundColor DarkGray
 }
 

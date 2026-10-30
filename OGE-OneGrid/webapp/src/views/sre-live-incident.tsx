@@ -64,6 +64,9 @@ interface LiveStatus {
   proposal?: AgentWorkOrder | null;
   rejected?: AgentWorkOrder | null;
   agentThreadUrl?: string | null;
+  agentPagedAt?: string | null;
+  agentThreadId?: string | null;
+  agentPageError?: string | null;
   writeError?: string | null;
 }
 
@@ -72,6 +75,8 @@ export interface LiveAlertEvent {
   state: string;
   firedAt: string | null;
 }
+
+export type LiveStep = "idle" | "running" | "investigating" | "awaiting" | "done";
 
 const STAGES: Array<{ id: string; label: string; icon: LucideIcon }> = [
   { id: "normal", label: "Normal", icon: Activity },
@@ -85,22 +90,23 @@ const WINDOW_SEC = 120;
 
 export function LiveIncidentPanel({
   alertEvents,
-  agentUrl,
   busy,
   otherActive,
   defaultApprover,
   onStart,
   onReset,
   onDecide,
+  onProgress,
 }: {
   alertEvents: LiveAlertEvent[];
-  agentUrl?: string | undefined;
   busy: string | null;
   otherActive: boolean;
   defaultApprover: string;
   onStart: () => void;
   onReset: () => void;
   onDecide: (wrId: string, decision: "approve" | "reject", name: string) => void;
+  /** Reports where this run is in the demo flow so the page-level steps can follow it. */
+  onProgress?: (step: LiveStep) => void;
 }) {
   const [live, setLive] = useState<LiveStatus | null>(null);
   const [approver, setApprover] = useState(defaultApprover);
@@ -131,10 +137,25 @@ export function LiveIncidentPanel({
   const alertFiring = alertEvents.some(
     (a) => a.state === "Fired" && (!a.firedAt || new Date(a.firedAt).getTime() >= runStart),
   );
+  // OneGrid pages the agent directly when the alarm trips; the Azure alert is the fallback.
+  const paged = !!live?.agentPagedAt && !live?.agentPageError;
+  const engaged = alertFiring || paged;
   const wo = live?.workOrders?.[0] ?? null;
   const proposal = !wo ? (live?.proposal ?? null) : null;
   const rejected = !wo && !proposal ? (live?.rejected ?? null) : null;
-  const threadUrl = live?.agentThreadUrl ?? agentUrl;
+  // Link only to this run's investigation thread, and only once the agent has been engaged.
+  const threadUrl = engaged || wo || proposal || rejected ? (live?.agentThreadUrl ?? null) : null;
+  const step: LiveStep =
+    !live || live.stage === "idle"
+      ? "idle"
+      : wo
+        ? "done"
+        : proposal
+          ? "awaiting"
+          : live.stage === "alarm" && engaged
+            ? "investigating"
+            : "running";
+  useEffect(() => onProgress?.(step), [step, onProgress]);
   const stageIdx =
     !live || live.stage === "idle"
       ? -1
@@ -143,7 +164,7 @@ export function LiveIncidentPanel({
         : proposal
           ? 3
           : live.stage === "alarm"
-            ? alertFiring
+            ? engaged
               ? 3
               : 2
             : live.stage === "rising"
@@ -183,9 +204,9 @@ export function LiveIncidentPanel({
             Bearing failure in real time → agent raises the work order
           </div>
           <div className="text-xs text-muted-foreground">
-            Vibration and bearing temperature climb together; the alarm trips in about 30 seconds.
-            Azure SRE Agent investigates through the OneGrid MCP server and proposes a work order;
-            you approve or reject it right here.
+            Vibration and bearing temperature climb together; the alarm trips in about 30 seconds
+            and OneGrid pages Azure SRE Agent at once. It investigates through the OneGrid MCP
+            server and proposes a work order; you approve or reject it right here.
           </div>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -220,8 +241,8 @@ export function LiveIncidentPanel({
       {/* stage strip */}
       <ol className="mt-4 grid grid-cols-5 gap-2">
         {STAGES.map((s, i) => {
-          const done = stageIdx > i;
-          const current = stageIdx === i;
+          const done = stageIdx > i || (s.id === "work-order" && stageIdx === 4);
+          const current = stageIdx === i && !done;
           const awaiting = current && s.id === "agent" && !!proposal;
           const hot = current && !awaiting && (s.id === "alarm" || s.id === "agent");
           return (
@@ -436,9 +457,13 @@ export function LiveIncidentPanel({
               {rejected
                 ? `Proposed work order ${rejected.wr_id} was rejected by ${rejected.approved_by || "a reviewer"}.`
                 : stageIdx >= 2
-                  ? alertFiring
-                    ? "Alert fired — the agent is investigating. Its proposed work order will appear here for your approval."
-                    : "Alarm tripped — Azure Monitor raises the alert within 1–3 minutes."
+                  ? paged
+                    ? "OneGrid paged Azure SRE Agent the moment the alarm tripped — it is investigating. Its proposed work order will appear here for your approval."
+                    : alertFiring
+                      ? "Alert fired — the agent is investigating. Its proposed work order will appear here for your approval."
+                      : live?.agentPageError
+                        ? "Paging the agent failed — waiting for the Azure Monitor alert instead (1–3 minutes)."
+                        : "Alarm tripped — Azure Monitor raises the alert within 1–3 minutes."
                   : "No agent work order yet."}
             </span>
             {threadUrl && stageIdx >= 2 && !deciding && <ThreadLink href={threadUrl} />}

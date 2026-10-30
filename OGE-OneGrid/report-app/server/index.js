@@ -82,7 +82,7 @@ async function handleApi(req, res, url) {
     if (p === '/api/sre/sensor-health') return json(res, 200, await sre.sensorHealth());
   if (p === '/api/sre/live') {
     const s = await live.liveStatus();
-    return json(res, 200, { ...s, agentThreadUrl: s.stage === 'idle' ? null : await sre.agentThreadUrl(s.startedAt) });
+    return json(res, 200, { ...s, agentThreadUrl: s.stage === 'idle' ? null : await sre.agentThreadUrl(s.startedAt, s.agentThreadId) });
   }
     // ── Governance / OneLake-security review plane (read-only) ──────────────
     if (p.startsWith('/api/governance/')) {

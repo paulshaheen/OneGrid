@@ -92,7 +92,7 @@ export const SCENARIOS = [
     name: 'Live: bearing failure → work order',
     component: 'Grid telemetry + OneGrid MCP',
     live: true,
-    breaks: 'Vibration and bearing temperature on the Fairview steam turbine start climbing in real time — alarm in about 30 seconds.',
+    breaks: 'Vibration and bearing temperature on the Fairview steam turbine start climbing in real time — alarm in about 30 seconds, and OneGrid pages Azure SRE Agent the moment it trips.',
     symptom: 'OneGrid raises a high-vibration alarm; the turbine is heading for a forced outage.',
     fix: 'Agent pulls the sensor trend, root cause and asset history through the OneGrid MCP server and proposes a work order, which you approve or reject on this page.',
     alerts: ['sre-demo-05-bearing-vibration'],
@@ -245,9 +245,15 @@ const SRE_AGENT_API = '2025-05-01-preview';
 let agentEndpoint = null;
 let threadCache = { at: 0, url: null };
 
-export async function agentThreadUrl(since) {
+const threadLink = (agentId, id) =>
+  `${(process.env.SRE_DEMO_AGENT_URL || 'https://sre.azure.com').replace(/\/$/, '')}/agents${agentId}/views/thread/${encodeURIComponent(id)}`;
+
+/** Link to the agent's thread for this run: the thread OneGrid paged (threadId), else the
+ *  newest thread opened for a scenario 05 alert or trigger since the run started. */
+export async function agentThreadUrl(since, threadId) {
   const agentId = process.env.SRE_DEMO_AGENT_ID || '';
   if (!agentId) return null;
+  if (threadId) return threadLink(agentId, threadId);
   if (Date.now() - threadCache.at < 20_000) return threadCache.url;
   threadCache.at = Date.now();
   try {
@@ -257,16 +263,12 @@ export async function agentThreadUrl(since) {
     const res = await fetch(`${agentEndpoint}/api/v1/threads`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error(`threads -> ${res.status}`);
     const after = since ? new Date(since).getTime() - 60_000 : 0;
-    // Prefer a thread opened during this run. A new alert can also be merged into an earlier
-    // thread (which updates it), so fall back to the most recently updated one.
+    // Only a thread opened during this run; never link to an older investigation.
     const ts = (v) => new Date(v || 0).getTime();
-    const demo = ((await res.json()).value || []).filter((t) => String(t.title || '').includes('sre-demo-05'));
-    const opened = demo.filter((t) => ts(t.createdTimestamp) >= after).sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp));
-    const touched = demo.filter((t) => ts(t.modifiedTimestamp) >= after).sort((a, b) => ts(b.modifiedTimestamp) - ts(a.modifiedTimestamp));
-    const thread = opened[0] || touched[0];
+    const demo = ((await res.json()).value || []).filter((t) => /sre-demo-05|onegrid-equipment-alarm/.test(String(t.title || '')));
+    const thread = demo.filter((t) => ts(t.createdTimestamp) >= after).sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp))[0];
     // New SRE Agent experience (sre.azure.com): /agents<agent resource id>/views/thread/<id>.
-    const portal = (process.env.SRE_DEMO_AGENT_URL || 'https://sre.azure.com').replace(/\/$/, '');
-    threadCache.url = thread ? `${portal}/agents${agentId}/views/thread/${encodeURIComponent(thread.id)}` : null;
+    threadCache.url = thread ? threadLink(agentId, thread.id) : null;
   } catch (e) {
     console.warn('[sre-demo] agent thread lookup failed:', String(e.message || e).slice(0, 160));
     threadCache.url = null;
