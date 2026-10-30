@@ -1,7 +1,6 @@
 // Plain-language analysis pop-up for an item on the executive brief's "Actions" layout.
 // Written so anyone can follow it: what we see → what it means → what it could cost → what to do.
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   CheckCircle2,
@@ -14,17 +13,21 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect } from "react";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { useOpsBase } from "@/components/ops/ops-nav";
 import { formatUsd, type Action, type ExecBrief, type RiskRow } from "@/lib/exec/exec-brief";
 import { AS_OF, loadSapDataset } from "@/lib/sap/sap-data";
 import type { Solution } from "@/lib/solution";
 import { cn } from "@/lib/utils";
 import { getJson } from "@/report/lib/api.js";
 
+interface RootCause {
+  tag?: string;
+  failure_mechanism?: string;
+}
+
 interface AssetDetail {
-  rootCause?: { tag?: string; failure_mechanism?: string } | null;
+  rootCause?: RootCause | RootCause[] | null;
   anomalies?: Array<{
     Tag?: string;
     latest_value?: number;
@@ -93,6 +96,7 @@ export function ActionModal({
   solution,
   number,
   onAsk,
+  onEvidence,
   onClose,
 }: {
   action: Action;
@@ -101,10 +105,9 @@ export function ActionModal({
   solution: Solution;
   number: number;
   onAsk: (question: string) => void;
+  onEvidence: () => void;
   onClose: () => void;
 }) {
-  const base = useOpsBase();
-  const AnyLink = Link as unknown as (props: Record<string, unknown>) => ReactElement;
   const assetId = row?.kind === "equipment" ? (row.assetId ?? "") : "";
 
   const detail = useQuery({
@@ -132,7 +135,8 @@ export function ActionModal({
   let cost: ReactNode = null;
 
   if (row?.kind === "equipment") {
-    const rc = detail.data?.rootCause ?? null;
+    const rawRc = detail.data?.rootCause;
+    const rc = (Array.isArray(rawRc) ? rawRc[0] : rawRc) ?? null;
     const tag = rc?.tag ?? detail.data?.anomalies?.[0]?.Tag;
     const anomaly =
       detail.data?.anomalies?.find((a) => a.Tag === tag) ?? detail.data?.anomalies?.[0];
@@ -309,13 +313,12 @@ export function ActionModal({
           >
             <Sparkles className="size-4 text-primary" /> Ask a question
           </button>
-          <AnyLink
-            to={`${base}${action.to}`}
-            search={action.search}
+          <button
+            onClick={onEvidence}
             className="og-primary-control inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground"
           >
-            See the full detail <ArrowRight className="size-4" />
-          </AnyLink>
+            See the evidence <ArrowRight className="size-4" />
+          </button>
         </div>
         <p className="mt-3 text-[11px] text-muted-foreground">
           Based on sensor data, the predictive maintenance model and past outages in SAP. Dollar

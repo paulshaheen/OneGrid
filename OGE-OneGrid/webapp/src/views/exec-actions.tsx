@@ -1,10 +1,9 @@
 // "Actions" layout of the executive brief: just the list of what to do this week and the
 // value at stake for each. Same data as the dashboard layout, so the two always agree.
 // Clicking an action opens a plain-language analysis pop-up.
-import { ArrowRight, ChevronRight, Sparkles } from "lucide-react";
+import { ChevronRight, Sparkles } from "lucide-react";
 import { useState } from "react";
 
-import { OpsLink } from "@/components/ops/ops-nav";
 import {
   formatUsd,
   type Action,
@@ -15,6 +14,8 @@ import {
 import type { Solution } from "@/lib/solution";
 import { cn } from "@/lib/utils";
 import { ActionModal } from "@/views/exec-action-modal";
+import { subjectFromRow } from "@/lib/exec/evidence";
+import { EvidenceModal } from "@/views/exec-evidence-modal";
 
 const NUMBER: Record<RiskLevel3 | "none", string> = {
   critical: "bg-red-500/12 text-red-500 ring-red-500/30",
@@ -56,7 +57,9 @@ export function ExecActions({
   ];
   const total = items.reduce((s, i) => s + (i.usd ?? 0), 0);
   const [open, setOpen] = useState<number | null>(null);
+  const [evidence, setEvidence] = useState<number | null>(null);
   const openItem = open != null ? items[open] : undefined;
+  const evidenceItem = evidence != null ? items[evidence] : undefined;
 
   return (
     <section className="mx-auto w-full max-w-3xl pt-2">
@@ -145,13 +148,7 @@ export function ExecActions({
       </div>
       <p className="mt-3 flex items-center justify-center gap-1 text-center text-xs text-muted-foreground">
         Click an action for the simple explanation · Values are {brandName} model estimates (typical
-        outcome) ·
-        <OpsLink
-          to="/"
-          className="inline-flex items-center gap-0.5 font-medium text-foreground hover:underline"
-        >
-          Open Operations <ArrowRight className="size-3" />
-        </OpsLink>
+        outcome)
       </p>
 
       {openItem && open != null && (
@@ -162,7 +159,21 @@ export function ExecActions({
           solution={solution}
           number={open + 1}
           onAsk={onAsk}
+          onEvidence={() => {
+            setEvidence(open);
+            setOpen(null);
+          }}
           onClose={() => setOpen(null)}
+        />
+      )}
+
+      {evidenceItem && (
+        <EvidenceModal
+          subject={evidenceItem.row ? subjectFromRow(evidenceItem.row) : { kind: "work" }}
+          action={evidenceItem.action}
+          solution={solution}
+          onAsk={onAsk}
+          onClose={() => setEvidence(null)}
         />
       )}
     </section>

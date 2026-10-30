@@ -3,8 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ExecBriefPage } from "@/views/exec-brief";
 
 export const Route = createFileRoute("/_authenticated/app/exec")({
-  validateSearch: (search: Record<string, unknown>): { layout?: "actions" } =>
-    search["layout"] === "actions" ? { layout: "actions" } : {},
+  validateSearch: (search: Record<string, unknown>): { layout?: "actions" | "scorecard" } =>
+    search["layout"] === "actions" || search["layout"] === "scorecard"
+      ? { layout: search["layout"] }
+      : {},
   head: () => ({
     meta: [
       { title: "Executive Brief | OneGrid" },

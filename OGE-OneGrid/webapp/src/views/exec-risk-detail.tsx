@@ -6,20 +6,22 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Area, AreaChart, ResponsiveContainer, YAxis } from "recharts";
 
-import { OpsLink } from "@/components/ops/ops-nav";
+import { Spinner } from "@/components/ops/Spinner";
 import { formatUsd, type RiskRow } from "@/lib/exec/exec-brief";
 import { AS_OF, loadSapDataset, type SapOutage } from "@/lib/sap/sap-data";
 import type { Solution } from "@/lib/solution";
 import { cn } from "@/lib/utils";
 import { getJson } from "@/report/lib/api.js";
 
+interface RootCause {
+  tag?: string;
+  failure_mechanism?: string;
+  root_cause?: string;
+  confidence?: number;
+}
+
 interface AssetDetail {
-  rootCause?: {
-    tag?: string;
-    failure_mechanism?: string;
-    root_cause?: string;
-    confidence?: number;
-  } | null;
+  rootCause?: RootCause | RootCause[] | null;
   anomalies?: Array<{
     Tag?: string;
     severity?: string;
@@ -69,14 +71,8 @@ function Mini({
   );
 }
 
-function Skeleton() {
-  return (
-    <div className="space-y-2">
-      <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
-      <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
-      <div className="h-8 w-full animate-pulse rounded bg-muted" />
-    </div>
-  );
+function Loading({ label }: { label: string }) {
+  return <Spinner label={label} size="sm" className="min-h-16 justify-center" />;
 }
 
 const fmt = (v: number) =>
@@ -84,19 +80,35 @@ const fmt = (v: number) =>
 
 const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 
-export function RiskDetail({ row, solution }: { row: RiskRow; solution: Solution }) {
+export function RiskDetail({
+  row,
+  solution,
+  onEvidence,
+}: {
+  row: RiskRow;
+  solution: Solution;
+  onEvidence?: () => void;
+}) {
   return (
     <div className="mx-3 mb-2 mt-1 grid gap-3 md:grid-cols-3">
       {row.kind === "weather" ? (
         <WeatherDetail row={row} />
       ) : (
-        <EquipmentDetail row={row} solution={solution} />
+        <EquipmentDetail row={row} solution={solution} onEvidence={onEvidence} />
       )}
     </div>
   );
 }
 
-function EquipmentDetail({ row, solution }: { row: RiskRow; solution: Solution }) {
+function EquipmentDetail({
+  row,
+  solution,
+  onEvidence,
+}: {
+  row: RiskRow;
+  solution: Solution;
+  onEvidence?: (() => void) | undefined;
+}) {
   const id = row.assetId ?? "";
   const detail = useQuery({
     queryKey: ["exec-asset-detail", solution, id],
@@ -104,7 +116,8 @@ function EquipmentDetail({ row, solution }: { row: RiskRow; solution: Solution }
     enabled: !!id,
     staleTime: 5 * 60 * 1000,
   });
-  const rc = detail.data?.rootCause ?? null;
+  const rawRc = detail.data?.rootCause;
+  const rc = (Array.isArray(rawRc) ? rawRc[0] : rawRc) ?? null;
   const topAnomaly = detail.data?.anomalies?.[0];
   const trendTag = rc?.tag ?? topAnomaly?.Tag ?? "";
   const trend = useQuery({
@@ -136,7 +149,7 @@ function EquipmentDetail({ row, solution }: { row: RiskRow; solution: Solution }
     <>
       <Mini icon={Activity} title="Why it's at risk">
         {detail.isLoading ? (
-          <Skeleton />
+          <Loading label="Reading the sensors…" />
         ) : rc || anomaly ? (
           <>
             <div className="text-sm font-semibold leading-5">
@@ -170,11 +183,19 @@ function EquipmentDetail({ row, solution }: { row: RiskRow; solution: Solution }
       </Mini>
 
       <Mini icon={History} title={`Failure history · SAP, ${HISTORY_MONTHS} months`}>
-        {sap.isLoading ? <Skeleton /> : <OutageHistory outages={outages} />}
+        {sap.isLoading ? (
+          <Loading label="Loading SAP history…" />
+        ) : (
+          <OutageHistory outages={outages} />
+        )}
       </Mini>
 
       <Mini icon={Wrench} title="Open work">
-        {work.isLoading ? <Skeleton /> : <OpenWork work={work.data ?? null} />}
+        {work.isLoading ? (
+          <Loading label="Loading work orders…" />
+        ) : (
+          <OpenWork work={work.data ?? null} onViewAll={onEvidence} />
+        )}
       </Mini>
     </>
   );
@@ -187,7 +208,8 @@ function Sparkline({
   data: Array<{ ts: string; v: number }>;
   loading: boolean;
 }) {
-  if (loading) return <div className="my-1.5 h-10 animate-pulse rounded bg-muted" />;
+  if (loading)
+    return <Spinner label="Loading trend…" size="sm" className="my-1.5 h-10 justify-center" />;
   if (data.length < 2) return <div className="my-1.5 h-10" />;
   return (
     <div className="my-1.5 h-10">
@@ -214,7 +236,7 @@ function Sparkline({
   );
 }
 
-function OutageHistory({ outages }: { outages: SapOutage[] }) {
+export function OutageHistory({ outages }: { outages: SapOutage[] }) {
   const end = new Date(`${AS_OF}T00:00:00Z`).getTime();
   const start = end - HISTORY_MONTHS * 30.44 * DAY;
   const inRange = outages
@@ -281,7 +303,13 @@ function OutageHistory({ outages }: { outages: SapOutage[] }) {
   );
 }
 
-function OpenWork({ work }: { work: AssetWork | null }) {
+function OpenWork({
+  work,
+  onViewAll,
+}: {
+  work: AssetWork | null;
+  onViewAll?: (() => void) | undefined;
+}) {
   const open = (work?.rows ?? []).filter((r) => r.open !== false);
   if (!open.length)
     return <p className="text-sm text-muted-foreground">No open work orders on this asset.</p>;
@@ -306,17 +334,19 @@ function OpenWork({ work }: { work: AssetWork | null }) {
         </div>
         <div className="line-clamp-2 text-xs leading-4">{top.problem}</div>
       </div>
-      <OpsLink
-        to="/maintenance"
-        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-      >
-        View work orders <ArrowRight className="size-3" />
-      </OpsLink>
+      {onViewAll && (
+        <button
+          onClick={onViewAll}
+          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+        >
+          See all the evidence <ArrowRight className="size-3" />
+        </button>
+      )}
     </>
   );
 }
 
-function WeatherDetail({ row }: { row: RiskRow }) {
+export function WeatherDetail({ row }: { row: RiskRow }) {
   const w = row.weather;
   if (!w) return null;
   return (
