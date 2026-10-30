@@ -30,7 +30,7 @@ interface Point {
   temp: number;
 }
 
-interface AgentWorkOrder {
+export interface AgentWorkOrder {
   wr_id: string;
   problem_descr: string;
   recommendation?: string;
@@ -109,10 +109,6 @@ export function LiveIncidentPanel({
   onProgress?: (step: LiveStep) => void;
 }) {
   const [live, setLive] = useState<LiveStatus | null>(null);
-  const [approver, setApprover] = useState(defaultApprover);
-  useEffect(() => {
-    if (defaultApprover) setApprover((v) => v || defaultApprover);
-  }, [defaultApprover]);
 
   const load = useCallback(async () => {
     try {
@@ -335,121 +331,15 @@ export function LiveIncidentPanel({
 
       {/* outcome */}
       <div className="mt-4 border-t pt-3">
-        {wo ? (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/8 p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <ClipboardCheck className="size-4 text-emerald-500" />
-              <span className="font-mono text-sm font-semibold">{wo.wr_id}</span>
-              <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-500 ring-1 ring-inset ring-red-500/20">
-                {wo.priority}
-              </span>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
-                {wo.wr_status}
-              </span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                Proposed by {wo.created_by ?? "Azure SRE Agent"} · approved by{" "}
-                {wo.approved_by ?? "—"} · {relativeTime(wo.decided_at ?? wo.create_date)}
-              </span>
-            </div>
-            <div className="mt-2 text-sm font-semibold">{wo.problem_descr}</div>
-            {wo.recommendation && <p className="mt-1 text-sm leading-5">{wo.recommendation}</p>}
-            {wo.evidence && (
-              <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                Evidence: {wo.evidence}
-              </p>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <Link
-                to="/app/maintenance"
-                className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium hover:bg-accent"
-              >
-                Open in Maintenance <ArrowUpRight className="size-3" />
-              </Link>
-              <Link
-                to="/app/exec"
-                className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium hover:bg-accent"
-              >
-                Executive brief <ArrowUpRight className="size-3" />
-              </Link>
-              {threadUrl && <ThreadLink href={threadUrl} boxed />}
-            </div>
-          </div>
-        ) : proposal ? (
-          <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 ring-1 ring-inset ring-primary/20">
-            <div className="flex flex-wrap items-center gap-2">
-              <Bot className="size-4 text-primary" />
-              <span className="text-sm font-semibold">Proposed work order</span>
-              <span className="font-mono text-xs text-muted-foreground">{proposal.wr_id}</span>
-              <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-500 ring-1 ring-inset ring-red-500/20">
-                {proposal.priority}
-              </span>
-              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/25 dark:text-amber-400">
-                Awaiting your approval
-              </span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                From {proposal.created_by ?? "Azure SRE Agent"} ·{" "}
-                {relativeTime(proposal.create_date)}
-              </span>
-            </div>
-            <div className="mt-2 text-sm font-semibold">{proposal.problem_descr}</div>
-            {proposal.recommendation && (
-              <p className="mt-1 whitespace-pre-line text-sm leading-5">
-                {proposal.recommendation}
-              </p>
-            )}
-            {proposal.evidence && (
-              <p className="mt-1 text-xs leading-4 text-muted-foreground">
-                Evidence: {proposal.evidence}
-              </p>
-            )}
-            <form
-              className="mt-3 flex flex-wrap items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (approver.trim()) onDecide(proposal.wr_id, "approve", approver.trim());
-              }}
-            >
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                Decision by
-                <input
-                  value={approver}
-                  onChange={(e) => setApprover(e.target.value)}
-                  placeholder="Your name"
-                  className="w-44 rounded-lg border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary/60"
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={!approver.trim() || !!busy}
-                className="og-primary-control inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {busy === "decide:approve" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <ThumbsUp className="size-4" />
-                )}
-                Approve &amp; raise
-              </button>
-              <button
-                type="button"
-                disabled={!approver.trim() || !!busy}
-                onClick={() => onDecide(proposal.wr_id, "reject", approver.trim())}
-                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {busy === "decide:reject" ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <ThumbsDown className="size-4" />
-                )}
-                Reject
-              </button>
-              {threadUrl && (
-                <span className="ml-auto">
-                  <ThreadLink href={threadUrl} />
-                </span>
-              )}
-            </form>
-          </div>
+        {wo || proposal ? (
+          <AgentWorkOrderCard
+            wo={wo}
+            proposal={proposal}
+            threadUrl={threadUrl}
+            busy={busy}
+            defaultApprover={defaultApprover}
+            onDecide={onDecide}
+          />
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
@@ -470,6 +360,144 @@ export function LiveIncidentPanel({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The agent's work order: approved (raised) or proposed and waiting for a human decision. */
+export function AgentWorkOrderCard({
+  wo,
+  proposal,
+  threadUrl,
+  busy,
+  defaultApprover,
+  onDecide,
+}: {
+  wo: AgentWorkOrder | null;
+  proposal: AgentWorkOrder | null;
+  threadUrl: string | null;
+  busy: string | null;
+  defaultApprover: string;
+  onDecide: (wrId: string, decision: "approve" | "reject", name: string) => void;
+}) {
+  const [approver, setApprover] = useState(defaultApprover);
+  useEffect(() => {
+    if (defaultApprover) setApprover((v) => v || defaultApprover);
+  }, [defaultApprover]);
+
+  if (wo) {
+    return (
+      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/8 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <ClipboardCheck className="size-4 text-emerald-500" />
+          <span className="font-mono text-sm font-semibold">{wo.wr_id}</span>
+          <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-500 ring-1 ring-inset ring-red-500/20">
+            {wo.priority}
+          </span>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium">
+            {wo.wr_status}
+          </span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Proposed by {wo.created_by ?? "Azure SRE Agent"} · approved by {wo.approved_by ?? "—"} ·{" "}
+            {relativeTime(wo.decided_at ?? wo.create_date)}
+          </span>
+        </div>
+        <div className="mt-2 text-sm font-semibold">{wo.problem_descr}</div>
+        {wo.recommendation && <p className="mt-1 text-sm leading-5">{wo.recommendation}</p>}
+        {wo.evidence && (
+          <p className="mt-1 text-xs leading-4 text-muted-foreground">Evidence: {wo.evidence}</p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          <Link
+            to="/app/maintenance"
+            className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium hover:bg-accent"
+          >
+            Open in Maintenance <ArrowUpRight className="size-3" />
+          </Link>
+          <Link
+            to="/app/exec"
+            className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium hover:bg-accent"
+          >
+            Executive brief <ArrowUpRight className="size-3" />
+          </Link>
+          {threadUrl && <ThreadLink href={threadUrl} boxed />}
+        </div>
+      </div>
+    );
+  }
+  if (!proposal) return null;
+  return (
+    <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 ring-1 ring-inset ring-primary/20">
+      <div className="flex flex-wrap items-center gap-2">
+        <Bot className="size-4 text-primary" />
+        <span className="text-sm font-semibold">Proposed work order</span>
+        <span className="font-mono text-xs text-muted-foreground">{proposal.wr_id}</span>
+        <span className="rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-500 ring-1 ring-inset ring-red-500/20">
+          {proposal.priority}
+        </span>
+        <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/25 dark:text-amber-400">
+          Awaiting your approval
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          From {proposal.created_by ?? "Azure SRE Agent"} · {relativeTime(proposal.create_date)}
+        </span>
+      </div>
+      <div className="mt-2 text-sm font-semibold">{proposal.problem_descr}</div>
+      {proposal.recommendation && (
+        <p className="mt-1 whitespace-pre-line text-sm leading-5">{proposal.recommendation}</p>
+      )}
+      {proposal.evidence && (
+        <p className="mt-1 text-xs leading-4 text-muted-foreground">
+          Evidence: {proposal.evidence}
+        </p>
+      )}
+      <form
+        className="mt-3 flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (approver.trim()) onDecide(proposal.wr_id, "approve", approver.trim());
+        }}
+      >
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          Decision by
+          <input
+            value={approver}
+            onChange={(e) => setApprover(e.target.value)}
+            placeholder="Your name"
+            className="w-44 rounded-lg border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary/60"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={!approver.trim() || !!busy}
+          className="og-primary-control inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy === "decide:approve" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ThumbsUp className="size-4" />
+          )}
+          Approve &amp; raise
+        </button>
+        <button
+          type="button"
+          disabled={!approver.trim() || !!busy}
+          onClick={() => onDecide(proposal.wr_id, "reject", approver.trim())}
+          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {busy === "decide:reject" ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <ThumbsDown className="size-4" />
+          )}
+          Reject
+        </button>
+        {threadUrl && (
+          <span className="ml-auto">
+            <ThreadLink href={threadUrl} />
+          </span>
+        )}
+      </form>
     </div>
   );
 }

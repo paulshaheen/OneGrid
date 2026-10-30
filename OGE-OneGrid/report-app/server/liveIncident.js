@@ -477,6 +477,11 @@ export async function agentWorkOrders() {
   return (await agentRecords()).filter((w) => w.wr_status !== PENDING && w.wr_status !== REJECTED);
 }
 
+/** Every agent record (pending or decided) created at or after `ms`, newest first. */
+export async function agentRecordsSince(ms) {
+  return (await agentRecords()).filter((w) => new Date(w.create_date).getTime() >= ms);
+}
+
 function persist(rec, after) {
   const key = `${rec.wr_id}|${rec.wr_status}`;
   unpersisted.add(key);

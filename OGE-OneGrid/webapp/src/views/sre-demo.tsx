@@ -28,7 +28,12 @@ import { AppShell } from "@/components/ops/AppShell";
 import { relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { LiveIncidentPanel, type LiveStep } from "@/views/sre-live-incident";
+import {
+  AgentWorkOrderCard,
+  LiveIncidentPanel,
+  type AgentWorkOrder,
+  type LiveStep,
+} from "@/views/sre-live-incident";
 
 interface AlertEvent {
   name: string;
@@ -36,6 +41,15 @@ interface AlertEvent {
   severity: string;
   firedAt: string | null;
   resolvedAt: string | null;
+}
+
+/** The agent's progress on the active scenario (from its investigation thread). */
+interface ScenarioAgent {
+  status: "waiting" | "investigating" | "complete";
+  threadUrl: string | null;
+  updatedAt: string | null;
+  proposal: AgentWorkOrder | null;
+  decided: AgentWorkOrder | null;
 }
 
 interface Scenario {
@@ -51,6 +65,7 @@ interface Scenario {
   broken?: boolean | null;
   detail?: string;
   alertEvents?: AlertEvent[];
+  agent?: ScenarioAgent;
 }
 
 interface SreStatus {
@@ -256,7 +271,11 @@ export function SreDemoPage() {
     awaiting: 3,
     done: 4,
   };
-  const stage = !active ? -1 : activeScenario?.live ? LIVE_STAGE[liveStep] : firing ? 2 : 1;
+  const stage = !active
+    ? -1
+    : activeScenario?.live
+      ? LIVE_STAGE[liveStep]
+      : scenarioStage(firing, activeScenario?.agent);
 
   return (
     <AppShell>
@@ -412,8 +431,10 @@ export function SreDemoPage() {
                     active={active === s.id}
                     otherActive={!!active && active !== s.id}
                     busy={busy}
+                    defaultApprover={approverName}
                     onBreak={() => setConfirm(s)}
                     onReset={() => void call("reset", s.id)}
+                    onDecide={(wrId, decision, name) => void decide(wrId, decision, name)}
                   />
                 ),
               )}
@@ -519,20 +540,32 @@ function CollapsedScenario({ s, onExpand }: { s: Scenario; onExpand: () => void 
   );
 }
 
+/** Steps for alert-driven scenarios: alert → agent investigates → you decide → done. */
+function scenarioStage(firing: boolean, agent?: ScenarioAgent): number {
+  if (agent?.decided) return 4;
+  if (agent?.proposal || agent?.status === "complete") return 3;
+  if (firing || agent?.status === "investigating") return 2;
+  return 1;
+}
+
 function ScenarioCard({
   s,
   active,
   otherActive,
   busy,
+  defaultApprover,
   onBreak,
   onReset,
+  onDecide,
 }: {
   s: Scenario;
   active: boolean;
   otherActive: boolean;
   busy: string | null;
+  defaultApprover: string;
   onBreak: () => void;
   onReset: () => void;
+  onDecide: (wrId: string, decision: "approve" | "reject", name: string) => void;
 }) {
   const Icon = ICON[s.id];
   const state = s.broken == null ? "unknown" : s.broken ? "broken" : "healthy";
@@ -596,6 +629,16 @@ function ScenarioCard({
         <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" /> {s.warning}
         </div>
+      )}
+
+      {active && s.agent && (
+        <AgentProgress
+          agent={s.agent}
+          firing={(s.alertEvents ?? []).some((a) => a.state === "Fired")}
+          busy={busy}
+          defaultApprover={defaultApprover}
+          onDecide={onDecide}
+        />
       )}
 
       <div className="mt-4 border-t pt-3">
@@ -667,6 +710,73 @@ function ScenarioCard({
         </button>
       </div>
     </Panel>
+  );
+}
+
+/** What Azure SRE Agent is doing about the active scenario, and its work order if any. */
+function AgentProgress({
+  agent,
+  firing,
+  busy,
+  defaultApprover,
+  onDecide,
+}: {
+  agent: ScenarioAgent;
+  firing: boolean;
+  busy: string | null;
+  defaultApprover: string;
+  onDecide: (wrId: string, decision: "approve" | "reject", name: string) => void;
+}) {
+  const wo = agent.decided && agent.decided.wr_status !== "Rejected" ? agent.decided : null;
+  const rejected = agent.decided?.wr_status === "Rejected" ? agent.decided : null;
+  const text = rejected
+    ? `Proposed work order ${rejected.wr_id} was rejected by ${rejected.approved_by || "a reviewer"}.`
+    : agent.status === "complete"
+      ? agent.proposal
+        ? "Investigation complete — the agent proposed a work order for your approval."
+        : "Investigation complete — review the agent's findings and recommended fix."
+      : agent.status === "investigating"
+        ? "Azure SRE Agent is investigating the alert…"
+        : firing
+          ? "Alert fired — the agent picks it up within a minute."
+          : "Waiting for Azure Monitor to raise the alert (up to ~5 minutes).";
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <Bot className="size-3.5" /> Azure SRE Agent
+      </div>
+      {wo || agent.proposal ? (
+        <AgentWorkOrderCard
+          wo={wo}
+          proposal={agent.proposal}
+          threadUrl={agent.threadUrl}
+          busy={busy}
+          defaultApprover={defaultApprover}
+          onDecide={onDecide}
+        />
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span className="flex items-center gap-2 text-muted-foreground">
+            {agent.status === "complete" ? (
+              <CheckCircle2 className="size-4 text-emerald-500" />
+            ) : (
+              <Loader2 className="size-4 animate-spin text-primary" />
+            )}
+            {text}
+          </span>
+          {agent.threadUrl && (
+            <a
+              href={agent.threadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            >
+              View agent investigation <ArrowUpRight className="size-3" />
+            </a>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

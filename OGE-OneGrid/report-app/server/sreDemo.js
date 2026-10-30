@@ -205,6 +205,11 @@ export async function sreStatus() {
     recentAlerts(c).catch((e) => ({ error: String(e.message || e) })),
     ...SCENARIOS.map((s) => scenarioState(c, s.id).catch((e) => ({ broken: null, detail: `Status unavailable: ${String(e.message || e).slice(0, 160)}` }))),
   ]);
+  const activeId = active ? String(active).split('@')[0] : null;
+  const activeScenario = SCENARIOS.find((s) => s.id === activeId && !s.live);
+  const agent = activeScenario && Array.isArray(alerts)
+    ? await scenarioAgent(activeScenario, String(active).split('@')[1], alerts).catch(() => null)
+    : null;
   return {
     enabled: true,
     canControl: !!c.key,
@@ -215,6 +220,7 @@ export async function sreStatus() {
       ...s,
       ...states[i],
       alertEvents: Array.isArray(alerts) ? alerts.filter((a) => s.alerts.includes(a.name)) : [],
+      ...(s === activeScenario && agent ? { agent } : {}),
     })),
     checkedAt: new Date().toISOString(),
   };
@@ -243,7 +249,8 @@ export async function decideWorkOrder(wrId, decision, decidedBy, providedKey) {
 // agent's data-plane API. Best effort: needs SRE_DEMO_AGENT_ID and read access to the agent.
 const SRE_AGENT_API = '2025-05-01-preview';
 let agentEndpoint = null;
-let threadCache = { at: 0, url: null };
+let threadCache = { at: 0, list: [] };
+const ts = (v) => new Date(v || 0).getTime();
 
 const threadLink = (agentId, id) =>
   `${(process.env.SRE_DEMO_AGENT_URL || 'https://sre.azure.com').replace(/\/$/, '')}/agents${agentId}/views/thread/${encodeURIComponent(id)}`;
@@ -254,26 +261,58 @@ export async function agentThreadUrl(since, threadId) {
   const agentId = process.env.SRE_DEMO_AGENT_ID || '';
   if (!agentId) return null;
   if (threadId) return threadLink(agentId, threadId);
-  if (Date.now() - threadCache.at < 20_000) return threadCache.url;
+  const after = since ? ts(since) - 60_000 : 0;
+  // Only a thread opened during this run; never link to an older investigation.
+  const thread = (await agentThreads())
+    .filter((t) => /sre-demo-05|onegrid-equipment-alarm/.test(String(t.title || '')) && ts(t.createdTimestamp) >= after)
+    .sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp))[0];
+  // New SRE Agent experience (sre.azure.com): /agents<agent resource id>/views/thread/<id>.
+  return thread ? threadLink(agentId, thread.id) : null;
+}
+
+/** The agent's investigation of the active (non-live) scenario's alert and any work order it
+ *  proposed since, so the page can follow the run: investigating → complete → decided. A
+ *  stateful alert can still be firing from before this injection, so its thread counts too. */
+async function scenarioAgent(s, activeSince, alerts) {
+  const agentId = process.env.SRE_DEMO_AGENT_ID || '';
+  // Alert episodes that overlap this run (a stateful alert can predate the injection).
+  const start = activeSince ? ts(activeSince) : Date.now();
+  const fired = alerts
+    .filter((a) => s.alerts.includes(a.name) && a.firedAt && (a.state === 'Fired' || ts(a.resolvedAt) >= start))
+    .map((a) => ts(a.firedAt));
+  const since = Math.min(start, ...fired) - 60_000;
+  const thread = agentId
+    ? (await agentThreads())
+      .filter((t) => s.alerts.some((n) => String(t.incidentDetails?.incidentTitle || t.title || '').includes(n)) && ts(t.createdTimestamp) >= since)
+      .sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp))[0]
+    : null;
+  const records = await live.agentRecordsSince(since).catch(() => []);
+  return {
+    status: !thread ? 'waiting' : thread.incidentDetails?.investigationStatus === 'Complete' ? 'complete' : 'investigating',
+    threadUrl: thread ? threadLink(agentId, thread.id) : null,
+    updatedAt: thread?.modifiedTimestamp || null,
+    proposal: records.find((w) => w.wr_status === live.PENDING) || null,
+    decided: records.find((w) => w.wr_status !== live.PENDING) || null,
+  };
+}
+
+/** The agent's threads, cached briefly (the SRE page polls). */
+async function agentThreads() {
+  const agentId = process.env.SRE_DEMO_AGENT_ID || '';
+  if (!agentId) return [];
+  if (Date.now() - threadCache.at < 15_000) return threadCache.list;
   threadCache.at = Date.now();
   try {
     agentEndpoint ||= String((await arm('GET', agentId, undefined, SRE_AGENT_API)).properties?.agentEndpoint || '').replace(/\/$/, '');
-    if (!agentEndpoint) return null;
+    if (!agentEndpoint) return [];
     const token = await getToken('https://azuresre.dev');
     const res = await fetch(`${agentEndpoint}/api/v1/threads`, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) throw new Error(`threads -> ${res.status}`);
-    const after = since ? new Date(since).getTime() - 60_000 : 0;
-    // Only a thread opened during this run; never link to an older investigation.
-    const ts = (v) => new Date(v || 0).getTime();
-    const demo = ((await res.json()).value || []).filter((t) => /sre-demo-05|onegrid-equipment-alarm/.test(String(t.title || '')));
-    const thread = demo.filter((t) => ts(t.createdTimestamp) >= after).sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp))[0];
-    // New SRE Agent experience (sre.azure.com): /agents<agent resource id>/views/thread/<id>.
-    threadCache.url = thread ? threadLink(agentId, thread.id) : null;
+    threadCache.list = (await res.json()).value || [];
   } catch (e) {
     console.warn('[sre-demo] agent thread lookup failed:', String(e.message || e).slice(0, 160));
-    threadCache.url = null;
   }
-  return threadCache.url;
+  return threadCache.list;
 }
 
 /** action: "inject" | "reset"; scenario: id or "all" (reset only). */
