@@ -21,6 +21,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PauseCircle,
+  Receipt,
   Server,
   ServerCog,
   Siren,
@@ -262,6 +263,7 @@ const RESOURCES: Group = {
   children: [
     { to: "/esu-planner", label: "ESU Planner", icon: Calculator },
     { to: "/sap", label: "SAP S/4HANA", icon: Landmark },
+    { to: "/rates", label: "Customer Rate Analysis", icon: Receipt },
     { to: "/sre", label: "SRE Demo", icon: Siren },
     { label: "Nuclear Permitting", icon: Atom, soon: true },
   ],
@@ -282,6 +284,7 @@ const MOBILE_ROUTES = [
   { to: "/ontology", label: "Ontology" },
   { to: "/esu-planner", label: "ESU Planner" },
   { to: "/sap", label: "SAP S/4HANA" },
+  { to: "/rates", label: "Customer Rate Analysis" },
   { to: "/sre", label: "SRE Demo" },
   { to: "/infrastructure", label: "Infrastructure" },
   { to: "/thresholds", label: "Thresholds" },

@@ -53,6 +53,7 @@ import { Route as AuthenticatedAppMapRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedAppOntologyRouteImport } from './routes/_authenticated/app.ontology'
 import { Route as AuthenticatedAppOverviewLegacyRouteImport } from './routes/_authenticated/app.overview-legacy'
 import { Route as AuthenticatedAppPostureRouteImport } from './routes/_authenticated/app.posture'
+import { Route as AuthenticatedAppRatesRouteImport } from './routes/_authenticated/app.rates'
 import { Route as AuthenticatedAppRiskRouteImport } from './routes/_authenticated/app.risk'
 import { Route as AuthenticatedAppSapRouteImport } from './routes/_authenticated/app.sap'
 import { Route as AuthenticatedAppSimulationRouteImport } from './routes/_authenticated/app.simulation'
@@ -289,6 +290,11 @@ const AuthenticatedAppPostureRoute = AuthenticatedAppPostureRouteImport.update({
   path: '/app/posture',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppRatesRoute = AuthenticatedAppRatesRouteImport.update({
+  id: '/app/rates',
+  path: '/app/rates',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAppRiskRoute = AuthenticatedAppRiskRouteImport.update({
   id: '/app/risk',
   path: '/app/risk',
@@ -366,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
+  '/app/rates': typeof AuthenticatedAppRatesRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
   '/app/sap': typeof AuthenticatedAppSapRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
@@ -417,6 +424,7 @@ export interface FileRoutesByTo {
   '/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
+  '/app/rates': typeof AuthenticatedAppRatesRoute
   '/app/risk': typeof AuthenticatedAppRiskRoute
   '/app/sap': typeof AuthenticatedAppSapRoute
   '/app/simulation': typeof AuthenticatedAppSimulationRoute
@@ -470,6 +478,7 @@ export interface FileRoutesById {
   '/_authenticated/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/_authenticated/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/_authenticated/app/posture': typeof AuthenticatedAppPostureRoute
+  '/_authenticated/app/rates': typeof AuthenticatedAppRatesRoute
   '/_authenticated/app/risk': typeof AuthenticatedAppRiskRoute
   '/_authenticated/app/sap': typeof AuthenticatedAppSapRoute
   '/_authenticated/app/simulation': typeof AuthenticatedAppSimulationRoute
@@ -523,6 +532,7 @@ export interface FileRouteTypes {
     | '/app/ontology'
     | '/app/overview-legacy'
     | '/app/posture'
+    | '/app/rates'
     | '/app/risk'
     | '/app/sap'
     | '/app/simulation'
@@ -574,6 +584,7 @@ export interface FileRouteTypes {
     | '/app/ontology'
     | '/app/overview-legacy'
     | '/app/posture'
+    | '/app/rates'
     | '/app/risk'
     | '/app/sap'
     | '/app/simulation'
@@ -626,6 +637,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/ontology'
     | '/_authenticated/app/overview-legacy'
     | '/_authenticated/app/posture'
+    | '/_authenticated/app/rates'
     | '/_authenticated/app/risk'
     | '/_authenticated/app/sap'
     | '/_authenticated/app/simulation'
@@ -973,6 +985,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppPostureRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/rates': {
+      id: '/_authenticated/app/rates'
+      path: '/app/rates'
+      fullPath: '/app/rates'
+      preLoaderRoute: typeof AuthenticatedAppRatesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/risk': {
       id: '/_authenticated/app/risk'
       path: '/app/risk'
@@ -1037,6 +1056,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppOntologyRoute: typeof AuthenticatedAppOntologyRoute
   AuthenticatedAppOverviewLegacyRoute: typeof AuthenticatedAppOverviewLegacyRoute
   AuthenticatedAppPostureRoute: typeof AuthenticatedAppPostureRoute
+  AuthenticatedAppRatesRoute: typeof AuthenticatedAppRatesRoute
   AuthenticatedAppRiskRoute: typeof AuthenticatedAppRiskRoute
   AuthenticatedAppSapRoute: typeof AuthenticatedAppSapRoute
   AuthenticatedAppSimulationRoute: typeof AuthenticatedAppSimulationRoute
@@ -1066,6 +1086,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppOntologyRoute: AuthenticatedAppOntologyRoute,
   AuthenticatedAppOverviewLegacyRoute: AuthenticatedAppOverviewLegacyRoute,
   AuthenticatedAppPostureRoute: AuthenticatedAppPostureRoute,
+  AuthenticatedAppRatesRoute: AuthenticatedAppRatesRoute,
   AuthenticatedAppRiskRoute: AuthenticatedAppRiskRoute,
   AuthenticatedAppSapRoute: AuthenticatedAppSapRoute,
   AuthenticatedAppSimulationRoute: AuthenticatedAppSimulationRoute,
