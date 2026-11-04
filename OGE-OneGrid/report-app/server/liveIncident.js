@@ -44,10 +44,14 @@ let woPersist = Promise.resolve(); // chain of background work-order writes
 let woTableReady = false;
 const unpersisted = new Set(); // ids of work orders created here that are not yet in Eventhouse
 // The stream and the agent's MCP calls can run in different processes (e.g. the demo runs on
-// localhost while the SRE Agent calls the dev site), sharing state only through Eventhouse.
-// A process that has not started or reset the scenario itself keeps syncing from Eventhouse.
+// the live site or localhost while the SRE Agent calls the dev site's MCP), sharing state only
+// through Eventhouse. A process syncs from Eventhouse unless it is streaming the run itself, or
+// has just reset it here (until the clean-up lands, the old rows must not come back).
 const SYNC_MS = 15_000;
-let ownsRun = false;
+const RESET_HOLD_MS = 120_000;
+let holdSyncUntil = 0;
+const streamingHere = () => !!run && !run.restored && !run.stoppedAt;
+const ownsRun = () => streamingHere() || Date.now() < holdSyncUntil;
 let lastSyncAt = 0;
 let syncing = null;
 // Eventhouse clean-up runs in the background so Start/Reset respond instantly even when
@@ -272,7 +276,6 @@ async function startLiveInner() {
   const b = await getBaseline();
   const prev = run;
   run = null;
-  ownsRun = true;
   hideWoBefore = Date.now();
   const inflight = retire(prev, 'restarted');
   if (prev || !knownClean) scheduleCleanup(inflight);
@@ -301,7 +304,7 @@ export async function resetLive() {
   if (starting) await starting.catch(() => {});
   const prev = run;
   run = null;
-  ownsRun = true;
+  holdSyncUntil = Date.now() + RESET_HOLD_MS;
   hideWoBefore = Date.now();
   if (woRows) woRows = woRows.filter(visible);
   scheduleCleanup(retire(prev, 'reset'));
@@ -315,13 +318,13 @@ export function prefetchLive() {
 /** Rebuild the chart from Eventhouse when this process does not own the run: after an app
  *  restart, or while the stream runs in another process. Refreshed at most every SYNC_MS. */
 async function syncFromEventhouse() {
-  if (ownsRun || (run && !run.restored) || Date.now() - lastSyncAt < SYNC_MS) return syncing;
+  if (ownsRun() || Date.now() - lastSyncAt < SYNC_MS) return syncing;
   syncing ||= (async () => {
     lastSyncAt = Date.now();
     const rows = await kq(`PiEvents | where Tier == "${MARK}"
       | summarize vib = take_anyif(Value, Tag == "${LIVE.vibTag}"), temp = take_anyif(Value, Tag == "${LIVE.tempTag}"), ing = min(ingestion_time()) by Timestamp
       | order by Timestamp asc | take 2400`).catch(() => null);
-    if (!rows || ownsRun || (run && !run.restored)) return;
+    if (!rows || ownsRun()) return;
     if (!rows.length) { knownClean = true; run = null; return; }
     const t0 = new Date(rows[0].Timestamp).getTime();
     const points = rows.map((r) => ({ e: (new Date(r.Timestamp).getTime() - t0) / 1000, ts: r.Timestamp, vib: Number(r.vib), temp: Number(r.temp) }));
@@ -330,8 +333,12 @@ async function syncFromEventhouse() {
     // batch lands one flush interval (10 s) after the run starts.
     const ing = rows.map((r) => new Date(r.ing).getTime()).filter(Number.isFinite);
     const lastIngest = ing.length ? Math.max(...ing) : Date.now();
+    // Our own run has stopped and these are still its readings: keep it (it knows its agent thread).
+    if (run && !run.restored && lastIngest <= run.stoppedAt + 15_000) return;
     const startedAt = ing.length ? Math.min(...ing) - 10_000 : Date.now() - points[points.length - 1].e * 1000;
     const streaming = Date.now() - lastIngest < 30_000; // still being written by another process
+    // A run started elsewhere supersedes older agent records, even before its clean-up lands.
+    hideWoBefore = Math.max(hideWoBefore, startedAt - 60_000);
     run = {
       startedAt, anchorMs: t0, baseVib: points[0].vib, baseTemp: points[0].temp,
       tempAlarm: 107, points, pending: [], flushed: rows.length * 2, alarmAt: firstAlarm ? startedAt + firstAlarm.e * 1000 : null,
@@ -465,7 +472,7 @@ function dedupe(list) {
  *  progress, or another process owns the scenario, it is re-read every SYNC_MS so proposals
  *  and decisions made through another process (e.g. the dev site's MCP endpoint) show up here. */
 async function agentRecords(force = false, sync = false) {
-  const shared = !!run || !ownsRun || sync;
+  const shared = !!run || !ownsRun() || sync;
   if (force || ((!woRows || shared) && Date.now() - woLoadAt > (shared ? SYNC_MS : 60_000))) {
     woLoadAt = Date.now();
     try {

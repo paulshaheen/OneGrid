@@ -11,6 +11,12 @@
   pcpro app identity (system-assigned): the same three write scopes plus read on the
   resource group, Tag Contributor on itself and SRE Agent Reader on the agent (to deep-link
   the SRE page to the agent's investigation thread) -> powers the in-app SRE demo page.
+
+  Live site identity (onegrid-app-75033e-chat, system-assigned): runs scenarios 04 and 05
+  only (SRE_DEMO_SCENARIOS=sensor,bearing) against the same demo state as pcpro, so it gets
+  read on the resource group (alerts), Tag Contributor on the pcpro app (the shared
+  "active scenario" tag) and the agent roles. No write access to storage, deployment or
+  capacity. Eventhouse access comes from its Member role on the Fabric workspace.
 #>
 $ErrorActionPreference = "Stop"
 $Sub = "87bc8fc7-c4b7-4466-80b8-a7d5004b4f14"
@@ -22,6 +28,8 @@ $CapacityId = "/subscriptions/$Sub/resourceGroups/rgpoc/providers/Microsoft.Fabr
 $Workspace  = az monitor app-insights component show -g $Rg -a pcpro-ai-ujcb2qv6 --query workspaceResourceId -o tsv
 $AgentPrincipal = az identity show -g rg-onegrid-sre -n id-onegrid-sre-agent --query principalId -o tsv
 $AppPrincipal   = az webapp identity show -n pcpro-onegrid-app-ujcb2qv6vi2ts -g $Rg --query principalId -o tsv
+$LivePrincipal  = az containerapp show -g rg-onegrid-75033e -n onegrid-app-75033e-chat --query identity.principalId -o tsv
+$AgentId        = "/subscriptions/$Sub/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent"
 
 function Grant($principal, $role, $scope) {
   $existing = @(az role assignment list --assignee $principal --role $role --scope $scope --query "[].id" -o tsv | Where-Object { $_ })
@@ -45,6 +53,15 @@ Grant $AppPrincipal "Website Contributor"            $AppId
 Grant $AppPrincipal "Tag Contributor"                $AppId
 Grant $AppPrincipal "Storage Account Contributor"    $StorageId
 Grant $AppPrincipal "Contributor"                    $CapacityId
-Grant $AppPrincipal "SRE Agent Reader"               "/subscriptions/$Sub/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent"
+Grant $AppPrincipal "SRE Agent Reader"               $AgentId
 # Calling the agent's HTTP trigger needs Microsoft.App/agents/threads/write on the agent.
-Grant $AppPrincipal "SRE Agent Standard User"        "/subscriptions/$Sub/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent"
+Grant $AppPrincipal "SRE Agent Standard User"        $AgentId
+
+if ($LivePrincipal) {
+  Write-Host "Live site identity ($LivePrincipal)"
+  Grant $LivePrincipal "Reader"                      $RgId
+  Grant $LivePrincipal "Monitoring Reader"           $RgId
+  Grant $LivePrincipal "Tag Contributor"             $AppId
+  Grant $LivePrincipal "SRE Agent Reader"            $AgentId
+  Grant $LivePrincipal "SRE Agent Standard User"     $AgentId
+}

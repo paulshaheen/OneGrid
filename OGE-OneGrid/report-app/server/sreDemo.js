@@ -216,16 +216,25 @@ async function recentAlerts(c) {
     .sort((a, b) => String(b.firedAt).localeCompare(String(a.firedAt)));
 }
 
+/** Scenarios this deployment may run: SRE_DEMO_SCENARIOS (comma-separated ids), else all.
+ *  The live site enables only the telemetry scenarios (sensor, bearing), which need no rights
+ *  on the dev site's storage, deployment or capacity. */
+function enabledScenarios() {
+  const ids = String(process.env.SRE_DEMO_SCENARIOS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  return ids.length ? SCENARIOS.filter((s) => ids.includes(s.id)) : SCENARIOS;
+}
+
 export async function sreStatus() {
   const c = cfg();
-  if (!c.enabled) return { enabled: false, scenarios: SCENARIOS };
+  const list = enabledScenarios();
+  if (!c.enabled) return { enabled: false, scenarios: list };
   const [active, alerts, ...states] = await Promise.all([
     getActive(c).catch(() => null),
     recentAlerts(c).catch((e) => ({ error: String(e.message || e) })),
-    ...SCENARIOS.map((s) => scenarioState(c, s.id).catch((e) => ({ broken: null, detail: `Status unavailable: ${String(e.message || e).slice(0, 160)}` }))),
+    ...list.map((s) => scenarioState(c, s.id).catch((e) => ({ broken: null, detail: `Status unavailable: ${String(e.message || e).slice(0, 160)}` }))),
   ]);
   const activeId = active ? String(active).split('@')[0] : null;
-  const activeScenario = SCENARIOS.find((s) => s.id === activeId && !s.live);
+  const activeScenario = list.find((s) => s.id === activeId && !s.live);
   const agent = activeScenario && Array.isArray(alerts)
     ? await scenarioAgent(activeScenario, String(active).split('@')[1], alerts).catch(() => null)
     : null;
@@ -235,7 +244,7 @@ export async function sreStatus() {
     agentUrl: c.agentUrl,
     active,
     alertsError: Array.isArray(alerts) ? null : alerts.error,
-    scenarios: SCENARIOS.map((s, i) => ({
+    scenarios: list.map((s, i) => ({
       ...s,
       ...states[i],
       alertEvents: Array.isArray(alerts) ? alerts.filter((a) => s.alerts.includes(a.name)) : [],
@@ -339,8 +348,12 @@ export async function sreControl(action, scenario, providedKey, force = false) {
   const c = cfg();
   if (!c.enabled) return { status: 404, body: { ok: false, message: 'The SRE demo is not enabled on this deployment.' } };
   if (!keyOk(c, providedKey)) return { status: 401, body: { ok: false, message: 'A valid demo key is required.' } };
-  const ids = scenario === 'all' && action === 'reset' ? SCENARIOS.map((s) => s.id) : [scenario];
-  if (!ids.every((id) => SCENARIOS.some((s) => s.id === id))) return { status: 400, body: { ok: false, message: `Unknown scenario: ${scenario}` } };
+  const list = enabledScenarios();
+  const ids = scenario === 'all' && action === 'reset' ? list.map((s) => s.id) : [scenario];
+  if (!ids.every((id) => list.some((s) => s.id === id))) {
+    const known = SCENARIOS.some((s) => s.id === scenario);
+    return { status: 400, body: { ok: false, message: known ? `Scenario "${scenario}" is not available on this deployment.` : `Unknown scenario: ${scenario}` } };
+  }
 
   if (action === 'inject') {
     const active = await getActive(c);
@@ -366,7 +379,8 @@ export async function sreControl(action, scenario, providedKey, force = false) {
     } else if ((await capacityState(c)) !== 'Active') await arm('POST', `${c.capacityId}/resume`, undefined, '2023-11-01');
   }
   const active = await getActive(c).catch(() => null);
-  if (active && (scenario === 'all' || active.startsWith(`${scenario}@`))) await setActive(c, '');
+  // "Reset everything" only clears the active scenario if it is one this deployment runs.
+  if (active && ids.some((id) => active.startsWith(`${id}@`))) await setActive(c, '');
   return { status: 200, body: { ok: true, message: scenario === 'all' ? 'Everything reset.' : `Reset "${scenario}".` } };
 }
 
