@@ -83,8 +83,11 @@ export const SCENARIOS = [
     component: 'Grid telemetry (Eventhouse)',
     breaks: 'The vibration sensor on the Fairview steam turbine dies and reports a flat 0.0.',
     symptom: 'The turbine looks perfectly calm — the dead sensor hides the #1 equipment risk on the executive brief.',
-    fix: 'Agent reads the sensor-health findings through the OneGrid MCP server, diagnoses a failed transducer and proposes a repair work order, which you approve or reject on this page.',
+    fix: 'OneGrid\'s sensor-health check spots the flatline and pages Azure SRE Agent at once; it diagnoses a failed transducer through the OneGrid MCP server and proposes a repair work order, which you approve or reject on this page.',
     alerts: ['sre-demo-04-sensor-fault'],
+    // OneGrid pages the agent through this HTTP trigger as soon as the fault is injected;
+    // the Azure Monitor availability test (5-minute cadence) still alerts, but only as a record.
+    trigger: 'onegrid-sensor-fault',
   },
   {
     id: 'bearing',
@@ -142,10 +145,11 @@ async function getActive(c) {
   return r.properties?.tags?.[ACTIVE_TAG] || null;
 }
 
-// Cached active-scenario lookup for hot paths (health checks, status polling).
+// Cached active-scenario lookup for hot paths (health checks, status polling). Kept short: the
+// agent calls get_sensor_health here seconds after another site injected scenario 04.
 let activeCache = { at: 0, val: null };
 async function activeCached(c) {
-  if (Date.now() - activeCache.at < 60_000) return activeCache.val;
+  if (Date.now() - activeCache.at < 10_000) return activeCache.val;
   const val = await getActive(c).catch(() => null);
   activeCache = { at: Date.now(), val };
   return val;
@@ -309,14 +313,18 @@ async function scenarioAgent(s, activeSince, alerts) {
     .filter((a) => s.alerts.includes(a.name) && a.firedAt && (a.state === 'Fired' || ts(a.resolvedAt) >= start))
     .map((a) => ts(a.firedAt));
   const since = Math.min(start, ...fired) - 60_000;
+  // The agent's thread for this run: one OneGrid opened through the scenario's HTTP trigger,
+  // or one Azure Monitor opened for its alert.
+  const names = [...s.alerts, ...(s.trigger ? [s.trigger] : [])];
   const thread = agentId
     ? (await agentThreads())
-      .filter((t) => s.alerts.some((n) => String(t.incidentDetails?.incidentTitle || t.title || '').includes(n)) && ts(t.createdTimestamp) >= since)
+      .filter((t) => names.some((n) => String(t.incidentDetails?.incidentTitle || t.title || '').includes(n)) && ts(t.createdTimestamp) >= since)
       .sort((a, b) => ts(b.createdTimestamp) - ts(a.createdTimestamp))[0]
     : null;
   const records = await live.agentRecordsSince(since, scenarioTag(s)).catch(() => []);
+  const paging = !thread && !!s.trigger && !!process.env.SRE_DEMO_SENSOR_TRIGGER_URL;
   return {
-    status: !thread ? 'waiting' : thread.incidentDetails?.investigationStatus === 'Complete' ? 'complete' : 'investigating',
+    status: !thread ? (paging ? 'paging' : 'waiting') : thread.incidentDetails?.investigationStatus === 'Complete' ? 'complete' : 'investigating',
     threadUrl: thread ? threadLink(agentId, thread.id) : null,
     updatedAt: thread?.modifiedTimestamp || null,
     proposal: records.find((w) => w.wr_status === live.PENDING) || null,
@@ -363,10 +371,10 @@ export async function sreControl(action, scenario, providedKey, force = false) {
     await setActive(c, `${scenario}@${new Date().toISOString().slice(0, 16)}Z`);
     if (scenario === 'storage') await arm('PATCH', c.storageId, { properties: { publicNetworkAccess: 'Disabled' } }, '2023-05-01');
     else if (scenario === 'deploy') await setPackage(c, c.badPkg);
-    else if (scenario === 'sensor') { clearSensorWorkOrders(); await injectSensorFault(); }
+    else if (scenario === 'sensor') { clearSensorWorkOrders(); await injectSensorFault(); await pageSensorAgent(); }
     else if (scenario === 'bearing') await live.startLive();
     else await arm('POST', `${c.capacityId}/suspend`, undefined, '2023-11-01');
-    return { status: 200, body: { ok: true, message: scenario === 'bearing' ? 'Live incident started — alarm in about 30 seconds.' : `Injected "${scenario}". Alerts usually fire within 5 minutes.` } };
+    return { status: 200, body: { ok: true, message: scenario === 'bearing' ? 'Live incident started — alarm in about 30 seconds.' : scenario === 'sensor' && process.env.SRE_DEMO_SENSOR_TRIGGER_URL ? 'Sensor fault injected — OneGrid paged Azure SRE Agent.' : `Injected "${scenario}". Alerts usually fire within 5 minutes.` } };
   }
 
   for (const id of ids) {
@@ -419,6 +427,34 @@ async function clearSensorFault() {
   const t = kusto();
   await kqlMgmt(t.kustoUri, t.kqlDatabase, `.delete table PiEvents records <| PiEvents | where Tier == "${SENSOR_MARK}"`);
   sensorRowsCache = { at: 0, n: 0 };
+}
+
+/** Page the agent the moment the fault is injected (OneGrid's sensor-health check would see
+ *  it at once; the 5-minute Azure Monitor availability test is far slower). Best effort: if
+ *  it fails, the alert still reaches the agent once its plan is re-enabled. */
+async function pageSensorAgent() {
+  const url = process.env.SRE_DEMO_SENSOR_TRIGGER_URL || '';
+  if (!url) return;
+  try {
+    const token = await getToken('https://azuresre.dev');
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: 'OneGrid sensor-health check', scenario: 'sre-demo-04', detected_at: new Date().toISOString(),
+        faulty_sensors: [{ tag: SENSOR_TAG, asset_id: SENSOR_ASSET, flat_value: 0, readings: 60, window: 'newest hour of telemetry' }],
+        message: `Sensor fault: ${SENSOR_TAG} on ${SENSOR_ASSET} has been flatlined at 0.00 for 60 consecutive readings. ` +
+          'A healthy vibration signal is never perfectly constant, so the equipment is effectively unmonitored.',
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) throw new Error(`trigger -> ${res.status} ${(await res.text()).slice(0, 160)}`);
+    const { threadId } = await res.json().catch(() => ({}));
+    trackTrace(`OneGrid paged Azure SRE Agent for a flatlined sensor ${SENSOR_TAG} on ${SENSOR_ASSET} (thread ${threadId}).`,
+      { assetId: SENSOR_ASSET, sensorTag: SENSOR_TAG, scenario: 'sre-demo-04' }, 1);
+  } catch (e) {
+    console.warn('[sre-demo] paging the agent for scenario 04 failed:', String(e.message || e).slice(0, 200));
+  }
 }
 
 const lastTrace = new Map(); // tag -> epoch ms, throttles App Insights traces

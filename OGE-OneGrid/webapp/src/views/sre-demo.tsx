@@ -45,7 +45,7 @@ interface AlertEvent {
 
 /** The agent's progress on the active scenario (from its investigation thread). */
 interface ScenarioAgent {
-  status: "waiting" | "investigating" | "complete";
+  status: "waiting" | "paging" | "investigating" | "complete";
   threadUrl: string | null;
   updatedAt: string | null;
   proposal: AgentWorkOrder | null;
@@ -58,6 +58,8 @@ interface Scenario {
   name: string;
   component: string;
   live?: boolean;
+  /** HTTP trigger OneGrid uses to page the agent for this scenario, if any. */
+  trigger?: string;
   breaks: string;
   symptom: string;
   fix: string;
@@ -144,13 +146,13 @@ const STEPS: Array<{ icon: LucideIcon; title: string; text: string }> = [
   },
 ];
 
-/** The live scenario pages the agent directly from OneGrid instead of waiting for an alert. */
+/** Scenarios that page the agent directly from OneGrid instead of waiting for an alert. */
 const STEPS_LIVE = STEPS.map((s, i) =>
   i === 1
     ? {
         ...s,
         title: "OneGrid pages the agent",
-        text: "The alarm calls Azure SRE Agent directly — seconds, not minutes.",
+        text: "OneGrid detects it and calls Azure SRE Agent directly — seconds, not minutes.",
       }
     : i === 3
       ? {
@@ -342,7 +344,7 @@ export function SreDemoPage() {
 
         {/* flow */}
         <Panel className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
-          {(activeScenario?.live ? STEPS_LIVE : STEPS).map((s, i) => {
+          {(activeScenario?.live || activeScenario?.trigger ? STEPS_LIVE : STEPS).map((s, i) => {
             const done = stage > i;
             const current = stage === i;
             return (
@@ -736,10 +738,12 @@ function AgentProgress({
         ? "Investigation complete — the agent proposed a work order for your approval."
         : "Investigation complete — review the agent's findings and recommended fix."
       : agent.status === "investigating"
-        ? "Azure SRE Agent is investigating the alert…"
-        : firing
-          ? "Alert fired — the agent picks it up within a minute."
-          : "Waiting for Azure Monitor to raise the alert (up to ~5 minutes).";
+        ? "Azure SRE Agent is investigating…"
+        : agent.status === "paging"
+          ? "OneGrid paged Azure SRE Agent — it is opening the investigation…"
+          : firing
+            ? "Alert fired — the agent picks it up within a minute."
+            : "Waiting for Azure Monitor to raise the alert (up to ~5 minutes).";
   return (
     <div className="mt-4 border-t pt-3">
       <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">

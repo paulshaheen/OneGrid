@@ -8,10 +8,11 @@
                                         alarms (05) and sensor faults (04) and proposes a
                                         work order that a human approves or rejects on the
                                         OneGrid SRE page
-  3. Response plans                  -> sre-demo-04 alerts -> onegrid-maintenance
-                                        sre-demo-01..03    -> default agent
-                                        (05's plan is off: OneGrid pages the agent directly)
-  4. HTTP trigger                    -> onegrid-equipment-alarm -> onegrid-maintenance
+  3. Response plans                  -> sre-demo-01..03 alerts -> default agent
+                                        (04's and 05's plans are off: OneGrid pages the agent
+                                        directly through the HTTP triggers)
+  4. HTTP triggers                   -> onegrid-equipment-alarm (05) and onegrid-sensor-fault
+                                        (04) -> onegrid-maintenance
   All plans and the trigger run in Review mode: the agent asks before it changes anything.
 
 .EXAMPLE
@@ -110,7 +111,7 @@ $plans = @(
   @{ id = 'sre-demo-01-storage';  name = 'Storage access (demo 01)';  titleContains = 'sre-demo-01'; handlingAgent = '' }
   @{ id = 'sre-demo-02-deploy';   name = 'Bad deployment (demo 02)';  titleContains = 'sre-demo-02'; handlingAgent = '' }
   @{ id = 'sre-demo-03-capacity'; name = 'Fabric capacity (demo 03)'; titleContains = 'sre-demo-03'; handlingAgent = '' }
-  @{ id = 'sre-demo-04-sensor';   name = 'Faulty sensor (demo 04)';   titleContains = 'sre-demo-04'; handlingAgent = 'onegrid-maintenance' }
+  @{ id = 'sre-demo-04-sensor';   name = 'Faulty sensor (demo 04)';   titleContains = 'sre-demo-04'; handlingAgent = 'onegrid-maintenance'; isEnabled = $false }
 )
 foreach ($p in $plans) {
   # No merging: every injection gets its own thread and a fresh investigation.
@@ -122,26 +123,37 @@ foreach ($p in $plans) {
   Write-Host "   $($p.id) -> $(if ($p.handlingAgent) { $p.handlingAgent } else { 'default agent' })"
 }
 
-# 4. HTTP trigger ----------------------------------------------------------------
-# OneGrid calls this the moment a live equipment alarm trips (demo 05), so the investigation
-# starts in seconds instead of waiting ~2 minutes for the Azure Monitor alert. Each call opens
-# a new thread. pcpro needs SRE Agent Standard User on the agent (grant-access.ps1).
-Write-Host '4. HTTP trigger onegrid-equipment-alarm'
-$triggerPrompt = @'
-OneGrid has raised a live equipment alarm (scenario sre-demo-05). The JSON payload in this request has the asset, the sensor readings, thresholds and when the alarm tripped.
-Investigate it as the OneGrid maintenance reliability specialist: call get_active_alarms, then get_sensor_trend (15 minutes) and get_asset_context for the asset, diagnose the failure mode with your confidence and time to trip, then submit exactly ONE corrective work order with propose_work_order. Do not ask for approval in this conversation: a human approves or rejects the proposal on the OneGrid SRE page. Do not change any Azure resource. Keep the report short: what we see, what it means, what it costs if ignored, what to do.
-'@
-$triggerBody = @{ name = 'onegrid-equipment-alarm'; description = 'OneGrid pages the agent the moment a live equipment alarm trips (SRE demo 05).'
-  agentPrompt = $triggerPrompt; agent = 'onegrid-maintenance'; agentMode = 'review' }
-$trigger = @(Invoke-Agent GET '/api/v1/httptriggers' $null) | Where-Object { $_.name -eq 'onegrid-equipment-alarm' } | Select-Object -First 1
-if ($trigger) {
-  $triggerUrl = $trigger.triggerUrl
-  try { $null = Invoke-Agent PUT "/api/v1/httptriggers/$($trigger.id)" $triggerBody }
-  catch { Write-Warning "   could not update the existing trigger ($($_.Exception.Message)); keeping it as is" }
+# 4. HTTP triggers ---------------------------------------------------------------
+# OneGrid calls these the moment it detects the problem (demo 05: the live alarm trips; demo
+# 04: the sensor-health check finds the flatline), so the investigation starts in seconds
+# instead of waiting for Azure Monitor (~2 minutes for 05, 5+ minutes for 04's availability
+# test). Each call opens a new thread. Callers need SRE Agent Standard User (grant-access.ps1).
+function Set-Trigger([string]$Name, [string]$Description, [string]$Prompt) {
+  $body = @{ name = $Name; description = $Description; agentPrompt = $Prompt; agent = 'onegrid-maintenance'; agentMode = 'review' }
+  $existing = @(Invoke-Agent GET '/api/v1/httptriggers' $null) | Where-Object { $_.name -eq $Name } | Select-Object -First 1
+  if ($existing) {
+    try { $null = Invoke-Agent PUT "/api/v1/httptriggers/$($existing.id)" $body }
+    catch { Write-Warning "   could not update trigger $Name ($($_.Exception.Message)); keeping it as is" }
+    return $existing.triggerUrl
+  }
+  return (Invoke-Agent POST '/api/v1/httptriggers/create' $body).triggerUrl
 }
-else { $triggerUrl = (Invoke-Agent POST '/api/v1/httptriggers/create' $triggerBody).triggerUrl }
-Write-Host "   trigger URL: $triggerUrl"
-Write-Host "   set it on pcpro: az webapp config appsettings set -g rg-onegrid-test -n pcpro-onegrid-app-ujcb2qv6vi2ts --settings SRE_DEMO_AGENT_TRIGGER_URL=$triggerUrl"
+$common = 'Do not ask for approval in this conversation: a human approves or rejects the proposal on the OneGrid SRE page. Do not change any Azure resource. Keep the report short: what we see, what it means, what it costs if ignored, what to do.'
+
+Write-Host '4. HTTP triggers'
+$alarmUrl = Set-Trigger 'onegrid-equipment-alarm' 'OneGrid pages the agent the moment a live equipment alarm trips (SRE demo 05).' (@'
+OneGrid has raised a live equipment alarm (scenario sre-demo-05). The JSON payload in this request has the asset, the sensor readings, thresholds and when the alarm tripped.
+Investigate it as the OneGrid maintenance reliability specialist: call get_active_alarms, then get_sensor_trend (15 minutes) and get_asset_context for the asset, diagnose the failure mode with your confidence and time to trip, then submit exactly ONE corrective work order with propose_work_order.
+'@ + $common)
+$sensorUrl = Set-Trigger 'onegrid-sensor-fault' 'OneGrid pages the agent the moment its sensor-health check finds a flatlined sensor (SRE demo 04).' (@'
+OneGrid's sensor-health check has found a faulty (flatlined) sensor (scenario sre-demo-04). The JSON payload in this request has the sensor tag, the asset, the flat value and how many readings.
+Investigate it as the OneGrid maintenance reliability specialist, following your sensor-fault procedure: call get_sensor_health (if it does not list the sensor yet, the scan can lag a few seconds: use the payload and check again), then get_sensor_trend (60 minutes) and get_asset_context for the asset, diagnose the instrument failure and what is now unmonitored, then submit exactly ONE repair work order with propose_work_order.
+'@ + $common)
+Write-Host "   onegrid-equipment-alarm: $alarmUrl"
+Write-Host "   onegrid-sensor-fault:    $sensorUrl"
+Write-Host "   set them on each site running the demo (pcpro: az webapp config appsettings set ...; live site: az containerapp update --set-env-vars ...):"
+Write-Host "     SRE_DEMO_AGENT_TRIGGER_URL=$alarmUrl"
+Write-Host "     SRE_DEMO_SENSOR_TRIGGER_URL=$sensorUrl"
 
 # Verify ------------------------------------------------------------------------
 Start-Sleep 10

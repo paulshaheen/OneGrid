@@ -86,6 +86,8 @@ if ($SreDemo) {
     "/subscriptions/$env:SRE_DEMO_SUBSCRIPTION/resourceGroups/rg-onegrid-sre/providers/Microsoft.App/agents/onegrid-sre-agent" }
   $triggerSetting = $settings | Where-Object name -eq "SRE_DEMO_AGENT_TRIGGER_URL" | Select-Object -First 1
   if ($triggerSetting.value) { $env:SRE_DEMO_AGENT_TRIGGER_URL = $triggerSetting.value }
+  $sensorTrigger = $settings | Where-Object name -eq "SRE_DEMO_SENSOR_TRIGGER_URL" | Select-Object -First 1
+  if ($sensorTrigger.value) { $env:SRE_DEMO_SENSOR_TRIGGER_URL = $sensorTrigger.value }
   Write-Host "SRE demo: wired to $sreApp (Eventhouse $env:KUSTO_CLUSTER)" -ForegroundColor DarkGray
 }
 
