@@ -23,6 +23,10 @@ const CONFIG = {
     // silently query a stale/foreign workspace. kustoDb keeps the standard db name default.
     kustoCluster: process.env.KUSTO_CLUSTER || '',
     kustoDb: process.env.KUSTO_DATABASE || 'pi-realtime-db',
+    // Optional continuously-updated PI stream (Riverton RV1-RV3) in a separate Eventhouse
+    // with the original PI schema (Ts, Tag, Plant, Value dynamic, Questionable).
+    liveKustoCluster: (process.env.LIVE_KUSTO_CLUSTER || '').replace(/\/$/, ''),
+    liveKustoDb: process.env.LIVE_KUSTO_DATABASE || 'pi-realtime-db',
     pbiWorkspace: process.env.PBI_WORKSPACE || '',
     pbiDataset: process.env.PBI_DATASET || '',
     // Fabric Data Agent (published) — consumed over its MCP endpoint for NL queries
@@ -268,19 +272,47 @@ function normalizeKql(kql) {
 }
 
 // ── KQL query ────────────────────────────────────────────────────────────
-async function queryKql(kql) {
-    kql = normalizeKql(kql);
-    const token = await getToken(CONFIG.kustoCluster);
-    const resp = await fetch(`${CONFIG.kustoCluster}/v1/rest/query`, {
+// Riverton (RV1-RV3) PiEvents queries go to the live PI stream when one is configured;
+// everything else runs against the fleet Eventhouse. `source` can force either side.
+function isLiveKql(kql, source) {
+    if (!CONFIG.liveKustoCluster || source === 'fleet') return false;
+    if (source === 'live') return true;
+    return /\bPiEvents\b/.test(kql) && /\bRV[123]:/i.test(kql);
+}
+
+async function runKql(cluster, db, kql) {
+    const token = await getToken(cluster);
+    const resp = await fetch(`${cluster}/v1/rest/query`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csl: kql, db: CONFIG.kustoDb })
+        body: JSON.stringify({ csl: kql, db })
     });
     if (!resp.ok) throw new Error(`KQL error ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
     if (!data.Tables?.[0]?.Rows) return [];
     const cols = data.Tables[0].Columns.map(c => c.ColumnName);
     return data.Tables[0].Rows.map(row => Object.fromEntries(cols.map((c, i) => [c, row[i]])));
+}
+
+async function queryKql(kql, source = '') {
+    if (isLiveKql(kql, source)) {
+        return runKql(CONFIG.liveKustoCluster, CONFIG.liveKustoDb, String(kql).replace(/\bTimestamp\b/g, 'Ts'));
+    }
+    return runKql(CONFIG.kustoCluster, CONFIG.kustoDb, normalizeKql(kql));
+}
+
+// Latest reading in the live PI stream (cached), so the model knows it is current.
+let _liveRangeCache = null;
+async function getLiveRange() {
+    if (!CONFIG.liveKustoCluster) return null;
+    if (_liveRangeCache && Date.now() - _liveRangeCache.at < 300000) return _liveRangeCache.val;
+    try {
+        const rows = await queryKql('PiEvents | where IngestedAt > ago(7d) | summarize maxT=max(Ts), tags=dcount(Tag), units=make_set(Plant)', 'live');
+        const r = rows && rows[0];
+        const val = r && r.maxT ? { max: String(r.maxT), tags: r.tags, units: (r.units || []).filter(Boolean).sort() } : null;
+        _liveRangeCache = { at: Date.now(), val };
+        return val;
+    } catch { return null; }
 }
 
 // Cached PiEvents time window — the sample Eventhouse can be stale relative to
@@ -675,7 +707,7 @@ CORRELATION (for "is X correlated with Y", "which signals move together", "how d
 FOLLOW-UP SUGGESTIONS: At the very END of every response, append a machine tag on its own line: [[SUGGESTIONS: question one | question two | question three]] with up to 3 suggested next questions the user is likely to click. Each must be a short, specific question or command the user would type next (<=12 words), grounded in THIS conversation's data — reference concrete tags/equipment/units in play (e.g. "Trend the LV-55N level controller", "Compare 2A vs 2B airpreheater", "Show open work requests for the boiler"). Use these INSTEAD of a prose "Would you like me to..." offer — do not also ask it in sentence form. The tag is stripped before display; never mention it.`;
 
 const TOOLS = [
-    { type: 'function', function: { name: 'query_kql', description: 'Query Fabric Eventhouse (KQL). Use for: real-time PI, AIMM work requests, SmartSignal.', parameters: { type: 'object', properties: { kql: { type: 'string' } }, required: ['kql'] } } },
+    { type: 'function', function: { name: 'query_kql', description: 'Query Fabric Eventhouse (KQL). Use for: real-time PI, AIMM work requests, SmartSignal.', parameters: { type: 'object', properties: { kql: { type: 'string' }, source: { type: 'string', enum: ['fleet', 'live'], description: 'Eventhouse to query: "fleet" (default — the OneGrid fleet PiEvents, outages, work requests) or "live" (continuously updated Riverton RV1-RV3 PI stream; schema Ts, Tag, Plant, Value, Questionable).' } }, required: ['kql'] } } },
     { type: 'function', function: { name: 'query_dax', description: 'Query Power BI semantic model (DAX). Use for: historical fact_pi, watchlist, equipment dim. ALWAYS filter fact_pi by date_key and Tag.', parameters: { type: 'object', properties: { dax: { type: 'string' } }, required: ['dax'] } } },
     { type: 'function', function: { name: 'plot_line_chart', description: 'Render a line chart in the chat to trend metric(s) over time. Use a KQL query over PiEvents (source "kql") — it holds the full sensor history. The FIRST column is the time axis (a binned Ts) and each remaining numeric column is one series; wrap PiEvents.Value in todouble(). PiEvents filters by Tag ID only — if the user names a metric in words, resolve it to a Tag id via bridge_pi_tag_to_asset FIRST. ALWAYS pass running_tag so offline periods are excluded. Do NOT use source "dax"/fact_pi for trends (only a 2-day window). The chart is shown to the user automatically — after calling this, give a short interpretation of the trend.', parameters: { type: 'object', properties: { title: { type: 'string', description: 'Chart title (mention it is running-periods-only)' }, source: { type: 'string', enum: ['dax', 'kql'], description: 'Engine that runs the query — use "kql" for sensor trends' }, query: { type: 'string', description: 'KQL over PiEvents: binned Ts first (e.g. bin(Ts,1d)), then numeric series column(s); filter by Tag ID not description' }, y_label: { type: 'string', description: 'Optional y-axis label / units (use eng_units)' }, series_units: { type: 'array', items: { type: 'string' }, description: 'eng_units for each series in the same order as the query columns (e.g. ["inHgA","SCFM","Deg F","Deg F"]). Metrics with different units are auto-split onto separate stacked panels so none look flat.' }, running_tag: { type: 'string', description: 'Unit load/speed Tag used to exclude offline days (RV2:GEJU2GE00.AG net MW, RV3:GEJU3GE03.AG gross MW, or the unit running_indicator).' }, running_min: { type: 'number', description: 'Min running-indicator daily avg to count a day as running (MW load ~10, turbine speed ~3500). Default 10.' } }, required: ['title', 'source', 'query'] } } },
     { type: 'function', function: { name: 'correlate_sensors', description: 'Quantitatively correlate two or more PI sensor tags with each other. Pulls each tag as an aligned, time-binned average series from PiEvents and computes the REAL Pearson correlation coefficient (r) for every pair server-side — do NOT try to estimate correlation yourself from raw numbers; call this tool. Use it for "how do these sensors relate", "is X correlated with Y", "which signals move together", or to quantify the visual correlation behind a root_cause diagnosis. Filter by Tag ID (resolve words to Tag ids via bridge_pi_tag_to_asset first). ALWAYS pass running_tag so offline periods are excluded. Optionally set max_lag_bins to detect lead/lag (which signal moves first). After it returns, report each pair\'s r, strength label, and any lead/lag; remember correlation is not causation.', parameters: { type: 'object', properties: { tags: { type: 'array', items: { type: 'string' }, description: 'Two or more PI Tag IDs to correlate (e.g. ["RV3:GHPU3GP00.AG","RV3:TXSU3TS15A.AG"]).' }, hours: { type: 'number', description: 'Lookback window in hours (default 168 = 7 days).' }, bin_minutes: { type: 'number', description: 'Time-bin size in minutes for aligning the series (default 60).' }, running_tag: { type: 'string', description: 'Unit load/speed Tag used to keep only running periods (RV2:GEJU2GE00.AG, RV3:GEJU3GE03.AG, or the unit running_indicator).' }, running_min: { type: 'number', description: 'Min running-indicator average per bin to count as running (default 10).' }, max_lag_bins: { type: 'number', description: 'Optional: search +/- this many bins for the strongest lead/lag correlation (e.g. 6). 0 = zero-lag only.' } }, required: ['tags'] } } },
@@ -767,7 +799,7 @@ function focusDirective(ctx) {
 // Human-facing metadata for a tool call, used by the streaming UI's tool cards.
 function toolMeta(name, args) {
     switch (name) {
-        case 'query_kql': return { title: 'Eventhouse · KQL', preview: String(args.kql || '').replace(/\s+/g, ' ').slice(0, 120) };
+        case 'query_kql': return { title: args.source === 'live' || isLiveKql(String(args.kql || ''), args.source) ? 'Eventhouse · KQL (live stream)' : 'Eventhouse · KQL', preview: String(args.kql || '').replace(/\s+/g, ' ').slice(0, 120) };
         case 'query_dax': return { title: 'Semantic model · DAX', preview: String(args.dax || '').replace(/\s+/g, ' ').slice(0, 120) };
         case 'plot_line_chart': return { title: 'Build chart', preview: String(args.title || 'trend') };
         case 'correlate_sensors': return { title: 'Correlate sensors', preview: (args.tags || []).join(', ') };
@@ -890,14 +922,18 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
     // so DAX/KQL match this dataset instead of an older schema.
     const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local plant time
     const piRange = await getPiRange().catch(() => null);
+    const liveRange = await getLiveRange().catch(() => null);
     const sensorNote = piRange
-        ? `\n- SENSOR DATA WINDOW: PiEvents currently holds data from ${piRange.min} to ${piRange.max}. For sensor trends or "latest reading" queries, query WITHIN this window (e.g. Timestamp between datetime(${piRange.min.slice(0, 10)}) and datetime(${piRange.max.slice(0, 10)}) + 1d) — do NOT use ago(3h)/ago(Nd) relative to today, there is no data after ${piRange.max}. The PiEvents time column is Timestamp (not Ts); it has columns Timestamp, Tag, AssetId, Value, Tier (no "Questionable" column).`
+        ? `\n- SENSOR DATA WINDOW (fleet): the fleet PiEvents currently holds data from ${piRange.min} to ${piRange.max}. For fleet sensor trends or "latest reading" queries, query WITHIN this window (e.g. Timestamp between datetime(${piRange.min.slice(0, 10)}) and datetime(${piRange.max.slice(0, 10)}) + 1d) — do NOT use ago(3h)/ago(Nd) relative to today, there is no fleet data after ${piRange.max}. The fleet PiEvents time column is Timestamp (not Ts); it has columns Timestamp, Tag, AssetId, Value, Tier (no "Questionable" column).`
+        : '';
+    const liveNote = liveRange
+        ? `\n- LIVE PI STREAM (Riverton ${liveRange.units.join('/') || 'RV1/RV2/RV3'}, ${liveRange.tags} tags): a separate, continuously updated Eventhouse feed — latest reading ${liveRange.max}. You DO have live query access to it: for live / latest / current readings or recent trends on Riverton units (tags like RV3:GEJU3GE03.AG, RV2:GEJU2GE00.AG), call query_kql with source "live". Its PiEvents columns are Ts, Tag, Plant ("RV1"/"RV2"/"RV3"), Value (dynamic — wrap in todouble()), Questionable, IngestedAt; ago() works here (e.g. PiEvents | where Ts > ago(1h) and Tag startswith "RV3:" | summarize arg_max(Ts, Value) by Tag). Charts and correlations over RV tags read this live feed automatically. The fleet data-window rule above does not apply to Riverton.`
         : '';
     const dateContext = `CURRENT DATE: Today is ${today} (local plant time).
 - The 'watchlist' table is a CURRENT snapshot of ML anomaly scores. Columns: asset_id, tag_name, descriptor, trend_direction, current_value, baseline_mean, normal_range_low, normal_range_high, trend_slope_per_day, risk_contribution, recommended_action. It has NO date column — do NOT filter or reference scoring_date, model_name, recommendation_text or watch_horizon_days (they do not exist).
 - For "what should I watch / monitor today", rank the WHOLE watchlist by recommended_action severity, then risk_contribution. Ready-to-run:
   EVALUATE TOPN(25, 'watchlist', SWITCH(TRUE(), 'watchlist'[recommended_action]="CRITICAL",4, 'watchlist'[recommended_action]="HIGH",3, 'watchlist'[recommended_action]="MEDIUM",2, 'watchlist'[recommended_action]="LOW",1, 0), DESC, 'watchlist'[risk_contribution], DESC)
-- Tag ids in this dataset look like "<PLANT><unit>:<EQUIP>.<METRIC>" (e.g. CF2:GEN.MW, FV1:STM.BRG_TEMP, GW1:BLR.DRUM_PRESS) — use the watchlist's tag_name values, not RV2/RV3 examples.${sensorNote}`;
+- Tag ids in this dataset look like "<PLANT><unit>:<EQUIP>.<METRIC>" (e.g. CF2:GEN.MW, FV1:STM.BRG_TEMP, GW1:BLR.DRUM_PRESS) — use the watchlist's tag_name values, not RV2/RV3 examples.${sensorNote}${liveNote}`;
 
     const personaContext = PERSONAS[String(persona || '').toLowerCase()];
     const focusMsg = focusDirective(context);
@@ -950,7 +986,7 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
             try {
                 if (tc.function.name === 'query_kql') {
                     sendStatus(`🔍 Querying Eventhouse (KQL): ${args.kql.substring(0, 80)}...`);
-                    result = await queryKql(args.kql);
+                    result = await queryKql(args.kql, args.source);
                     queries.push({ type: 'kql', query: args.kql, rows: result.length, table: guessTable('kql', args.kql) });
                     sendStatus(`✅ KQL returned ${result.length} rows`);
                 } else if (tc.function.name === 'query_dax') {
