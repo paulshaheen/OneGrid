@@ -3,8 +3,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ExecBriefPage } from "@/views/exec-brief";
 
 export const Route = createFileRoute("/_authenticated/app/exec")({
-  validateSearch: (search: Record<string, unknown>): { layout?: "actions" | "scorecard" } =>
-    search["layout"] === "actions" || search["layout"] === "scorecard"
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { layout?: "actions" | "scorecard" | "workbench" } =>
+    search["layout"] === "actions" ||
+    search["layout"] === "scorecard" ||
+    search["layout"] === "workbench"
       ? { layout: search["layout"] }
       : {},
   head: () => ({

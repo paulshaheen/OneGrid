@@ -21,6 +21,7 @@ import {
   Gauge,
   Info,
   LayoutDashboard,
+  PanelsTopLeft,
   ListChecks,
   Sparkles,
   User,
@@ -63,6 +64,7 @@ import { subjectFromRow, type EvidenceSubject } from "@/lib/exec/evidence";
 import { EvidenceModal } from "@/views/exec-evidence-modal";
 import { RiskDetail } from "@/views/exec-risk-detail";
 import { ExecScorecard } from "@/views/exec-scorecard";
+import { ExecWorkbench } from "@/views/exec-workbench";
 
 const HORIZON_HOURS = 120;
 
@@ -205,7 +207,9 @@ export function ExecBriefPage() {
   const search = useSearch({ strict: false }) as { layout?: string };
   const navigate = useNavigate();
   const layout: Layout =
-    search.layout === "actions" || search.layout === "scorecard" ? search.layout : "dashboard";
+    search.layout === "actions" || search.layout === "scorecard" || search.layout === "workbench"
+      ? search.layout
+      : "dashboard";
   const setLayout = (next: Layout) =>
     void navigate({
       to: ".",
@@ -283,7 +287,12 @@ export function ExecBriefPage() {
 
   return (
     <AppShell variant="exec">
-      <div className="mx-auto w-full max-w-[1248px] space-y-3.5 px-6 py-5">
+      <div
+        className={cn(
+          "mx-auto w-full space-y-3.5 px-6 py-5",
+          layout === "workbench" ? "max-w-[1680px]" : "max-w-[1248px]",
+        )}
+      >
         {/* ── header ─────────────────────────────────────────────── */}
         <header className="flex items-start justify-between gap-6">
           <div className="min-w-0">
@@ -318,6 +327,7 @@ export function ExecBriefPage() {
                   ["dashboard", "Dashboard", LayoutDashboard],
                   ["actions", "Actions", ListChecks],
                   ["scorecard", "Scorecard", BarChart3],
+                  ["workbench", "Workbench", PanelsTopLeft],
                 ] as const
               ).map(([value, label, Icon]) => (
                 <button
@@ -398,6 +408,12 @@ export function ExecBriefPage() {
             solution={solution}
             fleet={fleet.data ?? []}
             healthScore={brief.strip.health.score}
+            onEvidence={(subject) => setEvidence({ subject })}
+          />
+        ) : layout === "workbench" ? (
+          <ExecWorkbench
+            solution={solution}
+            fleet={fleet.data ?? []}
             onEvidence={(subject) => setEvidence({ subject })}
           />
         ) : (
@@ -615,7 +631,7 @@ export function ExecBriefPage() {
   );
 }
 
-type Layout = "dashboard" | "actions" | "scorecard";
+type Layout = "dashboard" | "actions" | "scorecard" | "workbench";
 
 function StripCell({
   icon,
