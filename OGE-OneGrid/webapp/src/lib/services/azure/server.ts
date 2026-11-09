@@ -273,7 +273,8 @@ const OPS_SYSTEM =
   "- When presenting per-asset or comparative data (assets, scores, wind, lead-time, etc.), use a Markdown TABLE with a header row and `|---|` separators.\n" +
   "- Keep paragraphs short. Do not use raw HTML.\n\n" +
   "At the very END of your response, add a section titled exactly `### How I reasoned` with 2-4 short bullet points describing which data you used and how you cross-referenced it to reach the answer.\n\n" +
-  "When the context includes SENSOR TRENDS, use them for any question about trends, readings or equipment condition: quote the actual first/last/min/max values and rate of change, say which tags are rising or falling, and give the time window. Do not say time-series data is missing when SENSOR TRENDS are present. A chart is already shown to the user, so do not draw one.";
+  "When the context includes SENSOR TRENDS, use them for any question about trends, readings or equipment condition: quote the actual first/last/min/max values and rate of change, say which tags are rising or falling, and give the time window. Do not say time-series data is missing when SENSOR TRENDS are present. A chart is already shown to the user, so do not draw one.\n\n" +
+  "DATA FEEDS says which sensor data is live: only the Riverton live PI stream is live (and it may be idle between bursts); everything else, including Fairview, is a historical snapshot. Never call snapshot data live or current, and state the timestamp of any reading you quote.";
 
 // Data sources folded into the grounding context — surfaced as answer citations.
 const OPS_CITATIONS: CopilotCitation[] = [
@@ -375,47 +376,145 @@ function summarizeSeries(s: SensorSeries): string {
   ].join("\n");
 }
 
+type FeedStatus = {
+  checkedAt?: string;
+  live?: {
+    database?: string;
+    coverage?: string;
+    units?: string[];
+    tags?: number;
+    latest?: string | null;
+    lastIngest?: string | null;
+    streaming?: boolean;
+    minutesSinceLastData?: number | null;
+  } | null;
+  fleet?: { database?: string | null; coverage?: string; tags?: number; latest?: string | null } | null;
+};
+
+// Riverton's live stream uses the plant's real PI tag names; these are the unit
+// load/speed tags the chat agent also uses as running indicators.
+const LIVE_KEY_TAGS: Record<string, { tag: string; label: string; unit: string }[]> = {
+  RV2: [
+    { tag: "RV2:GEJU2GE00.AG", label: "Net load", unit: "MW" },
+    { tag: "RV2:TXSU2TS14.AG", label: "Turbine speed", unit: "rpm" },
+  ],
+  RV3: [
+    { tag: "RV3:GEJU3GE03.AG", label: "Gross load", unit: "MW" },
+    { tag: "RV3:TXSU3TS15A.AG", label: "Turbine speed", unit: "rpm" },
+  ],
+};
+
+function buildFeedsContext(f: FeedStatus | null): string {
+  if (!f) return "";
+  const lines = [`DATA FEEDS — which sensor data is live (checked ${f.checkedAt ?? "now"}):`];
+  const l = f.live;
+  if (l) {
+    const age = l.minutesSinceLastData;
+    const status = l.streaming
+      ? `STREAMING NOW (last data ${age ?? 0} min ago)`
+      : `IDLE — last burst ended ${l.lastIngest ?? "unknown"}${age != null ? ` (about ${age >= 120 ? `${Math.round(age / 60)} h` : `${age} min`} ago)` : ""}; the seeder streams in daily bursts of about 2 hours`;
+    lines.push(
+      `- LIVE: Live PI stream (${l.database ?? "pi-realtime-db"}) covering ${l.coverage ?? "Riverton RV1–RV3"} (${l.tags ?? 0} tags). Status: ${status}. Latest reading ${l.latest ?? "unknown"}.`,
+    );
+  } else {
+    lines.push("- LIVE: no live PI stream is configured for this deployment.");
+  }
+  const fl = f.fleet;
+  if (fl) {
+    lines.push(
+      `- NOT LIVE: Fleet historian snapshot (${fl.database ?? "PiEvents"}) covering ${fl.coverage ?? "all plants"} (${fl.tags ?? 0} tags). Fixed historical data ending ${fl.latest ?? "unknown"}; no new data arrives (only the SRE demo live scenario appends FV1 turbine readings).`,
+    );
+  }
+  lines.push(
+    "When asked which data is live or how current it is, answer from this section. Whenever you quote sensor values, say whether they come from the live stream or the historical snapshot, and give the timestamp.",
+  );
+  return lines.join("\n");
+}
+
+function feedsEvidence(f: FeedStatus | null): { label: string; detail: string } | undefined {
+  if (!f) return undefined;
+  if (!f.live) return { label: "Data feeds", detail: "no live stream; fleet snapshot only" };
+  const age = f.live.minutesSinceLastData;
+  return {
+    label: "Data feeds",
+    detail: f.live.streaming
+      ? "Riverton live: streaming now"
+      : `Riverton live: idle${age != null ? ` ${age >= 120 ? `${Math.round(age / 60)} h` : `${age} min`}` : ""}`,
+  };
+}
+
 async function groundSensors(
   question: string,
   getJson: (path: string) => Promise<unknown>,
+  feedsP: Promise<FeedStatus | null>,
 ): Promise<{ context: string; series: SensorSeries[]; evidence?: { label: string; detail: string } }> {
   const units = unitsInQuestion(question);
   if (!units.length) return { context: "", series: [] };
-  const live = /\b(live|right now|real[- ]?time|last (?:hour|few hours)|this (?:hour|morning)|minute)\b/i.test(question);
-  const hours = live ? 2 : 72;
-  const bin = live ? 1 : 60;
-  const candidates = units.flatMap((u) => rankStems(question).map((s) => ({ ...s, tag: `${u}:${s.stem}` })));
-  const present = await getJson(`/api/tag-values?tags=${encodeURIComponent(candidates.map((c) => c.tag).join(","))}`);
-  const have = new Set((Array.isArray(present) ? present : []).map((r) => String((r as { tag?: unknown }).tag)));
-  const picked = candidates.filter((c) => have.has(c.tag)).slice(0, MAX_TREND_TAGS);
+  const feeds = await feedsP;
+  const liveUnits = feeds?.live ? units.filter((u) => LIVE_KEY_TAGS[u]) : [];
+  const fleetUnits = units.filter((u) => !liveUnits.includes(u));
+  const liveWords = /\b(live|right now|real[- ]?time|last (?:hour|few hours)|this (?:hour|morning)|minute)\b/i.test(question);
+  const win = {
+    live: liveWords ? { hours: 2, bin: 1 } : { hours: 6, bin: 2 },
+    fleet: liveWords ? { hours: 2, bin: 1 } : { hours: 72, bin: 60 },
+  };
+  type Cand = { tag: string; label: string; unit: string; source: "live" | "fleet" };
+  const cands: Cand[] = liveUnits.flatMap((u) => (LIVE_KEY_TAGS[u] ?? []).map((t) => ({ ...t, source: "live" as const })));
+  if (fleetUnits.length) {
+    const fc = fleetUnits.flatMap((u) =>
+      rankStems(question).map((s) => ({ tag: `${u}:${s.stem}`, label: s.label, unit: s.unit, source: "fleet" as const })),
+    );
+    const present = await getJson(`/api/tag-values?tags=${encodeURIComponent(fc.map((c) => c.tag).join(","))}`);
+    const have = new Set((Array.isArray(present) ? present : []).map((r) => String((r as { tag?: unknown }).tag)));
+    cands.push(...fc.filter((c) => have.has(c.tag)));
+  }
+  const picked = cands.slice(0, MAX_TREND_TAGS);
   if (!picked.length) {
     return {
-      context: `SENSOR TRENDS: no PI historian tags were found for ${units.join(", ")}.`,
+      context: `SENSOR TRENDS: no PI tags were found for ${units.join(", ")}.`,
       series: [],
       evidence: { label: "Sensor trends", detail: `no tags for ${units.join(", ")}` },
     };
   }
   const series: SensorSeries[] = await Promise.all(
     picked.map(async (c) => {
-      const rows = await getJson(`/api/tag-trend?tag=${encodeURIComponent(c.tag)}&hours=${hours}&bin=${bin}`);
+      const w = win[c.source];
+      const rows = await getJson(
+        `/api/tag-trend?tag=${encodeURIComponent(c.tag)}&hours=${w.hours}&bin=${w.bin}${c.source === "live" ? "&source=live" : ""}`,
+      );
       const points = (Array.isArray(rows) ? rows : []).map((r) => {
         const o = r as { ts?: unknown; v?: unknown };
         return { ts: String(o.ts ?? ""), v: typeof o.v === "number" ? o.v : null };
       });
-      return { tag: c.tag, label: c.label, unit: c.unit, points };
+      return { tag: c.tag, label: c.label, unit: c.unit, source: c.source, points };
     }),
   );
   const withData = series.filter((s) => s.points.some((p) => p.v !== null));
-  const lastTs = withData.flatMap((s) => s.points.map((p) => p.ts)).sort().pop() || "unknown";
+  const section = (source: "live" | "fleet") => {
+    const ss = series.filter((s) => s.source === source);
+    if (!ss.length) return [];
+    const w = win[source];
+    const lastTs = ss.flatMap((s) => s.points.map((p) => p.ts)).sort().pop() || "unknown";
+    const us = (source === "live" ? liveUnits : fleetUnits).join(", ");
+    const head =
+      source === "live"
+        ? `SENSOR TRENDS — LIVE PI STREAM for ${us} (${feeds?.live?.streaming ? "streaming now" : "idle between bursts"}): ${w.bin}-minute averages over the ${w.hours} h ending at the newest live reading (${lastTs}).`
+        : `SENSOR TRENDS — FLEET HISTORIAN SNAPSHOT (historical, NOT live) for ${us}: ${w.bin}-minute averages over the ${w.hours} h ending at the snapshot's newest reading (${lastTs}).`;
+    return [head, ...ss.map(summarizeSeries)];
+  };
   const context = [
-    `SENSOR TRENDS — PI historian (Eventhouse PiEvents) for ${units.join(", ")}, ${bin}-minute averages over the ${hours} h ending at the newest reading (${lastTs}).`,
-    "This is the latest sensor data available; describe trends with these real numbers. A trend chart of these tags is shown to the user automatically.",
-    ...series.map(summarizeSeries),
+    ...section("live"),
+    ...section("fleet"),
+    "Describe trends with these real numbers. A trend chart of these tags is shown to the user automatically.",
   ].join("\n");
+  const nLive = withData.filter((s) => s.source === "live").length;
   return {
     context,
     series: withData,
-    evidence: { label: "Sensor trends", detail: `${withData.length} tag${withData.length === 1 ? "" : "s"}, ${hours} h` },
+    evidence: {
+      label: "Sensor trends",
+      detail: `${withData.length} tag${withData.length === 1 ? "" : "s"}${nLive ? ` (${nLive} live)` : " (snapshot)"}`,
+    },
   };
 }
 
@@ -438,13 +537,17 @@ async function groundOps(question = ""): Promise<{
       fetch(`${apiBase}${path}`, { headers: { Accept: "application/json" } })
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []);
-    const [events, exposure, outagesRaw, workOrders, sites, sensors] = await Promise.all([
+    const feedsP = (getJson("/api/feeds") as Promise<FeedStatus | null>).then((f) =>
+      f && typeof f === "object" && !Array.isArray(f) ? f : null,
+    );
+    const [events, exposure, outagesRaw, workOrders, sites, sensors, feedStatus] = await Promise.all([
       getJson("/api/weather/events"),
       getJson("/api/exposure"),
       getJson("/api/outages"),
       getJson("/api/work-orders?limit=12"),
       getJson("/api/sites-geo"),
-      groundSensors(question, getJson).catch(() => ({ context: "", series: [] as SensorSeries[], evidence: undefined })),
+      groundSensors(question, getJson, feedsP).catch(() => ({ context: "", series: [] as SensorSeries[], evidence: undefined })),
+      feedsP,
     ]);
     // /api/outages returns { rows, summary }; other feeds are plain arrays.
     const outages =
@@ -452,6 +555,8 @@ async function groundOps(question = ""): Promise<{
         ? outagesRaw
         : ((outagesRaw as { rows?: unknown[] } | null)?.rows ?? []);
     dataContext = buildOpsContext(events, exposure, outages, workOrders, sites);
+    const feedsContext = buildFeedsContext(feedStatus);
+    if (feedsContext) dataContext += `\n\n${feedsContext}`;
     if (sensors.context) dataContext += `\n\n${sensors.context}`;
     series = sensors.series;
     const evs = Array.isArray(events) ? (events as Array<Record<string, unknown>>) : [];
@@ -485,6 +590,8 @@ async function groundOps(question = ""): Promise<{
       { label: "Work orders", detail: `${wos.length} open` },
     );
     if (sensors.evidence) evidence.push(sensors.evidence);
+    const fe = feedsEvidence(feedStatus);
+    if (fe) evidence.push(fe);
   } catch {
     /* grounding is best-effort */
   }

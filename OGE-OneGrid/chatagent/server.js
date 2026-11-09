@@ -324,10 +324,21 @@ function swrCache(ttlMs, load) {
 // Latest reading in the live PI stream, so the model knows it is current.
 const getLiveRange = swrCache(120000, async () => {
     if (!CONFIG.liveKustoCluster) return null;
-    const rows = await queryKql('PiEvents | where IngestedAt > ago(7d) | summarize maxT=max(Ts), tags=dcount(Tag), units=make_set(Plant)', 'live');
+    const rows = await queryKql('PiEvents | where IngestedAt > ago(7d) | summarize maxT=max(Ts), lastIngest=max(IngestedAt), tags=dcount(Tag), units=make_set(Plant)', 'live');
     const r = rows && rows[0];
-    return r && r.maxT ? { max: String(r.maxT), tags: r.tags, units: (r.units || []).filter(Boolean).sort() } : null;
+    return r && r.maxT ? { max: String(r.maxT), lastIngest: r.lastIngest ? String(r.lastIngest) : null, tags: r.tags, units: (r.units || []).filter(Boolean).sort() } : null;
 });
+
+// Whether the live stream is receiving data right now (the seeder writes every few seconds
+// during a burst), and how long it has been idle otherwise.
+function liveStreamState(liveRange) {
+    const last = liveRange && liveRange.lastIngest ? new Date(liveRange.lastIngest).getTime() : NaN;
+    if (Number.isNaN(last)) return 'status unknown';
+    const mins = Math.round((Date.now() - last) / 60000);
+    if (mins <= 10) return `STREAMING NOW (last data ${mins} min ago)`;
+    const ago = mins >= 120 ? `${Math.round(mins / 60)} h` : `${mins} min`;
+    return `IDLE between bursts — last data arrived ${liveRange.lastIngest} (about ${ago} ago); the seeder streams in daily bursts of about 2 hours`;
+}
 
 // PiEvents time window — the sample Eventhouse can be stale relative to
 // "today", so we tell the model the real data window to query instead of ago(3h).
@@ -934,13 +945,16 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
         ? `\n- SENSOR DATA WINDOW (fleet): the fleet PiEvents currently holds data from ${piRange.min} to ${piRange.max}. For fleet sensor trends or "latest reading" queries, query WITHIN this window (e.g. Timestamp between datetime(${piRange.min.slice(0, 10)}) and datetime(${piRange.max.slice(0, 10)}) + 1d) — do NOT use ago(3h)/ago(Nd) relative to today, there is no fleet data after ${piRange.max}. The fleet PiEvents time column is Timestamp (not Ts); it has columns Timestamp, Tag, AssetId, Value, Tier (no "Questionable" column).`
         : '';
     const liveNote = liveRange
-        ? `\n- LIVE PI STREAM (Riverton ${liveRange.units.join('/') || 'RV1/RV2/RV3'}, ${liveRange.tags} tags): a separate, continuously updated Eventhouse feed — latest reading ${liveRange.max}. You DO have live query access to it: for live / latest / current readings or recent trends on Riverton units (tags like RV3:GEJU3GE03.AG, RV2:GEJU2GE00.AG), call query_kql with source "live". Its PiEvents columns are Ts, Tag, Plant ("RV1"/"RV2"/"RV3"), Value (dynamic — wrap in todouble()), Questionable, IngestedAt. The feed streams in bursts, so the newest data can be hours old: anchor time filters to the latest reading, NOT ago(). For latest/current readings, run ONE query with no time filter, e.g. PiEvents | where Tag in ("RV2:GEJU2GE00.AG","RV3:GEJU3GE03.AG") | summarize arg_max(Ts, Value) by Tag (or Tag startswith "RV3:" for a whole unit). For recent trends use Ts > datetime(${liveRange.max}) - 6h. Never retry with progressively wider windows. Charts and correlations over RV tags read this live feed automatically. The fleet data-window rule above does not apply to Riverton.`
+        ? `\n- LIVE PI STREAM (Riverton ${liveRange.units.join('/') || 'RV1/RV2/RV3'}, ${liveRange.tags} tags): a separate Eventhouse feed, seeded in daily bursts. Stream status: ${liveStreamState(liveRange)}. Latest reading ${liveRange.max}. You DO have live query access to it: for live / latest / current readings or recent trends on Riverton units (tags like RV3:GEJU3GE03.AG, RV2:GEJU2GE00.AG), call query_kql with source "live". Its PiEvents columns are Ts, Tag, Plant ("RV1"/"RV2"/"RV3"), Value (dynamic — wrap in todouble()), Questionable, IngestedAt. The feed streams in bursts, so the newest data can be hours old: anchor time filters to the latest reading, NOT ago(). For latest/current readings, run ONE query with no time filter, e.g. PiEvents | where Tag in ("RV2:GEJU2GE00.AG","RV3:GEJU3GE03.AG") | summarize arg_max(Ts, Value) by Tag (or Tag startswith "RV3:" for a whole unit). For recent trends use Ts > datetime(${liveRange.max}) - 6h. Never retry with progressively wider windows. Charts and correlations over RV tags read this live feed automatically. The fleet data-window rule above does not apply to Riverton.`
         : '';
+    const feedsNote = `\n- DATA FEEDS (which data is live): ${liveRange
+        ? `ONLY the Riverton RV1–RV3 live PI stream is live (${liveStreamState(liveRange)}).`
+        : 'no live PI stream is configured; all sensor data is historical.'} Every other plant and unit (Fairview FV1/FV2, Harbor Point, Cedar Falls, Ashford, Deepwater, …) comes from the fleet historian snapshot${piRange ? ` ending ${piRange.max}` : ''}, which is NOT live. When asked which data is live or how current it is, answer from this. Whenever you quote a sensor value, say whether it is from the live stream or the historical snapshot and give its timestamp; never call snapshot data live or current.`;
     const dateContext = `CURRENT DATE: Today is ${today} (local plant time).
 - The 'watchlist' table is a CURRENT snapshot of ML anomaly scores. Columns: asset_id, tag_name, descriptor, trend_direction, current_value, baseline_mean, normal_range_low, normal_range_high, trend_slope_per_day, risk_contribution, recommended_action. It has NO date column — do NOT filter or reference scoring_date, model_name, recommendation_text or watch_horizon_days (they do not exist).
 - For "what should I watch / monitor today", rank the WHOLE watchlist by recommended_action severity, then risk_contribution. Ready-to-run:
   EVALUATE TOPN(25, 'watchlist', SWITCH(TRUE(), 'watchlist'[recommended_action]="CRITICAL",4, 'watchlist'[recommended_action]="HIGH",3, 'watchlist'[recommended_action]="MEDIUM",2, 'watchlist'[recommended_action]="LOW",1, 0), DESC, 'watchlist'[risk_contribution], DESC)
-- Tag ids in this dataset look like "<PLANT><unit>:<EQUIP>.<METRIC>" (e.g. CF2:GEN.MW, FV1:STM.BRG_TEMP, GW1:BLR.DRUM_PRESS) — use the watchlist's tag_name values, not RV2/RV3 examples.${sensorNote}${liveNote}`;
+- Tag ids in this dataset look like "<PLANT><unit>:<EQUIP>.<METRIC>" (e.g. CF2:GEN.MW, FV1:STM.BRG_TEMP, GW1:BLR.DRUM_PRESS) — use the watchlist's tag_name values, not RV2/RV3 examples.${feedsNote}${sensorNote}${liveNote}`;
 
     const personaContext = PERSONAS[String(persona || '').toLowerCase()];
     const focusMsg = focusDirective(context);

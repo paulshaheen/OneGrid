@@ -125,7 +125,7 @@ export interface CopilotAnswer {
   /** The raw grounding context that was sent to the model (for a "view data" expand). */
   context?: string;
   /** Sensor history the answer was grounded on, drawn as trend charts under the answer. */
-  series?: { tag: string; label: string; unit: string; points: { ts: string; v: number | null }[] }[];
+  series?: { tag: string; label: string; unit: string; source?: "live" | "fleet"; points: { ts: string; v: number | null }[] }[];
 }
 
 export interface GeospatialLayer {

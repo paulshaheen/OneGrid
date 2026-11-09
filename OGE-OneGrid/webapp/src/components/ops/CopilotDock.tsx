@@ -170,7 +170,7 @@ function TrendCharts({ series }: { series: NonNullable<Msg["series"]> }) {
   return (
     <div className="rounded-md border p-2" style={{ borderColor: OG.border, background: OG.bg }}>
       <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: OG.sub }}>
-        Sensor trends (PI historian)
+        Sensor trends
       </div>
       <div className="space-y-2">
         {series.map((s) => {
@@ -189,7 +189,15 @@ function TrendCharts({ series }: { series: NonNullable<Msg["series"]> }) {
             <div key={s.tag}>
               <div className="flex items-baseline justify-between gap-2 text-[11px]">
                 <span style={{ color: OG.heading }}>
-                  {s.label} <span className="font-mono text-[10px]" style={{ color: OG.sub }}>{s.tag}</span>
+                  {s.label} <span className="font-mono text-[10px]" style={{ color: OG.sub }}>{s.tag}</span>{" "}
+                  {s.source && (
+                    <span
+                      className="rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-wider"
+                      style={s.source === "live" ? { background: "#12b88633", color: "#3ddc97" } : { background: `${OG.border}`, color: OG.sub }}
+                    >
+                      {s.source === "live" ? "Live" : "Snapshot"}
+                    </span>
+                  )}
                 </span>
                 <span className="tabular-nums" style={{ color: rising ? "#f2a37c" : OG.accent }}>
                   {fmt(last)} {s.unit} {rising ? "▲" : "▼"}

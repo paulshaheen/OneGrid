@@ -19,6 +19,7 @@ import * as manuals from './manuals.js';
 import * as aurora from './aurora.js';
 import * as sre from './sreDemo.js';
 import * as live from './liveIncident.js';
+import * as feeds from './feeds.js';
 import { handleMcp } from './mcp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -110,12 +111,17 @@ async function handleApi(req, res, url) {
     if (p === '/api/assets-geo') return json(res, 200, await api.assetsGeo());
     if (p === '/api/sites-geo') return json(res, 200, await api.sitesGeo());
     if (p.startsWith('/api/asset/')) return json(res, 200, await api.assetDetail(decodeURIComponent(p.split('/api/asset/')[1])));
+    if (p === '/api/feeds') return json(res, 200, await feeds.feedStatus());
     if (p === '/api/tag-values') {
       const tags = (url.searchParams.get('tags') || '').split(',').map((s) => s.trim()).filter(Boolean);
+      if (url.searchParams.get('source') === 'live') return json(res, 200, await feeds.liveTagValues(tags));
       return json(res, 200, await api.tagValues(tags));
     }
     if (p === '/api/tag-trend') {
       const tag = url.searchParams.get('tag');
+      if (url.searchParams.get('source') === 'live') {
+        return json(res, 200, await feeds.liveTagTrend(tag, Number(url.searchParams.get('hours')) || 6, Number(url.searchParams.get('bin')) || 2));
+      }
       return json(res, 200, await api.tagTrend(tag, Number(url.searchParams.get('hours')) || 24, Number(url.searchParams.get('bin')) || 15));
     }
     // ── ESU Compass retail price refresh ─────────────────────────────────
