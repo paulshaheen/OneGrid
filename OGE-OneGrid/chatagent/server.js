@@ -301,33 +301,41 @@ async function queryKql(kql, source = '') {
     return runKql(CONFIG.kustoCluster, CONFIG.kustoDb, normalizeKql(kql));
 }
 
-// Latest reading in the live PI stream (cached), so the model knows it is current.
-let _liveRangeCache = null;
-async function getLiveRange() {
-    if (!CONFIG.liveKustoCluster) return null;
-    if (_liveRangeCache && Date.now() - _liveRangeCache.at < 300000) return _liveRangeCache.val;
-    try {
-        const rows = await queryKql('PiEvents | where IngestedAt > ago(7d) | summarize maxT=max(Ts), tags=dcount(Tag), units=make_set(Plant)', 'live');
-        const r = rows && rows[0];
-        const val = r && r.maxT ? { max: String(r.maxT), tags: r.tags, units: (r.units || []).filter(Boolean).sort() } : null;
-        _liveRangeCache = { at: Date.now(), val };
-        return val;
-    } catch { return null; }
+// Stale-while-revalidate cache: once a value exists, callers get it immediately and
+// an expired entry refreshes in the background, so chat turns never wait on it.
+function swrCache(ttlMs, load) {
+    let entry = null, inflight = null;
+    const refresh = () => {
+        if (!inflight) {
+            inflight = load()
+                .then((val) => { entry = { at: Date.now(), val }; return val; })
+                .catch(() => (entry ? entry.val : null))
+                .finally(() => { inflight = null; });
+        }
+        return inflight;
+    };
+    return () => {
+        if (!entry) return refresh();
+        if (Date.now() - entry.at >= ttlMs) refresh();
+        return Promise.resolve(entry.val);
+    };
 }
 
-// Cached PiEvents time window — the sample Eventhouse can be stale relative to
+// Latest reading in the live PI stream, so the model knows it is current.
+const getLiveRange = swrCache(120000, async () => {
+    if (!CONFIG.liveKustoCluster) return null;
+    const rows = await queryKql('PiEvents | where IngestedAt > ago(7d) | summarize maxT=max(Ts), tags=dcount(Tag), units=make_set(Plant)', 'live');
+    const r = rows && rows[0];
+    return r && r.maxT ? { max: String(r.maxT), tags: r.tags, units: (r.units || []).filter(Boolean).sort() } : null;
+});
+
+// PiEvents time window — the sample Eventhouse can be stale relative to
 // "today", so we tell the model the real data window to query instead of ago(3h).
-let _piRangeCache = null;
-async function getPiRange() {
-    if (_piRangeCache && Date.now() - _piRangeCache.at < 600000) return _piRangeCache.val;
-    try {
-        const rows = await queryKql('PiEvents | summarize minT=min(Timestamp), maxT=max(Timestamp)');
-        const r = rows && rows[0];
-        const val = r && r.maxT ? { min: String(r.minT), max: String(r.maxT) } : null;
-        _piRangeCache = { at: Date.now(), val };
-        return val;
-    } catch { return null; }
-}
+const getPiRange = swrCache(600000, async () => {
+    const rows = await queryKql('PiEvents | summarize minT=min(Timestamp), maxT=max(Timestamp)');
+    const r = rows && rows[0];
+    return r && r.maxT ? { min: String(r.minT), max: String(r.maxT) } : null;
+});
 
 // ── DAX query ────────────────────────────────────────────────────────────
 async function queryDax(dax) {
@@ -921,13 +929,12 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
     // plus the actual watchlist schema (no scoring_date) and the live sensor data window
     // so DAX/KQL match this dataset instead of an older schema.
     const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local plant time
-    const piRange = await getPiRange().catch(() => null);
-    const liveRange = await getLiveRange().catch(() => null);
+    const [piRange, liveRange] = await Promise.all([getPiRange().catch(() => null), getLiveRange().catch(() => null)]);
     const sensorNote = piRange
         ? `\n- SENSOR DATA WINDOW (fleet): the fleet PiEvents currently holds data from ${piRange.min} to ${piRange.max}. For fleet sensor trends or "latest reading" queries, query WITHIN this window (e.g. Timestamp between datetime(${piRange.min.slice(0, 10)}) and datetime(${piRange.max.slice(0, 10)}) + 1d) — do NOT use ago(3h)/ago(Nd) relative to today, there is no fleet data after ${piRange.max}. The fleet PiEvents time column is Timestamp (not Ts); it has columns Timestamp, Tag, AssetId, Value, Tier (no "Questionable" column).`
         : '';
     const liveNote = liveRange
-        ? `\n- LIVE PI STREAM (Riverton ${liveRange.units.join('/') || 'RV1/RV2/RV3'}, ${liveRange.tags} tags): a separate, continuously updated Eventhouse feed — latest reading ${liveRange.max}. You DO have live query access to it: for live / latest / current readings or recent trends on Riverton units (tags like RV3:GEJU3GE03.AG, RV2:GEJU2GE00.AG), call query_kql with source "live". Its PiEvents columns are Ts, Tag, Plant ("RV1"/"RV2"/"RV3"), Value (dynamic — wrap in todouble()), Questionable, IngestedAt; ago() works here (e.g. PiEvents | where Ts > ago(1h) and Tag startswith "RV3:" | summarize arg_max(Ts, Value) by Tag). Charts and correlations over RV tags read this live feed automatically. The fleet data-window rule above does not apply to Riverton.`
+        ? `\n- LIVE PI STREAM (Riverton ${liveRange.units.join('/') || 'RV1/RV2/RV3'}, ${liveRange.tags} tags): a separate, continuously updated Eventhouse feed — latest reading ${liveRange.max}. You DO have live query access to it: for live / latest / current readings or recent trends on Riverton units (tags like RV3:GEJU3GE03.AG, RV2:GEJU2GE00.AG), call query_kql with source "live". Its PiEvents columns are Ts, Tag, Plant ("RV1"/"RV2"/"RV3"), Value (dynamic — wrap in todouble()), Questionable, IngestedAt. The feed streams in bursts, so the newest data can be hours old: anchor time filters to the latest reading, NOT ago(). For latest/current readings, run ONE query with no time filter, e.g. PiEvents | where Tag in ("RV2:GEJU2GE00.AG","RV3:GEJU3GE03.AG") | summarize arg_max(Ts, Value) by Tag (or Tag startswith "RV3:" for a whole unit). For recent trends use Ts > datetime(${liveRange.max}) - 6h. Never retry with progressively wider windows. Charts and correlations over RV tags read this live feed automatically. The fleet data-window rule above does not apply to Riverton.`
         : '';
     const dateContext = `CURRENT DATE: Today is ${today} (local plant time).
 - The 'watchlist' table is a CURRENT snapshot of ML anomaly scores. Columns: asset_id, tag_name, descriptor, trend_direction, current_value, baseline_mean, normal_range_low, normal_range_high, trend_slope_per_day, risk_contribution, recommended_action. It has NO date column — do NOT filter or reference scoring_date, model_name, recommendation_text or watch_horizon_days (they do not exist).
@@ -975,7 +982,11 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
 
         messages.push(choice);
         emit('thinking', { title: 'Planning data queries', detail: `${choice.tool_calls.length} tool call${choice.tool_calls.length === 1 ? '' : 's'}` });
-        for (const tc of choice.tool_calls) {
+        // Independent tool calls in one turn run concurrently; results are merged back
+        // in call order so the transcript and query log stay deterministic.
+        const runTool = async (tc) => {
+            const queries = [];
+            const charts = [];
             toolCalls++;
             let args = {};
             try { args = JSON.parse(tc.function.arguments); } catch { /* malformed args */ }
@@ -1054,7 +1065,13 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
             let resultStr = JSON.stringify(Array.isArray(result) ? result.slice(0, 30) : result);
             if (resultStr.length > 6000) resultStr = resultStr.slice(0, 6000) + `... (${result.length} total rows)`;
 
-            messages.push({ role: 'tool', tool_call_id: tc.id, content: resultStr });
+            return { tc, queries, charts, resultStr };
+        };
+        const outs = await Promise.all(choice.tool_calls.map(runTool));
+        for (const o of outs) {
+            queries.push(...o.queries);
+            charts.push(...o.charts);
+            messages.push({ role: 'tool', tool_call_id: o.tc.id, content: o.resultStr });
         }
     }
     return { reply: 'Analysis incomplete — reached max iterations.', queries, toolCalls, charts };
@@ -1203,6 +1220,9 @@ if (require.main === module) {
     server.listen(PORT, '0.0.0.0', () => {
         console.log(`PI-Fabric Chat Agent running on port ${PORT}`);
         console.log('Open chat.html in browser, or visit the URL above.');
+        // Warm the data-window caches so the first chat turn doesn't wait on them.
+        if (CONFIG.kustoCluster) getPiRange().catch(() => {});
+        getLiveRange().catch(() => {});
     });
 } else {
     module.exports = { correlateSensors, _pearson, queryKql };
