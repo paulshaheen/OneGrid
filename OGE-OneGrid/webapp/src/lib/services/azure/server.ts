@@ -272,7 +272,8 @@ const OPS_SYSTEM =
   "- Use `-` bullet lists for enumerations, and `**bold**` for key values/labels.\n" +
   "- When presenting per-asset or comparative data (assets, scores, wind, lead-time, etc.), use a Markdown TABLE with a header row and `|---|` separators.\n" +
   "- Keep paragraphs short. Do not use raw HTML.\n\n" +
-  "At the very END of your response, add a section titled exactly `### How I reasoned` with 2-4 short bullet points describing which data you used and how you cross-referenced it to reach the answer.";
+  "At the very END of your response, add a section titled exactly `### How I reasoned` with 2-4 short bullet points describing which data you used and how you cross-referenced it to reach the answer.\n\n" +
+  "When the context includes SENSOR TRENDS, use them for any question about trends, readings or equipment condition: quote the actual first/last/min/max values and rate of change, say which tags are rising or falling, and give the time window. Do not say time-series data is missing when SENSOR TRENDS are present. A chart is already shown to the user, so do not draw one.";
 
 // Data sources folded into the grounding context — surfaced as answer citations.
 const OPS_CITATIONS: CopilotCitation[] = [
@@ -299,29 +300,151 @@ function personaDirective(persona?: string): string {
   }
 }
 
+// ── Sensor trends ────────────────────────────────────────────────────────────
+// When a question names a unit (FV1, RV2, …) or a plant (Fairview → FV1/FV2), pull
+// that unit's PI tag history from the report server so the assistant can describe
+// real trends instead of answering from the weather/outage snapshot alone.
+const SITE_UNIT_PREFIX: Record<string, string> = {
+  riverton: "RV", fairview: "FV", ashford: "AS", deepwater: "DW", "harbor point": "HP",
+  "cedar falls": "CF", glenwood: "GW", brookline: "BK", eastport: "EP",
+};
+const TAG_STEMS: { stem: string; label: string; unit: string }[] = [
+  { stem: "STM.VIBR", label: "Turbine vibration", unit: "mm/s" },
+  { stem: "STM.BRG_TEMP", label: "Turbine bearing temp", unit: "°C" },
+  { stem: "STM.FRNT_BRG_TEMP", label: "Turbine front bearing temp", unit: "°C" },
+  { stem: "STM.GEN_BRG_TEMP", label: "Generator-end bearing temp", unit: "°C" },
+  { stem: "STM.RPM", label: "Turbine speed", unit: "rpm" },
+  { stem: "GEN.MW", label: "Net load", unit: "MW" },
+  { stem: "GEN.STATOR_TEMP", label: "Stator winding temp", unit: "°C" },
+  { stem: "BFP.VIBR", label: "Feed pump vibration", unit: "mm/s" },
+  { stem: "BFP.BRG_TEMP", label: "Feed pump bearing temp", unit: "°C" },
+  { stem: "BLR.DRUM_PRESS", label: "Drum pressure", unit: "bar" },
+  { stem: "BLR.STEAM_TEMP", label: "Main steam temp", unit: "°C" },
+  { stem: "BLR.O2", label: "Flue-gas O2", unit: "%" },
+];
+const MAX_TREND_TAGS = 6;
+
+function unitsInQuestion(q: string): string[] {
+  const text = String(q || "");
+  const units = new Set<string>();
+  const prefixes = Object.values(SITE_UNIT_PREFIX).join("|");
+  for (const m of text.matchAll(new RegExp(`\\b(${prefixes})[\\s-]?([1-4])\\b`, "gi"))) {
+    units.add(`${(m[1] ?? "").toUpperCase()}${m[2] ?? ""}`);
+  }
+  if (!units.size) {
+    for (const [site, pfx] of Object.entries(SITE_UNIT_PREFIX)) {
+      if (new RegExp(`\\b${site}\\b`, "i").test(text)) { units.add(`${pfx}1`); units.add(`${pfx}2`); }
+    }
+  }
+  return [...units].slice(0, 2);
+}
+
+// Keep the turbine/bearing tags first so the most diagnostic ones survive the cap;
+// with a topic word in the question, prefer the matching equipment.
+function rankStems(q: string) {
+  const t = q.toLowerCase();
+  const want = (s: string) =>
+    (/(feed ?pump|bfp)/.test(t) && s.startsWith("BFP")) ||
+    (/(boiler|drum|steam temp|o2)/.test(t) && s.startsWith("BLR")) ||
+    (/(generator|stator|load|mw)/.test(t) && s.startsWith("GEN")) ||
+    (/(turbine|bearing|vibration)/.test(t) && s.startsWith("STM"));
+  return [...TAG_STEMS].sort((a, b) => Number(want(b.stem)) - Number(want(a.stem)));
+}
+
+type SensorSeries = NonNullable<CopilotAnswer["series"]>[number];
+
+function summarizeSeries(s: SensorSeries): string {
+  const pts = s.points.filter((p) => typeof p.v === "number") as { ts: string; v: number }[];
+  const head = pts[0], tail = pts[pts.length - 1];
+  if (!head || !tail) return `- ${s.tag} (${s.label}): no readings in the window`;
+  const vals = pts.map((p) => p.v);
+  const first = head.v, last = tail.v;
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const hours = (new Date(tail.ts).getTime() - new Date(head.ts).getTime()) / 3.6e6 || 1;
+  const perDay = ((last - first) / hours) * 24;
+  const pct = first ? ((last - first) / Math.abs(first)) * 100 : 0;
+  const f = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
+  const step = Math.max(1, Math.floor(pts.length / 12));
+  const sample = pts.filter((_, i) => i % step === 0 || i === pts.length - 1)
+    .map((p) => `${p.ts.slice(5, 16).replace("T", " ")}=${f(p.v)}`).join(", ");
+  return [
+    `- ${s.tag} — ${s.label} (${s.unit}), ${pts.length} points ${head.ts} → ${tail.ts}`,
+    `  first ${f(first)}, last ${f(last)}, min ${f(min)}, max ${f(max)}, mean ${f(mean)}, change ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% (${perDay >= 0 ? "+" : ""}${f(perDay)} ${s.unit}/day)`,
+    `  samples: ${sample}`,
+  ].join("\n");
+}
+
+async function groundSensors(
+  question: string,
+  getJson: (path: string) => Promise<unknown>,
+): Promise<{ context: string; series: SensorSeries[]; evidence?: { label: string; detail: string } }> {
+  const units = unitsInQuestion(question);
+  if (!units.length) return { context: "", series: [] };
+  const live = /\b(live|right now|real[- ]?time|last (?:hour|few hours)|this (?:hour|morning)|minute)\b/i.test(question);
+  const hours = live ? 2 : 72;
+  const bin = live ? 1 : 60;
+  const candidates = units.flatMap((u) => rankStems(question).map((s) => ({ ...s, tag: `${u}:${s.stem}` })));
+  const present = await getJson(`/api/tag-values?tags=${encodeURIComponent(candidates.map((c) => c.tag).join(","))}`);
+  const have = new Set((Array.isArray(present) ? present : []).map((r) => String((r as { tag?: unknown }).tag)));
+  const picked = candidates.filter((c) => have.has(c.tag)).slice(0, MAX_TREND_TAGS);
+  if (!picked.length) {
+    return {
+      context: `SENSOR TRENDS: no PI historian tags were found for ${units.join(", ")}.`,
+      series: [],
+      evidence: { label: "Sensor trends", detail: `no tags for ${units.join(", ")}` },
+    };
+  }
+  const series: SensorSeries[] = await Promise.all(
+    picked.map(async (c) => {
+      const rows = await getJson(`/api/tag-trend?tag=${encodeURIComponent(c.tag)}&hours=${hours}&bin=${bin}`);
+      const points = (Array.isArray(rows) ? rows : []).map((r) => {
+        const o = r as { ts?: unknown; v?: unknown };
+        return { ts: String(o.ts ?? ""), v: typeof o.v === "number" ? o.v : null };
+      });
+      return { tag: c.tag, label: c.label, unit: c.unit, points };
+    }),
+  );
+  const withData = series.filter((s) => s.points.some((p) => p.v !== null));
+  const lastTs = withData.flatMap((s) => s.points.map((p) => p.ts)).sort().pop() || "unknown";
+  const context = [
+    `SENSOR TRENDS — PI historian (Eventhouse PiEvents) for ${units.join(", ")}, ${bin}-minute averages over the ${hours} h ending at the newest reading (${lastTs}).`,
+    "This is the latest sensor data available; describe trends with these real numbers. A trend chart of these tags is shown to the user automatically.",
+    ...series.map(summarizeSeries),
+  ].join("\n");
+  return {
+    context,
+    series: withData,
+    evidence: { label: "Sensor trends", detail: `${withData.length} tag${withData.length === 1 ? "" : "s"}, ${hours} h` },
+  };
+}
+
 // Ground the assistant in the tenant's live ops data with a single fetch. Shared
 // by the Azure and GitHub-Copilot answer paths. Also returns an evidence summary
 // (data sources + counts) that powers the chat's "Thought process" panel.
-async function groundOps(): Promise<{
+async function groundOps(question = ""): Promise<{
   dataContext: string;
   highlightAssetIds: string[];
   evidence: { label: string; detail: string }[];
+  series: SensorSeries[];
 }> {
   let dataContext = "";
   let highlightAssetIds: string[] = [];
   const evidence: { label: string; detail: string }[] = [];
+  let series: SensorSeries[] = [];
   try {
     const apiBase = reportApiBase();
     const getJson = (path: string) =>
       fetch(`${apiBase}${path}`, { headers: { Accept: "application/json" } })
         .then((r) => (r.ok ? r.json() : []))
         .catch(() => []);
-    const [events, exposure, outagesRaw, workOrders, sites] = await Promise.all([
+    const [events, exposure, outagesRaw, workOrders, sites, sensors] = await Promise.all([
       getJson("/api/weather/events"),
       getJson("/api/exposure"),
       getJson("/api/outages"),
       getJson("/api/work-orders?limit=12"),
       getJson("/api/sites-geo"),
+      groundSensors(question, getJson).catch(() => ({ context: "", series: [] as SensorSeries[], evidence: undefined })),
     ]);
     // /api/outages returns { rows, summary }; other feeds are plain arrays.
     const outages =
@@ -329,6 +452,8 @@ async function groundOps(): Promise<{
         ? outagesRaw
         : ((outagesRaw as { rows?: unknown[] } | null)?.rows ?? []);
     dataContext = buildOpsContext(events, exposure, outages, workOrders, sites);
+    if (sensors.context) dataContext += `\n\n${sensors.context}`;
+    series = sensors.series;
     const evs = Array.isArray(events) ? (events as Array<Record<string, unknown>>) : [];
     const exp = Array.isArray(exposure) ? (exposure as Array<Record<string, unknown>>) : [];
     const wos = Array.isArray(workOrders) ? (workOrders as unknown[]) : [];
@@ -359,10 +484,11 @@ async function groundOps(): Promise<{
       { label: "Outages", detail: `${outs.length}${outs.length ? ` (${activeOut} active)` : ""}` },
       { label: "Work orders", detail: `${wos.length} open` },
     );
+    if (sensors.evidence) evidence.push(sensors.evidence);
   } catch {
     /* grounding is best-effort */
   }
-  return { dataContext, highlightAssetIds, evidence };
+  return { dataContext, highlightAssetIds, evidence, series };
 }
 
 // ── Ontology / semantic-model grounding ─────────────────────────────────────
@@ -448,6 +574,7 @@ type Grounding = {
   highlightAssetIds: string[];
   system: string;
   citations: CopilotCitation[];
+  series: SensorSeries[];
 };
 
 // Route a question to the right grounding: schema/ontology → knowledge graph;
@@ -462,15 +589,19 @@ async function selectGrounding(question: string): Promise<Grounding> {
       highlightAssetIds: [],
       system: ONTOLOGY_SYSTEM,
       citations: g.dataContext ? ONTOLOGY_CITATIONS : [],
+      series: [],
     };
   }
-  const g = await groundOps();
+  const g = await groundOps(question);
   return {
     dataContext: g.dataContext,
     evidence: g.evidence,
     highlightAssetIds: g.highlightAssetIds,
     system: OPS_SYSTEM,
-    citations: g.dataContext ? OPS_CITATIONS : [],
+    citations: g.dataContext
+      ? [...OPS_CITATIONS, ...(g.series.length ? [{ label: "PI sensor history", kind: "dataset" as const }] : [])]
+      : [],
+    series: g.series,
   };
 }
 
@@ -673,7 +804,7 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
     // Route to the user's own GitHub Copilot license when connected.
     if (data.copilotToken && data.copilotToken.trim()) {
       const g = await selectGrounding(data.question);
-      return answerViaGithubCopilot(
+      const a = await answerViaGithubCopilot(
         data.question,
         data.copilotToken,
         data.model || "gpt-4o",
@@ -684,6 +815,7 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
         g.system,
         g.citations,
       );
+      return g.series.length ? { ...a, series: g.series } : a;
     }
     const endpoint = process.env["FOUNDRY_ENDPOINT"] || process.env["AZURE_AI_ENDPOINT"];
     // The UI can pick a specific Foundry deployment; fall back to the configured default.
@@ -711,7 +843,7 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
     // Ground the assistant with a single fetch (fast, and avoids a slow,
     // rate-limit-prone multi-tool agent loop). Schema/ontology questions ground on
     // the knowledge graph; ops questions ground on live weather/exposure/outage/work.
-    const { dataContext, highlightAssetIds, evidence, system: sysPrompt, citations } =
+    const { dataContext, highlightAssetIds, evidence, system: sysPrompt, citations, series } =
       await selectGrounding(data.question);
 
     const isReasoning = /gpt-5|^o[0-9]/i.test(String(deployment));
@@ -772,6 +904,7 @@ export const askFoundryCopilot = createServerFn({ method: "POST" })
         highlightAssetIds,
         evidence,
         context: dataContext || undefined,
+        ...(series.length ? { series } : {}),
       };
     } catch {
       return {

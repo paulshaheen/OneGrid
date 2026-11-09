@@ -16,6 +16,7 @@ import {
 
 import { useOpsBase } from "@/components/ops/ops-nav";
 import { getServices } from "@/lib/services";
+import type { CopilotAnswer } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
 // OneGrid Copilot — a single full-height right-side assistant, styled to the OneGrid app
@@ -155,7 +156,60 @@ type Msg = {
   evidence?: { label: string; detail: string }[];
   reasoning?: string;
   context?: string;
+  series?: NonNullable<CopilotAnswer["series"]>;
 };
+
+// Small multiples: one sparkline panel per PI tag the answer was grounded on.
+function TrendCharts({ series }: { series: NonNullable<Msg["series"]> }) {
+  const W = 260, H = 54, P = 3;
+  const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2));
+  const when = (ts: string) => {
+    const d = new Date(ts);
+    return Number.isNaN(d.getTime()) ? ts : d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+  return (
+    <div className="rounded-md border p-2" style={{ borderColor: OG.border, background: OG.bg }}>
+      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: OG.sub }}>
+        Sensor trends (PI historian)
+      </div>
+      <div className="space-y-2">
+        {series.map((s) => {
+          const pts = s.points.filter((p): p is { ts: string; v: number } => typeof p.v === "number");
+          const head = pts[0], tail = pts[pts.length - 1];
+          if (!head || !tail || pts.length < 2) return null;
+          const vals = pts.map((p) => p.v);
+          const min = Math.min(...vals), max = Math.max(...vals);
+          const span = max - min || 1;
+          const d = pts
+            .map((p, i) => `${i ? "L" : "M"}${(P + (i / (pts.length - 1)) * (W - 2 * P)).toFixed(1)},${(H - P - ((p.v - min) / span) * (H - 2 * P)).toFixed(1)}`)
+            .join(" ");
+          const last = tail.v;
+          const rising = last >= head.v;
+          return (
+            <div key={s.tag}>
+              <div className="flex items-baseline justify-between gap-2 text-[11px]">
+                <span style={{ color: OG.heading }}>
+                  {s.label} <span className="font-mono text-[10px]" style={{ color: OG.sub }}>{s.tag}</span>
+                </span>
+                <span className="tabular-nums" style={{ color: rising ? "#f2a37c" : OG.accent }}>
+                  {fmt(last)} {s.unit} {rising ? "▲" : "▼"}
+                </span>
+              </div>
+              <svg viewBox={`0 0 ${W} ${H}`} className="h-[54px] w-full" preserveAspectRatio="none" role="img" aria-label={`${s.label} trend`}>
+                <path d={d} fill="none" stroke={OG.accent} strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+              </svg>
+              <div className="flex justify-between text-[9.5px] tabular-nums" style={{ color: OG.sub }}>
+                <span>{when(head.ts)}</span>
+                <span>min {fmt(min)} · max {fmt(max)}</span>
+                <span>{when(tail.ts)}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // Split a trailing "### How I reasoned" section out of the answer so it can be
 // shown in the collapsible "Thought process" panel instead of the main bubble.
@@ -247,6 +301,10 @@ function ThoughtProcess({ msg }: { msg: Msg }) {
 
 const TWIN_RE =
   /turbine|boiler|pump|generator|equipment|digital twin|\btwin\b|anomal|\btrip|vibration|bearing|fleet health|rv3|rv4|riverton|fairview|deepwater|harbor point|cedar falls|ashford|maintenance|work order/i;
+// Questions about a specific unit's sensors (trends, readings, live values) need the
+// grounded assistant with PI history, not the canned twin summary.
+const SENSOR_RE =
+  /\b(trend\w*|readings?|history|historical|over time|chart|plot|graph|live|real[- ]?time|last \d+|past \d+)\b|\b(RV|FV|AS|DW|HP|CF|GW|BK|EP)[\s-]?[1-4]\b/i;
 
 function twinAnswer(q: string, tw: TwinSummary): Msg {
   if (/\btrip|survival|predict/i.test(q)) {
@@ -525,7 +583,7 @@ export function CopilotDock({
       } catch {
         ai = { who: "ai", text: "The equipment manuals aren't available right now." };
       }
-    } else if (!opts?.direct && TWIN_RE.test(t) && twinRef.current) {
+    } else if (!opts?.direct && TWIN_RE.test(t) && !SENSOR_RE.test(t) && twinRef.current) {
       ai = twinAnswer(t, twinRef.current);
     } else if (useDataAgent) {
       // Route to the published Fabric Data Agent (SSE: status updates + final reply).
@@ -576,6 +634,7 @@ export function CopilotDock({
         evidence: a.evidence,
         reasoning,
         context: a.context,
+        series: a.series,
       };
     }
     if (stageTimer.current) window.clearTimeout(stageTimer.current);
@@ -926,6 +985,7 @@ export function CopilotDock({
             >
               {m.who === "ai" ? <Markdown>{m.text}</Markdown> : m.text}
             </div>
+            {m.who === "ai" && m.series && m.series.length > 0 && <TrendCharts series={m.series} />}
             {m.who === "ai" && <ThoughtProcess msg={m} />}
             {m.citations && m.citations.length > 0 && !(m.evidence && m.evidence.length) && (
               <div className="flex flex-wrap gap-1">
