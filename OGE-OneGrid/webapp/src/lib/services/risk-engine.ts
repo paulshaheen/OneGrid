@@ -143,8 +143,15 @@ const CRITICALITY: Record<Asset["criticality"], { points: number; label: string 
   standard: { points: 2, label: "Asset designated standard criticality" },
 };
 
+// Mid-latitude wind storms (Aurora extratropical lows) do not threaten assets far from
+// their track. Without this cut-off the fixed criticality/type/ETA points would lift
+// every site to "monitor" for a storm thousands of miles away. Mirrors
+// WIND_STORM_MAX_MI in the compute_aurora_exposure notebook.
+const WIND_STORM_MAX_MI = 600;
+
 export function scoreAsset(asset: Asset, event: WeatherEvent, horizonHours = 120): AssetRisk {
   const prox = trackProximity(asset, event, horizonHours);
+  const outOfReach = event.kind === "severe_convective" && prox.distanceMi > WIND_STORM_MAX_MI;
   const wind = forecastWindAt(prox.distanceMi, prox.nearest.windMph);
   const rain = forecastRainfallAt(prox.distanceMi, prox.nearest.category);
   const factors = [];
@@ -203,7 +210,7 @@ export function scoreAsset(asset: Asset, event: WeatherEvent, horizonHours = 120
   }
 
   const raw = factors.reduce((sum, f) => sum + f.points, 0);
-  const score = Math.max(0, Math.min(100, Math.round(raw)));
+  const score = outOfReach ? 0 : Math.max(0, Math.min(100, Math.round(raw)));
 
   const arrival = windArrival(asset, event, horizonHours);
 
@@ -220,7 +227,7 @@ export function scoreAsset(asset: Asset, event: WeatherEvent, horizonHours = 120
     hurWindEtaH: arrival.hurWindEtaH,
     evacWindowH: arrival.evacWindowH,
     insideCone: prox.insideCone,
-    factors: factors.filter((f) => f.points > 0),
+    factors: outOfReach ? [] : factors.filter((f) => f.points > 0),
     recommendations: recommend(asset, wind, eta, prox.insideCone, rain),
   };
 }

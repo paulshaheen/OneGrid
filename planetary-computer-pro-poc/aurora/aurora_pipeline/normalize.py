@@ -96,8 +96,19 @@ def _to_event(
         "expectedLandfall": "Under evaluation — see forecast track",
         "cycleId": f"{stamp:%HZ %a}",
         "history": [[round(current.lon, 3), round(current.lat, 3)]],
-        "forecast": [_forecast_point(centre) for centre in track],
+        "forecast": [_forecast_point(centre) for centre in _until_antimeridian(track)],
     }
+
+
+def _until_antimeridian(track: Track) -> Track:
+    # A track that crosses the dateline jumps from -180 to +180 longitude, which the
+    # North-America maps draw as a line across the whole map. Stop it at the crossing.
+    kept = [track[0]]
+    for centre in track[1:]:
+        if abs(centre.lon - kept[-1].lon) > 180.0:
+            break
+        kept.append(centre)
+    return kept
 
 
 def _forecast_point(centre) -> dict:
