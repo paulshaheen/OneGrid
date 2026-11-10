@@ -1,12 +1,13 @@
 import type { WeatherEvent } from "@/lib/domain/types";
 
-// Ops region we surface storms for: the East Pacific + Gulf + Caribbean + western
-// North Atlantic waters around North America. Storms outside it (open/central
-// Pacific, eastern Atlantic near Africa) smear across the US-centric maps and skew
-// the camera framing, so we drop them on every data plane. Keep in sync with the
-// report-app filter (report-app/server/dataApi.js) and the Aurora DETECTION_BBOX
-// (planetary-computer-pro-poc): -125,7,-55,50.
-export const STORM_DOMAIN = { minLon: -125, minLat: 7, maxLon: -55, maxLat: 50 };
+// Ops region we surface storms for: the North-East Pacific (incl. the Gulf of Alaska,
+// which drives Pacific Northwest weather) + Gulf + Caribbean + western North Atlantic
+// waters around North America. Storms outside it (open/central Pacific, eastern
+// Atlantic near Africa) smear across the US-centric maps and skew the camera framing,
+// so we drop them on every data plane. Keep in sync with the report-app filter
+// (report-app/server/dataApi.js) and the Aurora DETECTION_BBOX
+// (planetary-computer-pro-poc): -160,7,-55,62.
+export const STORM_DOMAIN = { minLon: -160, minLat: 7, maxLon: -55, maxLat: 62 };
 
 export function inStormDomain(lon: number, lat: number): boolean {
   return (

@@ -224,7 +224,7 @@ def load_config() -> Config:
         static_repo=os.environ.get("AURORA_STATIC_REPO", "").strip() or DEFAULT_STATIC_REPO,
         static_name=os.environ.get("AURORA_STATIC_NAME", "").strip() or DEFAULT_STATIC_NAME,
         analysis_time=analysis_time,
-        detection_bbox=_parse_bbox(os.environ.get("DETECTION_BBOX", "-125,7,-55,50")),
+        detection_bbox=_parse_bbox(os.environ.get("DETECTION_BBOX", "-160,7,-55,62")),
         storm_filter=_storm_filter(),
         nhc_url=os.environ.get("NHC_URL", "").strip() or DEFAULT_NHC_URL,
         nhc_match_km=float(os.environ.get("NHC_MATCH_KM", "350")),

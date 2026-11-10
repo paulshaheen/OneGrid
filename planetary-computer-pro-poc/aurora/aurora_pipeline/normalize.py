@@ -28,6 +28,13 @@ def tracks_to_events(
             sorted(tracks, key=lambda t: min(c.pressure_hpa for c in t)), start=1
         )
     ]
+    # Area-based names for mid-latitude lows can repeat; keep them distinct.
+    seen: dict[str, int] = {}
+    for event in events:
+        count = seen.get(event["name"], 0) + 1
+        seen[event["name"]] = count
+        if count > 1:
+            event["name"] = f"{event['name']} #{count}"
     return events
 
 
@@ -57,13 +64,24 @@ def _to_event(
     stamp = config.analysis_time
     event_id = f"aurora-{stamp:%Y%m%dT%H}-{index}"
     name = _name(config, track, index, official)
+    # Poleward of the tropical band a deep low is a mid-latitude (extratropical)
+    # storm, not a tropical cyclone: label it as a wind storm and name it by area.
+    extratropical = abs(current.lat) > config.tropical_max_lat
+    if extratropical and name.startswith("Aurora system"):
+        name = f"{_area(current.lat, current.lon)} low"
+    if extratropical:
+        kind = "severe_convective"
+        status = _extratropical_status(current_wind_mph)
+    else:
+        kind = "hurricane" if peak_wind_mph >= 74 else "tropical_storm"
+        status = _status(current_wind_mph)
 
     return {
         "id": event_id,
         "name": name,
-        "kind": "hurricane" if peak_wind_mph >= 74 else "tropical_storm",
-        "status": _status(current_wind_mph),
-        "basin": _basin(current.lat, current.lon),
+        "kind": kind,
+        "status": status,
+        "basin": _area(current.lat, current.lon) if extratropical else _basin(current.lat, current.lon),
         "currentCategory": _category(current_wind_mph),
         "currentWindMph": round(current_wind_mph),
         "gustMph": round(current_wind_mph * _GUST_FACTOR),
@@ -151,6 +169,29 @@ def _status(wind_mph: float) -> str:
     if wind_mph >= 39:
         return "Tropical storm"
     return "Tropical depression"
+
+
+def _extratropical_status(wind_mph: float) -> str:
+    # Marine wind classes: storm force >= 48 kt (55 mph), gale force >= 34 kt (39 mph).
+    if wind_mph >= 55:
+        return "Storm-force low"
+    if wind_mph >= 39:
+        return "Gale-force low"
+    return "Low-pressure system"
+
+
+def _area(lat: float, lon: float) -> str:
+    """Plain-language area for a mid-latitude low (lon normalized to -180..180)."""
+    lon = ((lon + 180.0) % 360.0) - 180.0
+    if lat >= 54 and -170 <= lon < -128:
+        return "Gulf of Alaska"
+    if lon < -150:
+        return "North Pacific"
+    if lon < -115:
+        return "Northeast Pacific"
+    if lon > -82:
+        return "North Atlantic" if lat >= 35 else "Western Atlantic"
+    return "Central North America"
 
 
 def _confidence(track: Track) -> str:

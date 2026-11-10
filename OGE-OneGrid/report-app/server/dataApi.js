@@ -760,15 +760,15 @@ const REGION_BASIN = {
   west_coast: 'Eastern Pacific / West Coast', northeast: 'Atlantic / Northeast',
 };
 
-// Ops region we surface storms for: the East Pacific + Gulf + Caribbean + western
-// North Atlantic waters around North America. Aurora detects cyclones by genesis
-// across whatever DETECTION_BBOX it is handed, so a globe-wide box drops storms
-// (open/central Pacific, eastern Atlantic near Africa, southern hemisphere) far off
-// the North-America-centric holo map, where they smear into a horizontal line
-// across it. We keep only events that touch this box. Keep in sync with the Aurora
-// DETECTION_BBOX (planetary-computer-pro-poc/aurora + deploy/azure/main.bicep):
-// -125,7,-55,50.
-const STORM_DOMAIN = { minLon: -125, minLat: 7, maxLon: -55, maxLat: 50 };
+// Ops region we surface storms for: the North-East Pacific (incl. the Gulf of Alaska)
+// + Gulf + Caribbean + western North Atlantic waters around North America. Aurora
+// detects cyclones by genesis across whatever DETECTION_BBOX it is handed, so a
+// globe-wide box drops storms (open/central Pacific, eastern Atlantic near Africa,
+// southern hemisphere) far off the North-America-centric holo map, where they smear
+// into a horizontal line across it. We keep only events that touch this box. Keep in
+// sync with the Aurora DETECTION_BBOX (planetary-computer-pro-poc/aurora +
+// deploy/azure/main.bicep): -160,7,-55,62.
+const STORM_DOMAIN = { minLon: -160, minLat: 7, maxLon: -55, maxLat: 62 };
 function inStormDomain(lon, lat) {
   return (
     Number.isFinite(lon) && Number.isFinite(lat) &&

@@ -92,7 +92,11 @@ Each stage below names the real code file (`aurora_pipeline/…`) that does it.
   `STORM_NAMES` is used as a fallback. Only names and positions come from NHC;
   intensity and track stay Aurora's. Historical replays (`ANALYSIS_TIME` more than a
   day old) automatically use the tropical-latitude filter, since NHC's feed only
-  lists storms active now. `Seeded N cyclone tracker(s)` in the logs is
+  lists storms active now. With `STORM_FILTER=none` every detected low is kept;
+  systems poleward of `TROPICAL_MAX_LAT` are published as mid-latitude wind storms
+  (`kind` `severe_convective`, status "Gale-force low" / "Storm-force low") and,
+  without an official name, are named by area (e.g. "Gulf of Alaska low"). Use this
+  outside hurricane season to show the winter storms that threaten the network. `Seeded N cyclone tracker(s)` in the logs is
   the count after this filter.
 - **If N = 0, the endpoint is never called** — no storms, no forecast, empty publish.
 
@@ -172,7 +176,7 @@ All are environment variables on the job (validated up front by `config.py`):
 |---|---|---|
 | `ANALYSIS_TIME` | The moment to forecast **from**. Empty = latest cycle ("now"). Must be a synoptic hour (00/06/12/18 UTC). | `2021-08-29T00:00` (Hurricane Ida) or empty |
 | `INITIAL_CONDITION_SOURCE` | Data source for the present state. | `gfs` (real-time) |
-| `DETECTION_BBOX` | Region to detect storms: `minLon,minLat,maxLon,maxLat`. | `-125,7,-55,50` (default: E Pacific + Atlantic around North America), `-100,15,-70,35` (Gulf only), or `-140,10,-50,55` (US-wide) |
+| `DETECTION_BBOX` | Region to detect storms: `minLon,minLat,maxLon,maxLat`. | `-160,7,-55,62` (default: NE Pacific/Gulf of Alaska + Atlantic around North America), `-100,15,-70,35` (Gulf only), or `-140,10,-50,55` (US-wide) |
 | `AURORA_NUM_STEPS` | Forecast length in 6 h steps (1–60). | `20` = 120 h |
 | `AURORA_MODEL_NAME` | Which Aurora checkpoint. | `aurora-0.25-finetuned` |
 | `STORM_FILTER` | Which detected systems to publish: `nhc` (only NHC-tracked storms, named by position), `tropical` (equatorward of `TROPICAL_MAX_LAT`), or `none`. | `nhc` (default) |
