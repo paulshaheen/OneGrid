@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import type { FeatureCollection } from "geojson";
-import { ChevronDown, CloudSnow, Crosshair, ExternalLink, Gauge, Loader2, Pause, Play, Sparkles, Thermometer, Truck, Wind, Zap } from "lucide-react";
+import { ChevronDown, CloudSnow, Crosshair, ExternalLink, Gauge, Layers, Loader2, Pause, Play, Sparkles, Thermometer, Truck, Wind, Zap } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { RiskBadge, StatCell } from "@/components/ops/RiskBadge";
@@ -140,7 +140,8 @@ export function TransmissionWeatherPage() {
 
   const fc = useMemo(() => buildFeatures(analysis, tab, h), [analysis, tab, h]);
   const [wxSel, setWxSel] = useState<WxLayer | "auto">("auto");
-  const [showArrows, setShowArrows] = useState(true);
+  const [showArrows, setShowArrows] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const wxLayer: WxLayer =
     wxSel === "auto" || (!baseWeather && (wxSel === "dtemp" || wxSel === "dgust")) ? TAB_WX[tab] : wxSel;
   const wxImage = useMemo(
@@ -180,6 +181,16 @@ export function TransmissionWeatherPage() {
   }, [allSources.map((r) => r.dataUpdatedAt).join(",")]);
 
   const [focus, setFocus] = useState<{ bounds: [[number, number], [number, number]]; seq: number } | null>(null);
+
+  // Open each forecast at its peak-risk hour, so the map agrees with the tables on first look.
+  const openedAt = useRef("");
+  useEffect(() => {
+    if (!analysis || (compare && !diff)) return;
+    const key = `${source}|${weather?.issuedIso}`;
+    if (openedAt.current === key) return;
+    openedAt.current = key;
+    setHour((compare ? diff?.peakHour.aurora : null) ?? items[0]?.hour ?? 0);
+  }, [analysis, diff, items, source, compare, weather?.issuedIso]);
   const jumpTo = (it: FocusItem) => {
     setPlaying(false);
     setTab(it.kind);
@@ -240,11 +251,16 @@ export function TransmissionWeatherPage() {
       />
 
       <div className="flex flex-col gap-3 p-4">
-        <SourceBanner weather={weather} loading={loading} baseline={baseWeather} />
+        <SourceBanner
+          weather={weather}
+          loading={loading}
+          baseline={baseWeather}
+          onCompare={source === "aurora" ? () => setSource("compare") : undefined}
+        />
 
-        {(compare || source === "aurora") && <WhyAurora diff={diff} synthetic={synthetic} hours={analysis?.hours ?? []} />}
+        {compare && diff && <ResponsePlan diff={diff} hours={analysis?.hours ?? []} />}
 
-        {analysis && <Kpis a={analysis} />}
+        {analysis && !compare && <Kpis a={analysis} />}
 
         {analysis && (
           <FocusStrip
@@ -303,26 +319,36 @@ export function TransmissionWeatherPage() {
               >
                 <Crosshair className="size-3" /> Whole network
               </button>
-              <div className="absolute top-2 left-2 flex flex-col gap-1 rounded-md border bg-card/90 p-1.5 text-[11px] backdrop-blur">
-                <span className="px-1 font-semibold text-muted-foreground">Weather layer</span>
-                <div className="flex gap-0.5">
-                  {WX_OPTIONS.filter((o) => !o.compareOnly || baseWeather).map((o) => (
-                    <button
-                      key={o.id}
-                      onClick={() => setWxSel(o.id)}
-                      className={cn(
-                        "rounded px-2 py-0.5",
-                        wxLayer === o.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-                <label className="flex items-center gap-1.5 px-1 text-muted-foreground">
-                  <input type="checkbox" checked={showArrows} onChange={(e) => setShowArrows(e.target.checked)} />
-                  Wind arrows
-                </label>
+              <div className="absolute top-2 left-2 flex flex-col gap-1 rounded-md border bg-card/90 p-1 text-[11px] backdrop-blur">
+                <button
+                  onClick={() => setLayersOpen((o) => !o)}
+                  className="flex items-center gap-1 px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <Layers className="size-3" /> Layers: <span className="text-foreground">{WX_OPTIONS.find((o) => o.id === wxLayer)?.label}</span>
+                  <ChevronDown className={cn("size-3 transition-transform", layersOpen && "rotate-180")} />
+                </button>
+                {layersOpen && (
+                  <>
+                    <div className="flex gap-0.5">
+                      {WX_OPTIONS.filter((o) => !o.compareOnly || baseWeather).map((o) => (
+                        <button
+                          key={o.id}
+                          onClick={() => setWxSel(o.id)}
+                          className={cn(
+                            "rounded px-2 py-0.5",
+                            wxLayer === o.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-1.5 px-1 text-muted-foreground">
+                      <input type="checkbox" checked={showArrows} onChange={(e) => setShowArrows(e.target.checked)} />
+                      Wind arrows
+                    </label>
+                  </>
+                )}
               </div>
               <Legend tab={tab} wx={wxLayer} />
               {sel && <LineCard r={sel} hour={h} onClose={() => setSelected(null)} hours={analysis?.hours ?? []} />}
@@ -406,11 +432,12 @@ function MapPlaceholder() {
   );
 }
 
+/** Quiet count: coloured text and outline, not a solid alarm-red pill. */
 function CountBadge({ n, level }: { n: number; level: Level }) {
   return (
     <span
-      className="num inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] leading-[16px] font-bold"
-      style={{ background: LEVEL_HEX[level], color: level === "elevated" ? "#1a1300" : "#fff" }}
+      className="num inline-flex min-w-[18px] items-center justify-center rounded-full border px-1.5 text-[10px] leading-[14px] font-semibold"
+      style={{ borderColor: `${LEVEL_HEX[level]}80`, color: LEVEL_HEX[level] }}
     >
       {n}
     </span>
@@ -419,25 +446,17 @@ function CountBadge({ n, level }: { n: number; level: Level }) {
 
 const KIND_ICON: Record<FocusItem["kind"], typeof Wind> = { outage: Wind, ice: CloudSnow, rating: Gauge, heat: Thermometer, crews: Truck };
 const KIND_LABEL: Record<FocusItem["kind"], string> = { outage: "Outage", ice: "Ice", rating: "Rating", heat: "Heat", crews: "Crews" };
+const KIND_ACTION: Record<FocusItem["kind"], string> = {
+  outage: "Patrol and pre-stage a crew",
+  ice: "Ice patrol and repair plan",
+  rating: "Re-dispatch before the rating drops",
+  heat: "Cap loading during the peak",
+  crews: "Stage crews and request aid",
+};
 
 const LEVEL_ORDER: Level[] = ["normal", "monitor", "elevated", "high", "critical"];
-
-/** What NOAA GFS says about the same item, shown on focus cards in the comparison. */
-function BaselineTag({ aurora, gfs }: { aurora: Level; gfs: Level }) {
-  const d = LEVEL_ORDER.indexOf(aurora) - LEVEL_ORDER.indexOf(gfs);
-  const text = d === 0 ? "GFS agrees" : LEVEL_ORDER.indexOf(gfs) < 2 ? "GFS misses it" : `GFS: ${gfs}`;
-  return (
-    <span
-      title={`NOAA GFS rates this ${gfs}`}
-      className={cn(
-        "rounded px-1 py-px text-[9.5px] font-semibold uppercase tracking-wider",
-        d === 0 ? "bg-muted text-muted-foreground" : d > 0 ? "bg-[#ff8a3d]/20 text-[#ff8a3d]" : "bg-[#4aa3ff]/20 text-[#4aa3ff]",
-      )}
-    >
-      {text}
-    </span>
-  );
-}
+const rankOf = (l: Level) => LEVEL_ORDER.indexOf(l);
+const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
 function FocusStrip({
   items,
@@ -452,63 +471,81 @@ function FocusStrip({
   onPick: (it: FocusItem) => void;
   selected: string | null;
   tab: Tab;
+  /** When set (Aurora vs NOAA), show only decisions that change, with NOAA → Aurora. */
   baselineLevel: Map<string, Level> | null;
 }) {
-  if (!items.length)
+  const changedMode = !!baselineLevel;
+  // In the comparison: items Aurora rates higher than GFS, one card per line or area (its worst hazard).
+  const pool = changedMode
+    ? items.filter((i, k, all) => {
+        const key = i.lineId ?? i.areaId;
+        return rankOf(i.level) > rankOf(baselineLevel.get(i.id) ?? "normal") && all.findIndex((x) => (x.lineId ?? x.areaId) === key) === k;
+      })
+    : items;
+  if (!pool.length)
     return (
       <div className="rounded-md border border-[#2fbf71]/40 bg-[#2fbf71]/10 px-3 py-2 text-xs">
-        <span className="font-semibold text-[#2fbf71]">Nothing needs attention in the next 5 days.</span>{" "}
-        <span className="text-muted-foreground">No line reaches Elevated for outage, ice, rating or heat with this forecast. Try the Ice storm or Heat dome scenario to see how alerts look.</span>
+        <span className="font-semibold text-[#2fbf71]">
+          {changedMode ? "Aurora and NOAA lead to the same plan." : "Nothing needs attention in the next 5 days."}
+        </span>{" "}
+        {!changedMode && (
+          <span className="text-muted-foreground">Try the Ice storm or Heat dome scenario to see how alerts look.</span>
+        )}
       </div>
     );
-  const crit = items.filter((i) => i.level === "critical").length;
-  const high = items.filter((i) => i.level === "high").length;
-  // The worst item of each hazard first so one hazard can't crowd out the rest, then fill by severity.
+  // Focus mode: the worst item of each hazard first so one hazard can't crowd out the rest.
   const picked = new Set<string>();
-  for (const k of Object.keys(KIND_LABEL) as FocusItem["kind"][]) {
-    const f = items.find((i) => i.kind === k);
-    if (f) picked.add(f.id);
-  }
-  for (const i of items) if (picked.size < 6) picked.add(i.id);
-  const top = items.filter((i) => picked.has(i.id)).slice(0, 6);
+  if (!changedMode)
+    for (const k of Object.keys(KIND_LABEL) as FocusItem["kind"][]) {
+      const f = pool.find((i) => i.kind === k);
+      if (f) picked.add(f.id);
+    }
+  const n = changedMode ? 4 : 6;
+  for (const i of pool) if (picked.size < n) picked.add(i.id);
+  const top = pool.filter((i) => picked.has(i.id)).slice(0, n);
   return (
     <div className="rounded-md border bg-card">
-      <div className="flex items-baseline justify-between gap-2 border-b px-3 py-1.5">
-        <span className="text-sm font-semibold">Where to focus</span>
+      <div className="flex items-baseline justify-between gap-2 px-3 pt-2">
+        <span className="text-sm font-semibold">{changedMode ? "Decisions that change with Aurora" : "Where to focus"}</span>
         <span className="text-[11px] text-muted-foreground">
-          {items.length} issue{items.length === 1 ? "" : "s"} at Elevated or above
-          {crit ? ` · ${crit} critical` : ""}
-          {high ? ` · ${high} high` : ""}
-          {items.length > top.length ? ` · worst of each hazard shown, tab badges list the rest` : ""} · click to zoom to it at its peak hour
+          {changedMode ? `${pool.length} lines and areas · ` : `${pool.length} issues · `}click one to see it on the map
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 p-2 md:grid-cols-3 2xl:grid-cols-6">
+      <div className={cn("grid grid-cols-2 gap-2 p-2", changedMode ? "xl:grid-cols-4" : "md:grid-cols-3 2xl:grid-cols-6")}>
         {top.map((it) => {
           const Icon = KIND_ICON[it.kind];
           const active = tab === it.kind && (it.lineId ? selected === it.lineId : !selected);
+          const g = baselineLevel?.get(it.id) ?? "normal";
           return (
             <button
               key={it.id}
               onClick={() => onPick(it)}
               className={cn(
-                "flex min-w-0 flex-col gap-0.5 rounded-md border border-l-4 bg-background/40 px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-muted/50",
+                "flex min-w-0 flex-col gap-0.5 rounded-md border border-l-2 bg-background/40 px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-muted/50",
                 active && "ring-1 ring-primary",
               )}
               style={{ borderLeftColor: LEVEL_HEX[it.level] }}
             >
-              <span className="flex items-center gap-1.5">
-                <Icon className="size-3" style={{ color: LEVEL_HEX[it.level] }} />
-                <span className="font-semibold uppercase tracking-wider" style={{ color: LEVEL_HEX[it.level] }}>
-                  {it.level}
-                </span>
-                <span className="text-muted-foreground">· {KIND_LABEL[it.kind]}</span>
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Icon className="size-3" />
+                {KIND_LABEL[it.kind]}
+                <span className="ml-auto num text-[10px]">{hourLabel(hours[it.hour], it.hour)}</span>
               </span>
               <span className="truncate font-medium">{it.title}</span>
-              <span className="truncate text-muted-foreground">{it.detail}</span>
-              <span className="flex items-center justify-between gap-1">
-                <span className="num text-[10px] text-muted-foreground">{hourLabel(hours[it.hour], it.hour)}</span>
-                {baselineLevel && <BaselineTag aurora={it.level} gfs={baselineLevel.get(it.id) ?? "normal"} />}
-              </span>
+              {changedMode ? (
+                <>
+                  <span className="truncate">
+                    <span className="text-muted-foreground">NOAA {g} → </span>
+                    <span className="font-semibold" style={{ color: LEVEL_HEX[it.level] }}>Aurora {it.level}</span>
+                  </span>
+                  <span className="truncate text-muted-foreground">{KIND_ACTION[it.kind]}</span>
+                </>
+              ) : (
+                <span className="truncate">
+                  <span className="font-semibold" style={{ color: LEVEL_HEX[it.level] }}>{cap(it.level)}</span>
+                  <span className="text-muted-foreground"> · {it.detail}</span>
+                </span>
+              )}
             </button>
           );
         })}
@@ -516,7 +553,6 @@ function FocusStrip({
     </div>
   );
 }
-
 function buildFeatures(a: CorridorAnalysis | null, tab: Tab, h: number) {
   const byId = new Map(a?.lines.map((l) => [l.line.id, l]) ?? []);
   const lines: FeatureCollection = {
@@ -561,42 +597,54 @@ function SourceBanner({
   weather,
   loading,
   baseline,
+  onCompare,
 }: {
   weather: CorridorWeather | undefined;
   loading: boolean;
   baseline: CorridorWeather | null;
+  onCompare?: (() => void) | undefined;
 }) {
+  const [more, setMore] = useState(false);
   if (loading)
     return (
-      <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" /> Fetching corridor forecast…
       </div>
     );
   if (!weather) return null;
-  if (weather.synthetic)
-    return (
-      <div className="rounded-md border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs">
-        <span className="mr-1.5 rounded bg-violet-500/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
-          Synthetic
-        </span>
-        <span className="font-semibold">{weather.label}</span>
-        {baseline && <span className="font-semibold"> vs {baseline.label}</span>}
-        <span className="text-muted-foreground"> · {weather.detail} {SYNTHETIC_NOTE}</span>
-      </div>
-    );
   const scenario = weather.source.startsWith("scenario");
+  const tagged = weather.synthetic || scenario;
   return (
-    <div
-      className={cn(
-        "rounded-md border px-3 py-2 text-xs",
-        !weather.available ? "border-amber-500/40 bg-amber-500/10" : scenario ? "border-violet-500/40 bg-violet-500/10" : "bg-card",
-      )}
-    >
-      <span className="font-semibold">{weather.label}</span>
-      {baseline && <span className="font-semibold"> vs {baseline.label}</span>}
-      <span className="text-muted-foreground"> · {weather.detail}</span>
-      {weather.available && !scenario && (
-        <span className="text-muted-foreground"> · issued {new Date(weather.issuedIso).toLocaleString()}</span>
+    <div className="rounded-md border bg-card px-3 py-1.5 text-xs">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {tagged && (
+          <span className="rounded border border-violet-400/50 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300">
+            {weather.synthetic ? "Synthetic" : "Scenario"}
+          </span>
+        )}
+        <span className="font-medium">
+          {weather.synthetic
+            ? baseline
+              ? "Both forecasts are synthetic, not measured model performance."
+              : "Synthetic Aurora run, shown until a real Aurora run is published."
+            : `${weather.label}${baseline ? ` vs ${baseline.label}` : ""}`}
+        </span>
+        {!weather.synthetic && weather.available && !scenario && (
+          <span className="text-muted-foreground">issued {new Date(weather.issuedIso).toLocaleString()}</span>
+        )}
+        <button onClick={() => setMore((m) => !m)} className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+          {more ? "Less" : "Details"}
+        </button>
+        {onCompare && (
+          <button onClick={onCompare} className="ml-auto flex items-center gap-1 font-medium text-primary hover:underline">
+            <Sparkles className="size-3" /> Compare with NOAA
+          </button>
+        )}
+      </div>
+      {more && (
+        <p className="mt-1 text-muted-foreground">
+          {weather.detail} {weather.synthetic ? SYNTHETIC_NOTE : ""}
+        </p>
       )}
     </div>
   );
@@ -605,134 +653,84 @@ function SourceBanner({
 const NATURE_URL = "https://www.nature.com/articles/s41586-025-09005-y";
 const MSR_URL = "https://www.microsoft.com/en-us/research/blog/introducing-aurora-the-first-large-scale-foundation-model-of-the-atmosphere/";
 
-/** The case for Aurora: published evidence plus what it changes on this network. */
-function WhyAurora({ diff, synthetic, hours }: { diff: DecisionDiff | null; synthetic: boolean; hours: string[] }) {
-  const [open, setOpen] = useState(true);
-  const pillars: { title: string; stat: string; body: string }[] = [
-    {
-      title: "More accurate",
-      stat: "92%",
-      body: "of targets where Aurora's 10-day forecast beat ECMWF's HRES, the benchmark global model. Its 5-day hurricane tracks beat 7 operational forecasting centres on every target (Nature, 2025).",
-    },
-    {
-      title: "Fast enough to rerun",
-      stat: "~5,000×",
-      body: "faster than ECMWF's IFS (Microsoft Research estimate). A 5-day run takes minutes on one GPU, so you can rerun as each new analysis lands and afford ensembles.",
-    },
-    {
-      title: "Yours to run",
-      stat: "Your tenant",
-      body: "Runs in your Azure subscription over your territory on your schedule. Results land in Fabric beside the asset model, not in a vendor portal.",
-    },
-    {
-      title: "Adapts to you",
-      stat: "Fine-tune",
-      body: "A foundation model: fine-tune it on your own weather stations, line sensors and outage history. Fine-tuned versions already beat operational air-quality (74%) and ocean-wave (86%) models.",
-    },
+/** Aurora vs NOAA headline: how the response plan changes, with the published evidence one click away. */
+function ResponsePlan({ diff, hours }: { diff: DecisionDiff; hours: string[] }) {
+  const [why, setWhy] = useState(false);
+  const pa = diff.peakHour.aurora;
+  const pg = diff.peakHour.gfs;
+  const lead = pa != null && pg != null ? pg - pa : null;
+  const stats: { label: string; noaa: string; aurora: string }[] = [
+    { label: "Lines with ≥ ¼ in ice", noaa: `${diff.iceLines.gfs}`, aurora: `${diff.iceLines.aurora}` },
+    { label: "Expected faults", noaa: diff.faults.gfs.toFixed(1), aurora: diff.faults.aurora.toFixed(1) },
+    { label: "Crews to pre-stage", noaa: `${diff.crewTotal.gfs}`, aurora: `${diff.crewTotal.aurora}` },
   ];
-  const sign = (v: number, d = 0) => `${v > 0 ? "+" : ""}${v.toFixed(d)}`;
-  const at = (x: number | null) => (x == null ? "none" : hourLabel(hours[x], x));
   return (
-    <div className="rounded-md border border-primary/40 bg-gradient-to-r from-primary/10 via-card to-card">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
-        <span className="flex items-center gap-1.5 text-sm font-semibold">
-          <Sparkles className="size-3.5 text-primary" /> Why Aurora for transmission weather
-        </span>
-        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="grid gap-3 border-t px-3 py-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {pillars.map((p) => (
-              <div key={p.title} className="rounded-md border bg-background/40 px-2.5 py-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{p.title}</div>
-                <div className="num text-lg font-semibold text-primary">{p.stat}</div>
-                <div className="text-[11px] leading-snug text-muted-foreground">{p.body}</div>
-              </div>
-            ))}
-            <div className="col-span-2 text-[10.5px] text-muted-foreground md:col-span-4">
-              Aurora starts from the same NOAA or ECMWF analysis, so it builds on public data rather than replacing it. The 0.25° model used here does not forecast precipitation, gusts or sunshine, so those come from GFS.{" "}
-              <a href={NATURE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-                Nature paper <ExternalLink className="size-2.5" />
-              </a>{" "}
-              ·{" "}
-              <a href={MSR_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-                Microsoft Research <ExternalLink className="size-2.5" />
-              </a>
-            </div>
-          </div>
-          <div className="rounded-md border bg-background/40 px-3 py-2 text-[11.5px]">
-            <div className="mb-1 flex items-center gap-1.5 font-semibold">
-              What changes on this network
-              {synthetic && (
-                <span className="rounded bg-violet-500/30 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-violet-200">Synthetic</span>
-              )}
-            </div>
-            {!diff ? (
-              <div className="text-muted-foreground">Open Aurora vs NOAA to compare the two forecasts line by line.</div>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  {[
-                    ["Lines with ≥ ¼ in ice", diff.iceLines.aurora, diff.iceLines.gfs, 0],
-                    ["Expected faults", diff.faults.aurora, diff.faults.gfs, 1],
-                    ["Crews to pre-stage", diff.crewTotal.aurora, diff.crewTotal.gfs, 0],
-                    ["Flagged by only one", diff.onlyAurora.length, diff.onlyGfs.length, 0],
-                  ].map(([label, a, g, d]) => (
-                    <div key={label as string} className="rounded border px-1.5 py-1">
-                      <div className="text-[9.5px] uppercase tracking-wider text-muted-foreground">{label}</div>
-                      <div className="num text-base font-semibold">
-                        {(a as number).toFixed(d as number)}
-                        <span className="text-[11px] font-normal text-muted-foreground"> vs {(g as number).toFixed(d as number)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-[10px] text-muted-foreground">Aurora vs NOAA GFS. The last tile counts high or critical lines that only one forecast flags.</div>
-                {diff.onlyAurora.length > 0 && (
-                  <div>
-                    <span className="font-medium text-[#ff8a3d]">GFS would under-call: </span>
-                    {diff.onlyAurora.slice(0, 4).map((x, i) => (
-                      <span key={x.name + x.kind}>
-                        {i ? "; " : ""}
-                        {x.name} ({KIND_LABEL[x.kind].toLowerCase()}, {x.aurora} vs {x.gfs})
-                      </span>
-                    ))}
-                    {diff.onlyAurora.length > 4 ? ` and ${diff.onlyAurora.length - 4} more` : ""}
-                  </div>
-                )}
-                {diff.onlyGfs.length > 0 && (
-                  <div>
-                    <span className="font-medium text-[#4aa3ff]">GFS alone would flag: </span>
-                    {diff.onlyGfs.slice(0, 3).map((x) => x.name).join("; ")}
-                  </div>
-                )}
-                {diff.crews.length > 0 && (
-                  <div>
-                    <span className="font-medium">Crews: </span>
-                    {diff.crews.slice(0, 4).map((c, i) => (
-                      <span key={c.area}>
-                        {i ? " · " : ""}
-                        {c.area} {sign(c.aurora - c.gfs)}
-                      </span>
-                    ))}{" "}
-                    <span className="text-muted-foreground">(Aurora minus GFS)</span>
-                  </div>
-                )}
-                <div>
-                  <span className="font-medium">Peak damage window: </span>
-                  Aurora {at(diff.peakHour.aurora)} · GFS {at(diff.peakHour.gfs)}
-                </div>
-                <div className="text-[10px] text-muted-foreground">Use Δ Temp or Δ Gust on the map to see where the two forecasts disagree.</div>
-              </div>
-            )}
-          </div>
+    <div className="rounded-md border border-primary/40 bg-card">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-3 py-2">
+        <div className="min-w-[180px]">
+          <div className="text-sm font-semibold">What changes in the response plan</div>
+          <div className="text-[11px] text-muted-foreground">NOAA GFS → Microsoft Aurora, same storm, same engine</div>
         </div>
-      )}
+        {stats.map((s) => (
+          <div key={s.label}>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</div>
+            <div className="num text-lg">
+              <span className="text-muted-foreground">{s.noaa}</span>
+              <span className="mx-1 text-muted-foreground">→</span>
+              <span className="font-semibold text-primary">{s.aurora}</span>
+            </div>
+          </div>
+        ))}
+        {lead != null && lead > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Peak damage</div>
+            <div className="num text-lg">
+              <span className="font-semibold text-primary">{lead} h earlier</span>
+              <span className="ml-1 text-[11px] text-muted-foreground">{hourLabel(hours[pa!], pa!)}</span>
+            </div>
+          </div>
+        )}
+        <button
+          onClick={() => setWhy((w) => !w)}
+          className="ml-auto flex items-center gap-1 rounded border px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+        >
+          Why Aurora? <ChevronDown className={cn("size-3 transition-transform", why && "rotate-180")} />
+        </button>
+      </div>
+      {why && <AboutAurora />}
     </div>
   );
 }
 
+function AboutAurora() {
+  const pillars: [string, string][] = [
+    ["92% of targets", "where Aurora's 10-day forecast beat ECMWF HRES, the benchmark global model. Its 5-day hurricane tracks beat 7 operational centres."],
+    ["~5,000× faster", "than ECMWF's IFS. A run takes minutes on one GPU, so you can rerun as each new analysis arrives."],
+    ["Runs in your tenant", "over your territory, on your schedule. Results land in Fabric beside the asset model."],
+    ["Fine-tunable", "on your own stations, line sensors and outage history."],
+  ];
+  return (
+    <div className="border-t px-3 py-2 text-[11.5px]">
+      <div className="grid gap-x-6 gap-y-1.5 md:grid-cols-2">
+        {pillars.map(([h, b]) => (
+          <div key={h}>
+            <span className="font-semibold text-primary">{h}</span> <span className="text-muted-foreground">{b}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1.5 text-[10.5px] text-muted-foreground">
+        Published benchmarks are against ECMWF and operational centres, not this demo. Aurora starts from the same NOAA or ECMWF analysis; the 0.25° model does not forecast precipitation, gusts or sunshine, so those come from GFS.{" "}
+        <a href={NATURE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+          Nature 2025 <ExternalLink className="size-2.5" />
+        </a>{" "}
+        ·{" "}
+        <a href={MSR_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+          Microsoft Research <ExternalLink className="size-2.5" />
+        </a>
+      </div>
+    </div>
+  );
+}
 function Kpis({ a }: { a: CorridorAnalysis }) {
   const peakIce = Math.max(0, ...a.lines.map((l) => l.peakIce.mm));
   const peakLoad = Math.max(0, ...a.lines.map((l) => l.peakLoad.pct));
@@ -1032,38 +1030,34 @@ function ComparePanel({ aurora, gfs, onSelect }: { aurora: CorridorAnalysis; gfs
         Math.abs(y.dLevel) - Math.abs(x.dLevel) ||
         Math.abs(y.dGust) + Math.abs(y.dIce) * 40 + Math.abs(y.dDlr) / 3 + Math.abs(y.dP) -
           (Math.abs(x.dGust) + Math.abs(x.dIce) * 40 + Math.abs(x.dDlr) / 3 + Math.abs(x.dP)),
-    )
-    .slice(0, 8);
+    );
+  const changed = rows.filter((r) => r.dLevel !== 0).length;
+  const shown = rows.slice(0, Math.max(8, changed));
   const sign = (v: number, d = 0) => `${v >= 0 ? "+" : ""}${v.toFixed(d)}`;
   return (
-    <div className="rounded-md border border-primary/40 bg-card">
-      <div className="border-b px-3 py-2">
-        <div className="flex items-center gap-1.5 text-sm font-semibold"><Zap className="size-3.5 text-primary" /> Aurora vs NOAA GFS, line by line</div>
-        <div className="text-[11px] text-muted-foreground">
-          Lines where the two forecasts lead to a different risk level come first. Deltas are Aurora minus GFS at each line's peak. Click a line to open it on the map.
-        </div>
-      </div>
-      <table className="w-full px-3 text-xs">
+    <details className="group rounded-md border bg-card">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-sm font-semibold">
+        <Zap className="size-3.5 text-primary" /> All lines, NOAA vs Aurora
+        <span className="text-[11px] font-normal text-muted-foreground">· {changed} change risk level</span>
+        <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <table className="w-full border-t px-3 text-xs">
         <thead>
           <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
             <th className="px-3 py-1 text-left">Line</th>
+            <th className="py-1 text-left">NOAA</th>
             <th className="py-1 text-left">Aurora</th>
-            <th className="py-1 text-left">GFS</th>
             <th className="py-1 text-left">Δ gust</th>
             <th className="py-1 text-left">Δ ice</th>
             <th className="py-1 text-left">Δ fault</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.l.line.id}
-              onClick={() => onSelect(r.l.line.id)}
-              className={cn("cursor-pointer border-t hover:bg-muted/40", r.dLevel !== 0 && "bg-[#ff8a3d]/5")}
-            >
+          {shown.map((r) => (
+            <tr key={r.l.line.id} onClick={() => onSelect(r.l.line.id)} className="cursor-pointer border-t hover:bg-muted/40">
               <td className="px-3 py-1">{r.l.line.name}</td>
-              <td className="py-1"><RiskBadge level={lvl(r.l.level)} /></td>
               <td className="py-1"><RiskBadge level={lvl(r.b.level)} /></td>
+              <td className="py-1"><RiskBadge level={lvl(r.l.level)} /></td>
               <td className="num py-1">{sign(r.dGust)} mph</td>
               <td className="num py-1">{sign(r.dIce, 2)} in</td>
               <td className="num py-1">{sign(r.dP)} pts</td>
@@ -1071,7 +1065,7 @@ function ComparePanel({ aurora, gfs, onSelect }: { aurora: CorridorAnalysis; gfs
           ))}
         </tbody>
       </table>
-    </div>
+    </details>
   );
 }
 
