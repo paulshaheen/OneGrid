@@ -30,6 +30,7 @@ import {
   RETAINER_STATUS_LABEL,
   TABLETOP,
   TABLETOP_JEWEL,
+  type TabletopStep,
   blastRadius,
   retainerGaps,
   type BlastRadius,
@@ -518,14 +519,35 @@ interface Approval {
   actions: string[];
 }
 
+/** The tabletop's last step depends on whether a retainer and engagement path exist. */
+const FINAL_STEP: Record<"ready" | "none", TabletopStep> = {
+  ready: {
+    t: "02:47",
+    title: "Handoff sent through the documented engagement path",
+    body: "The incident commander follows the steps in the retainer record: engage Microsoft Incident Response, share this package and notify the CSAM. The enhanced two-hour response window applies.",
+    highlight: [],
+    tone: "action",
+  },
+  none: {
+    t: "02:47",
+    title: "Handoff ready, but no engagement path",
+    body: "The package is ready, but there's no retainer and no documented path. Leadership starts finding and contracting outside responders in the middle of the night.",
+    highlight: [],
+    tone: "critical",
+  },
+};
+
 function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: RetainerRecord; hours: number; autoplay: boolean; onAutoplayDone: () => void }) {
   const [step, setStep] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const [approval, setApproval] = useState<Approval | null>(null);
   const r = useMemo(() => blastRadius(CROWN_JEWELS.find((j) => j.id === TABLETOP_JEWEL)!), []);
-  const last = TABLETOP.length - 1;
+  const ready = isRetainerReady(record);
+  const mode = ready ? GREEN : RED;
+  const steps = useMemo(() => [...TABLETOP.slice(0, -1), FINAL_STEP[ready ? "ready" : "none"]], [ready]);
+  const last = steps.length - 1;
   const done = step >= last;
-  const waiting = step >= 0 && !!TABLETOP[step]!.decision && !approval;
+  const waiting = step >= 0 && !!steps[step]!.decision && !approval;
 
   const reset = () => {
     setPlaying(false);
@@ -549,11 +571,18 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
   }, [playing, step, done, waiting]);
 
   return (
-    <div className="rounded-md border bg-card">
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+    <div className="rounded-md border bg-card transition-colors" style={{ borderColor: `${mode}99` }}>
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2" style={{ backgroundImage: `linear-gradient(90deg, ${mode}1a, transparent 60%)` }}>
         <div className="mr-auto">
-          <div className="text-sm font-semibold">Tabletop: suspected historian tampering at Bayou plant</div>
-          <div className="text-[11px] text-muted-foreground">OneGrid weighs the evidence, people approve every action, and the incident commander gets a handoff for outside responders.</div>
+          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+            Tabletop: suspected historian tampering at Bayou plant
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: mode, boxShadow: `inset 0 0 0 1px ${mode}99` }}>
+              {ready ? "With a CIR retainer" : "Without a retainer"}
+            </span>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            OneGrid weighs the evidence, people approve every action, and the incident commander gets a handoff for outside responders. Flip the retainer switch to replay it the other way.
+          </div>
         </div>
         {step < 0 ? (
           <button onClick={() => setPlaying(true)} className="flex items-center gap-1 rounded bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground">
@@ -576,7 +605,7 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
       {step >= 0 && (
         <div className="grid gap-3 border-t p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
           <ol className="flex flex-col gap-1">
-            {TABLETOP.map((s, i) => (
+            {steps.map((s, i) => (
               <li
                 key={s.t}
                 className={cn("rounded border-l-2 px-2 py-1 text-xs", i > step && "opacity-35", i === step && "bg-muted/40")}
@@ -685,14 +714,15 @@ function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHou
         </button>
       </div>
       <div className="mt-2 grid gap-3 md:grid-cols-2">
-        {lanes.map((l) => {
+        {[...lanes].sort((a, b) => Number(b.on === ready) - Number(a.on === ready)).map((l) => {
           const reached = e >= l.end;
           const exposure = costPerHour * Math.min(e, l.end);
+          const mine = l.on === ready;
           return (
             <div
               key={l.title}
-              className="rounded-md border px-3 py-2"
-              style={{ borderColor: `${l.color}${l.on === ready ? "cc" : "55"}`, background: `${l.color}${l.on === ready ? "12" : "08"}` }}
+              className={cn("rounded-md border px-3 py-2 transition-opacity", !mine && "opacity-60")}
+              style={{ borderColor: `${l.color}${mine ? "cc" : "55"}`, background: `${l.color}${mine ? "14" : "08"}`, boxShadow: mine ? `0 0 0 1px ${l.color}66` : undefined }}
             >
               <div className="flex items-center gap-2">
                 <span className="font-semibold" style={{ color: l.color }}>
@@ -839,14 +869,16 @@ function Handoff({ record, approval, r, hours }: { record: RetainerRecord; appro
     [
       "Engagement",
       ready ? (
-        <span className="whitespace-pre-line">{record.engagementSteps}</span>
+        <span className="whitespace-pre-line" style={{ color: GREEN }}>
+          {record.engagementSteps}
+        </span>
       ) : (
-        <span style={{ color: "#ff8a3d" }}>Not documented. Who receives this would be decided during the incident.</span>
+        <span style={{ color: RED }}>Not documented. Who receives this would be decided during the incident.</span>
       ),
     ],
   ];
   return (
-    <div className="rounded border text-xs">
+    <div className="rounded border text-xs" style={{ borderColor: `${ready ? GREEN : RED}88` }}>
       <div className="flex flex-wrap items-center gap-2 border-b px-2 py-1">
         <span className="font-semibold">Incident response handoff</span>
         <span className="rounded border border-violet-400/50 px-1 text-[10px] font-semibold uppercase tracking-wider text-violet-300">Simulated</span>
