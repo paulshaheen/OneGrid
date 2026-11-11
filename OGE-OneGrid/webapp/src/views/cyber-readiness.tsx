@@ -573,6 +573,11 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
           </button>
         ) : (
           <>
+            {waiting && (
+              <span className="flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold" style={{ color: AMBER, boxShadow: `inset 0 0 0 1px ${AMBER}99` }}>
+                <UserCheck className="size-3.5" /> Paused: approve to continue
+              </span>
+            )}
             {!done && !waiting && (
               <button onClick={() => setPlaying((p) => !p)} className="flex items-center gap-1 rounded border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
                 {playing ? <Pause className="size-3" /> : <Play className="size-3" />} {playing ? "Pause" : "Resume"}
@@ -598,6 +603,11 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
                 >
                   <span className="num mr-2 text-muted-foreground">{s.t}</span>
                   <span className="font-medium">{s.title}</span>
+                  {s.decision && i === step && waiting && (
+                    <span className="ml-1.5 rounded px-1 text-[10px] font-semibold" style={{ background: `${AMBER}33`, color: AMBER }}>
+                      Waiting for your approval →
+                    </span>
+                  )}
                   {i === step && <div className="mt-0.5 text-[11px] text-muted-foreground">{s.body}</div>}
                 </li>
               ))}
@@ -787,12 +797,21 @@ function Hypotheses() {
 function ApprovalCard({ onApprove }: { onApprove: (a: Approval) => void }) {
   const [sel, setSel] = useState<Set<string>>(() => new Set(ACTIONS.filter((a) => a.recommended).map((a) => a.id)));
   const [by, setBy] = useState("Shift supervisor, Bayou");
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
   return (
-    <div className="rounded border px-2 py-1.5 text-xs" style={{ borderColor: `${AMBER}99`, background: `${AMBER}0d` }}>
-      <div className="flex items-center gap-1 font-semibold" style={{ color: AMBER }}>
-        <UserCheck className="size-3.5" /> Operator approval required
+    <div ref={ref} className="og-approve-card rounded-md border-2 px-2.5 py-2 text-xs" style={{ borderColor: AMBER, background: `${AMBER}14` }}>
+      <style>{`
+        @keyframes og-approve-pulse { 0%,100% { box-shadow: 0 0 0 0 ${AMBER}88; } 50% { box-shadow: 0 0 0 7px ${AMBER}00; } }
+        .og-approve-card, .og-approve-btn { animation: og-approve-pulse 1.6s ease-in-out infinite; }
+      `}</style>
+      <div className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: AMBER }}>
+        <UserCheck className="size-4" /> Your decision: approve the actions to continue
       </div>
-      <div className="mt-1 flex flex-col gap-0.5">
+      <div className="mt-0.5 text-[11px] text-muted-foreground">The exercise is paused. Nothing happens on the plant until a person approves.</div>
+      <div className="mt-1.5 flex flex-col gap-0.5">
         {ACTIONS.map((a) => (
           <label key={a.id} className="flex items-center gap-2" title={a.note}>
             <input type="checkbox" checked={sel.has(a.id)} onChange={() => setSel((s) => { const n = new Set(s); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} />
@@ -803,14 +822,15 @@ function ApprovalCard({ onApprove }: { onApprove: (a: Approval) => void }) {
           </label>
         ))}
       </div>
-      <div className="mt-1.5 flex items-center gap-2">
+      <div className="mt-2 flex items-center gap-2">
         <input className={cn(FIELD, "flex-1")} value={by} onChange={(e) => setBy(e.target.value)} aria-label="Approved by" />
         <button
           onClick={() => onApprove({ by: by.trim() || "Shift supervisor", at: "02:36", actions: ACTIONS.filter((a) => sel.has(a.id)).map((a) => a.label) })}
           disabled={!sel.size}
-          className="rounded bg-primary px-2.5 py-1 font-semibold text-primary-foreground disabled:opacity-40"
+          className="og-approve-btn flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm font-bold text-[#1a1300] disabled:opacity-40"
+          style={{ background: AMBER }}
         >
-          Approve
+          <CheckCircle2 className="size-4" /> Approve to continue
         </button>
       </div>
     </div>
