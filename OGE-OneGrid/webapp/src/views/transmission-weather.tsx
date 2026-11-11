@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { Feature, FeatureCollection } from "geojson";
+import type { FeatureCollection } from "geojson";
 import { CloudSnow, Gauge, Loader2, Pause, Play, Thermometer, Truck, Wind, Zap } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
@@ -24,11 +24,21 @@ import {
 import { getCorridorWeather, type CorridorSource, type CorridorWeather } from "@/lib/services/corridor/server";
 import type { RiskLevel } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
+import { WX_LEGEND, renderWeather, weatherSummary, windArrows, type WxLayer } from "@/components/transmission/weather-layer";
 
 const CorridorMap = lazy(() => import("@/components/transmission/CorridorMap"));
 
 type Tab = "outage" | "ice" | "rating" | "heat" | "crews";
 type SourceSel = CorridorSource | "compare";
+
+/** Weather layer shown by default for each analytics tab. */
+const TAB_WX: Record<Tab, WxLayer> = { outage: "gust", ice: "precip", rating: "temp", heat: "temp", crews: "precip" };
+const WX_OPTIONS: { id: WxLayer; label: string }[] = [
+  { id: "precip", label: "Precipitation" },
+  { id: "temp", label: "Temperature" },
+  { id: "gust", label: "Gusts" },
+  { id: "off", label: "Off" },
+];
 
 const SOURCES: { id: SourceSel; label: string; hint: string }[] = [
   { id: "gfs", label: "NOAA GFS", hint: "Public baseline forecast" },
@@ -79,25 +89,6 @@ function lineColor(tab: Tab, x: LineHour | undefined): string {
   }
 }
 
-function cellStyle(tab: Tab, w: CorridorWeather, i: number, h: number): { color: string; opacity: number } {
-  const c = w.cells[i]!;
-  const t = c.t2m[h] ?? 0, g = mph(c.gust[h] ?? 0), pr = c.precip[h] ?? 0, t8 = c.t850[h] ?? 0;
-  if (tab === "ice") {
-    if (pr < 0.2) return { color: "#000", opacity: 0 };
-    if (t <= 0.5 && t8 > 0) return { color: "#ff4dd2", opacity: Math.min(0.75, 0.25 + pr / 5) };
-    if (t <= 0.5) return { color: "#ffffff", opacity: Math.min(0.6, 0.2 + pr / 6) };
-    return { color: "#3b82f6", opacity: Math.min(0.45, 0.1 + pr / 12) };
-  }
-  if (tab === "rating" || tab === "heat") {
-    const hot = Math.min(1, Math.max(0, (t - 10) / 30));
-    const color = t < 5 ? "#60a5fa" : t < 25 ? "#f0b429" : t < 33 ? "#ff8a3d" : "#ff4d5e";
-    return { color, opacity: tab === "heat" ? 0.15 + 0.45 * hot : 0.18 };
-  }
-  if (g < 25) return { color: "#000", opacity: 0 };
-  const color = g < 40 ? "#f0b429" : g < 55 ? "#ff8a3d" : "#ff4d5e";
-  return { color, opacity: Math.min(0.7, ((g - 25) / 40) * 0.7) };
-}
-
 export function TransmissionWeatherPage() {
   const [source, setSource] = useState<SourceSel>("gfs");
   const [tab, setTab] = useState<Tab>("outage");
@@ -134,7 +125,16 @@ export function TransmissionWeatherPage() {
     return () => window.clearInterval(t);
   }, [playing, n]);
 
-  const fc = useMemo(() => buildFeatures(analysis, weather, tab, h), [analysis, weather, tab, h]);
+  const fc = useMemo(() => buildFeatures(analysis, tab, h), [analysis, tab, h]);
+  const [wxSel, setWxSel] = useState<WxLayer | "auto">("auto");
+  const [showArrows, setShowArrows] = useState(true);
+  const wxLayer: WxLayer = wxSel === "auto" ? TAB_WX[tab] : wxSel;
+  const wxImage = useMemo(() => (mounted ? renderWeather(weather, wxLayer, h) : null), [mounted, weather, wxLayer, h]);
+  const arrows = useMemo(
+    () => (showArrows ? windArrows(weather, h) : ({ type: "FeatureCollection", features: [] } as FeatureCollection)),
+    [showArrows, weather, h],
+  );
+  const wxNow = useMemo(() => weatherSummary(weather, h), [weather, h]);
   const sel = analysis?.lines.find((l) => l.line.id === selected) ?? null;
   const loading = q.isLoading || (source === "compare" && gfsQ.isLoading);
 
@@ -188,12 +188,40 @@ export function TransmissionWeatherPage() {
             <div className="relative h-[560px] overflow-hidden rounded-md border bg-card">
               {mounted ? (
                 <Suspense fallback={<MapPlaceholder />}>
-                  <CorridorMap {...fc} selectedId={selected} onSelect={setSelected} className="absolute inset-0" />
+                  <CorridorMap
+                    {...fc}
+                    arrows={arrows}
+                    weather={wxImage}
+                    selectedId={selected}
+                    onSelect={setSelected}
+                    className="absolute inset-0"
+                  />
                 </Suspense>
               ) : (
                 <MapPlaceholder />
               )}
-              <Legend tab={tab} />
+              <div className="absolute top-2 left-2 flex flex-col gap-1 rounded-md border bg-card/90 p-1.5 text-[11px] backdrop-blur">
+                <span className="px-1 font-semibold text-muted-foreground">Weather layer</span>
+                <div className="flex gap-0.5">
+                  {WX_OPTIONS.map((o) => (
+                    <button
+                      key={o.id}
+                      onClick={() => setWxSel(o.id)}
+                      className={cn(
+                        "rounded px-2 py-0.5",
+                        wxLayer === o.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <label className="flex items-center gap-1.5 px-1 text-muted-foreground">
+                  <input type="checkbox" checked={showArrows} onChange={(e) => setShowArrows(e.target.checked)} />
+                  Wind arrows
+                </label>
+              </div>
+              <Legend tab={tab} wx={wxLayer} />
               {sel && <LineCard r={sel} hour={h} onClose={() => setSelected(null)} hours={analysis?.hours ?? []} />}
             </div>
             {n > 0 && (
@@ -215,6 +243,34 @@ export function TransmissionWeatherPage() {
                 />
                 <span className="num w-44 text-right text-xs text-muted-foreground">
                   {hourLabel(analysis?.hours[h], h)}
+                </span>
+              </div>
+            )}
+            {wxNow && (
+              <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-md border bg-card px-3 py-2 text-[11.5px]">
+                <span className="font-semibold">Weather at this hour</span>
+                <span>
+                  <span className="text-muted-foreground">Temperature </span>
+                  <span className="num">{wxNow.minT.toFixed(0)}–{wxNow.maxT.toFixed(0)} °C</span>
+                </span>
+                <span>
+                  <span className="text-muted-foreground">Max gust </span>
+                  <span className="num">{Math.round(wxNow.maxGustMph)} mph</span>
+                </span>
+                <span>
+                  <span className="text-muted-foreground">Heaviest precip </span>
+                  <span className="num">{wxNow.maxP.toFixed(1)} mm/h</span>
+                </span>
+                <span className="text-muted-foreground">
+                  {wxNow.rainPct + wxNow.fzPct + wxNow.snowPct === 0
+                    ? "Dry across the region"
+                    : [
+                        wxNow.rainPct ? `rain over ${wxNow.rainPct}%` : "",
+                        wxNow.fzPct ? `freezing rain over ${wxNow.fzPct}%` : "",
+                        wxNow.snowPct ? `snow over ${wxNow.snowPct}%` : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") + " of the region"}
                 </span>
               </div>
             )}
@@ -247,7 +303,7 @@ function MapPlaceholder() {
   );
 }
 
-function buildFeatures(a: CorridorAnalysis | null, w: CorridorWeather | undefined, tab: Tab, h: number) {
+function buildFeatures(a: CorridorAnalysis | null, tab: Tab, h: number) {
   const byId = new Map(a?.lines.map((l) => [l.line.id, l]) ?? []);
   const lines: FeatureCollection = {
     type: "FeatureCollection",
@@ -269,17 +325,6 @@ function buildFeatures(a: CorridorAnalysis | null, w: CorridorWeather | undefine
       geometry: { type: "Point", coordinates: [s.lon, s.lat] },
     })),
   };
-  const cells: FeatureCollection = {
-    type: "FeatureCollection",
-    features:
-      w?.available && w.cells.length
-        ? w.cells.map((c, i): Feature => ({
-            type: "Feature",
-            properties: cellStyle(tab, w, i, h),
-            geometry: { type: "Point", coordinates: [c.lon, c.lat] },
-          }))
-        : [],
-  };
   const depots: FeatureCollection = {
     type: "FeatureCollection",
     features:
@@ -295,7 +340,7 @@ function buildFeatures(a: CorridorAnalysis | null, w: CorridorWeather | undefine
           }))
         : [],
   };
-  return { lines, substations, cells, depots };
+  return { lines, substations, depots };
 }
 
 function SourceBanner({
@@ -350,7 +395,7 @@ function Kpis({ a }: { a: CorridorAnalysis }) {
   );
 }
 
-function Legend({ tab }: { tab: Tab }) {
+function Legend({ tab, wx }: { tab: Tab; wx: WxLayer }) {
   const items: [string, string][] =
     tab === "ice"
       ? [["#5f7fa6", "No ice"], ["#4fd1ff", "< ¼ in"], ["#7c6cff", "¼–½ in"], ["#c04dff", "½–¾ in"], ["#ff4dd2", "≥ ¾ in"]]
@@ -359,17 +404,27 @@ function Legend({ tab }: { tab: Tab }) {
         : tab === "heat"
           ? [["#5f7fa6", "< 70% of AAR"], ["#f0b429", "70–85%"], ["#ff8a3d", "85–100%"], ["#ff4d5e", "> 100%"]]
           : [["#5f7fa6", "Normal"], ["#4aa3ff", "Monitor"], ["#f0b429", "Elevated"], ["#ff8a3d", "High"], ["#ff4d5e", "Critical"]];
-  const cells =
-    tab === "ice" ? "Cells: freezing rain (pink), snow (white), rain (blue)" : tab === "rating" || tab === "heat" ? "Cells: air temperature" : "Cells: wind gusts ≥ 25 mph";
+  const wxLegend = wx === "off" ? null : WX_LEGEND[wx];
   return (
-    <div className="pointer-events-none absolute bottom-2 left-2 rounded-md border bg-card/90 px-2.5 py-2 text-[10.5px] backdrop-blur">
-      <div className="mb-1 font-semibold">{TABS.find((t) => t.id === tab)?.label}</div>
-      {items.map(([c, l]) => (
-        <div key={l} className="flex items-center gap-1.5">
-          <span className="h-1 w-4 rounded" style={{ background: c }} /> {l}
+    <div className="pointer-events-none absolute bottom-2 left-2 flex gap-3 rounded-md border bg-card/90 px-2.5 py-2 text-[10.5px] backdrop-blur">
+      <div>
+        <div className="mb-1 font-semibold">Lines: {TABS.find((t) => t.id === tab)?.label}</div>
+        {items.map(([c, l]) => (
+          <div key={l} className="flex items-center gap-1.5">
+            <span className="h-1 w-4 rounded" style={{ background: c }} /> {l}
+          </div>
+        ))}
+      </div>
+      {wxLegend && (
+        <div className="border-l pl-3">
+          <div className="mb-1 font-semibold">{wxLegend.title}</div>
+          {wxLegend.stops.map(([c, l]) => (
+            <div key={l} className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-sm" style={{ background: c }} /> {l}
+            </div>
+          ))}
         </div>
-      ))}
-      <div className="mt-1 text-muted-foreground">{cells}</div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@
 //   scenario-heat Synthetic heat dome with afternoon pop-up thunderstorms.
 import { createServerFn } from "@tanstack/react-start";
 
-import { weatherCells } from "@/lib/data/se-transmission";
+import { WEATHER_GRID, gridCells, weatherCells } from "@/lib/data/se-transmission";
 
 export type CorridorSource = "gfs" | "aurora" | "scenario-ice" | "scenario-heat";
 
@@ -41,11 +41,14 @@ export interface CorridorWeather {
   detail: string;
   issuedIso: string;
   hours: string[];
+  /** Weather at the 0.25° cells the corridors cross (drives the analytics). */
   cells: CellSeries[];
+  /** Regular 0.5° grid over the region (drives the map's weather layer), rows north→south. */
+  grid: { lats: number[]; lons: number[]; cells: CellSeries[] } | null;
 }
 
 const HOURS = 120;
-const GFS_TTL_MS = 30 * 60_000;
+const GFS_TTL_MS = 60 * 60_000;
 let gfsCache: { at: number; val: CorridorWeather } | null = null;
 let auroraCache: { at: number; val: CorridorWeather } | null = null;
 
@@ -56,7 +59,10 @@ type OmHourly = Record<string, (number | null)[]> & { time: string[] };
 
 async function fetchGfs(): Promise<CorridorWeather> {
   if (gfsCache && Date.now() - gfsCache.at < GFS_TTL_MS) return gfsCache.val;
-  const cells = weatherCells();
+  const corridor = weatherCells();
+  const byKey = new Map(corridor.map((c) => [c.key, c]));
+  for (const g of gridCells()) if (!byKey.has(g.key)) byKey.set(g.key, g);
+  const cells = [...byKey.values()];
   const batches: (typeof cells)[] = [];
   for (let i = 0; i < cells.length; i += 50) batches.push(cells.slice(i, i + 50));
   const rows: OmHourly[] = [];
@@ -96,14 +102,16 @@ async function fetchGfs(): Promise<CorridorWeather> {
       t850: pick(h, "temperature_850hPa"),
     };
   });
+  const seriesByKey = new Map(series.map((c) => [c.key, c]));
   const val: CorridorWeather = {
     source: "gfs",
     available: true,
     label: "NOAA GFS 0.25°",
-    detail: `Public NOAA Global Forecast System, hourly, ${series.length} grid cells along the corridors (via Open-Meteo).`,
+    detail: `Public NOAA Global Forecast System, hourly, ${corridor.length} grid cells along the corridors plus a regional 0.5° grid (via Open-Meteo).`,
     issuedIso: new Date().toISOString(),
     hours,
-    cells: series,
+    cells: corridor.map((c) => seriesByKey.get(c.key)!),
+    grid: { ...WEATHER_GRID, cells: gridCells().map((g) => ({ ...seriesByKey.get(g.key)!, lat: g.lat, lon: g.lon })) },
   };
   gfsCache = { at: Date.now(), val };
   return val;
@@ -193,6 +201,7 @@ async function fetchAurora(): Promise<CorridorWeather> {
       issuedIso: new Date().toISOString(),
       hours: [],
       cells: [],
+      grid: null,
     };
   }
   const t0 = Date.parse(file.analysisTimeIso);
@@ -207,7 +216,7 @@ async function fetchAurora(): Promise<CorridorWeather> {
     const f = Math.min(1, Math.max(0, (ms - validMs[k]!) / (validMs[k + 1]! - validMs[k]!)));
     return arr[k]! * (1 - f) + arr[k + 1]! * f;
   };
-  const cells: CellSeries[] = gfs.cells.map((c) => {
+  const toAurora = (c: CellSeries): CellSeries => {
     const at = (field: number[][][]) =>
       file.steps.map((_, s) => bilinear(field[s]!, file.lats, file.lons, c.lat, c.lon));
     const t2 = at(file.fields.t2m_c);
@@ -229,7 +238,8 @@ async function fetchAurora(): Promise<CorridorWeather> {
       out.t850.push(interp(t8, ms));
     }
     return out;
-  });
+  };
+  const cells = gfs.cells.map(toAurora);
   const val: CorridorWeather = {
     source: "aurora",
     available: cells.length > 0 && keep.length > 0,
@@ -238,6 +248,7 @@ async function fetchAurora(): Promise<CorridorWeather> {
     issuedIso: file.analysisTimeIso,
     hours: keep.map(({ i }) => gfs.hours[i]!),
     cells,
+    grid: gfs.grid ? { ...gfs.grid, cells: gfs.grid.cells.map(toAurora) } : null,
   };
   auroraCache = { at: Date.now(), val };
   return val;
@@ -254,7 +265,7 @@ const gauss = (x: number, w: number) => Math.exp(-((x / w) ** 2));
 /** Deterministic synthetic weather. Hour 0 is now. */
 function buildScenario(kind: "scenario-ice" | "scenario-heat"): CorridorWeather {
   const hours = scenarioHours();
-  const cells: CellSeries[] = weatherCells().map((c) => {
+  const series = (c: { key: string; lat: number; lon: number }): CellSeries => {
     const s: CellSeries = { ...c, t2m: [], wind: [], windDir: [], gust: [], precip: [], sw: [], t850: [] };
     hours.forEach((iso, h) => {
       const localHour = (new Date(iso).getUTCHours() - 5 + 24) % 24;
@@ -306,7 +317,7 @@ function buildScenario(kind: "scenario-ice" | "scenario-heat"): CorridorWeather 
       }
     });
     return s;
-  });
+  };
   return {
     source: kind,
     available: true,
@@ -317,16 +328,33 @@ function buildScenario(kind: "scenario-ice" | "scenario-heat"): CorridorWeather 
         : "Synthetic demo: 38–41 °C afternoons with light winds and scattered afternoon thunderstorms.",
     issuedIso: hours[0]!,
     hours,
-    cells,
+    cells: weatherCells().map(series),
+    grid: { ...WEATHER_GRID, cells: gridCells().map(series) },
   };
+}
+
+/** Round to keep the payload small (the grid adds ~200 points × 7 variables × 120 h). */
+function compact(w: CorridorWeather): CorridorWeather {
+  const r = (a: number[], d: number) => a.map((v) => Math.round(v * 10 ** d) / 10 ** d);
+  const c = (s: CellSeries): CellSeries => ({
+    ...s,
+    t2m: r(s.t2m, 1),
+    wind: r(s.wind, 1),
+    windDir: r(s.windDir, 0),
+    gust: r(s.gust, 1),
+    precip: r(s.precip, 2),
+    sw: r(s.sw, 0),
+    t850: r(s.t850, 1),
+  });
+  return { ...w, cells: w.cells.map(c), grid: w.grid ? { ...w.grid, cells: w.grid.cells.map(c) } : null };
 }
 
 export const getCorridorWeather = createServerFn({ method: "GET" })
   .validator((data: { source: CorridorSource }) => data)
   .handler(async ({ data }): Promise<CorridorWeather> => {
-    if (data.source === "scenario-ice" || data.source === "scenario-heat") return buildScenario(data.source);
+    if (data.source === "scenario-ice" || data.source === "scenario-heat") return compact(buildScenario(data.source));
     try {
-      return data.source === "aurora" ? await fetchAurora() : await fetchGfs();
+      return compact(data.source === "aurora" ? await fetchAurora() : await fetchGfs());
     } catch (e) {
       return {
         source: data.source,
@@ -336,6 +364,7 @@ export const getCorridorWeather = createServerFn({ method: "GET" })
         issuedIso: new Date().toISOString(),
         hours: [],
         cells: [],
+        grid: null,
       };
     }
   });

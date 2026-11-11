@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
-import type { Map as MlMap, GeoJSONSource } from "maplibre-gl";
+import type { Map as MlMap, GeoJSONSource, ImageSource } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
@@ -10,14 +10,47 @@ import { NETWORK_BBOX } from "@/lib/data/se-transmission";
 
 if (typeof window !== "undefined") maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
+type Corners = [[number, number], [number, number], [number, number], [number, number]];
+
 export interface CorridorMapProps {
   lines: FeatureCollection;
   substations: FeatureCollection;
-  cells: FeatureCollection;
   depots: FeatureCollection;
+  arrows: FeatureCollection;
+  weather: { url: string; coordinates: Corners } | null;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   className?: string;
+}
+
+const BLANK =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const BBOX_CORNERS: Corners = [
+  [NETWORK_BBOX.minLon, NETWORK_BBOX.maxLat],
+  [NETWORK_BBOX.maxLon, NETWORK_BBOX.maxLat],
+  [NETWORK_BBOX.maxLon, NETWORK_BBOX.minLat],
+  [NETWORK_BBOX.minLon, NETWORK_BBOX.minLat],
+];
+
+/** Upward arrow drawn once into an SDF icon so the layer can tint it. */
+function arrowIcon(): ImageData {
+  const s = 32;
+  const c = document.createElement("canvas");
+  c.width = s;
+  c.height = s;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.moveTo(16, 2);
+  ctx.lineTo(25, 14);
+  ctx.lineTo(19, 14);
+  ctx.lineTo(19, 30);
+  ctx.lineTo(13, 30);
+  ctx.lineTo(13, 14);
+  ctx.lineTo(7, 14);
+  ctx.closePath();
+  ctx.fill();
+  return ctx.getImageData(0, 0, s, s);
 }
 
 export default function CorridorMap(props: CorridorMapProps) {
@@ -46,20 +79,30 @@ export default function CorridorMap(props: CorridorMapProps) {
     mapRef.current = map;
     map.on("load", () => {
       const p = propsRef.current;
-      map.addSource("cells", { type: "geojson", data: p.cells });
+      map.addImage("wind-arrow", arrowIcon(), { sdf: true });
+      map.addSource("wx", { type: "image", url: BLANK, coordinates: BBOX_CORNERS });
+      map.addSource("arrows", { type: "geojson", data: p.arrows });
       map.addSource("lines", { type: "geojson", data: p.lines });
       map.addSource("subs", { type: "geojson", data: p.substations });
       map.addSource("depots", { type: "geojson", data: p.depots });
       map.addLayer({
-        id: "cells",
-        type: "circle",
-        source: "cells",
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 8, 8, 26],
-          "circle-color": ["get", "color"],
-          "circle-opacity": ["get", "opacity"],
-          "circle-blur": 0.7,
+        id: "wx",
+        type: "raster",
+        source: "wx",
+        paint: { "raster-opacity": 0.85, "raster-resampling": "linear", "raster-fade-duration": 0 },
+      });
+      map.addLayer({
+        id: "arrows",
+        type: "symbol",
+        source: "arrows",
+        layout: {
+          "icon-image": "wind-arrow",
+          "icon-rotate": ["get", "rot"],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true,
+          "icon-size": ["interpolate", ["linear"], ["get", "mph"], 0, 0.3, 10, 0.5, 30, 0.85],
         },
+        paint: { "icon-color": "#e8f1ff", "icon-opacity": 0.55 },
       });
       map.addLayer({
         id: "lines-casing",
@@ -141,7 +184,7 @@ export default function CorridorMap(props: CorridorMapProps) {
   useEffect(() => {
     const map = mapRef.current;
     if (map && readyRef.current) sync(map, props);
-  }, [props.lines, props.substations, props.cells, props.depots, props.selectedId]);
+  }, [props.lines, props.substations, props.depots, props.arrows, props.weather, props.selectedId]);
 
   // MapLibre sets `position: relative` on its container, so positioning lives on a wrapper.
   return (
@@ -154,7 +197,10 @@ export default function CorridorMap(props: CorridorMapProps) {
 function sync(map: MlMap, p: CorridorMapProps) {
   (map.getSource("lines") as GeoJSONSource | undefined)?.setData(p.lines);
   (map.getSource("subs") as GeoJSONSource | undefined)?.setData(p.substations);
-  (map.getSource("cells") as GeoJSONSource | undefined)?.setData(p.cells);
   (map.getSource("depots") as GeoJSONSource | undefined)?.setData(p.depots);
+  (map.getSource("arrows") as GeoJSONSource | undefined)?.setData(p.arrows);
+  (map.getSource("wx") as ImageSource | undefined)?.updateImage(
+    p.weather ? { url: p.weather.url, coordinates: p.weather.coordinates } : { url: BLANK, coordinates: BBOX_CORNERS },
+  );
   if (map.getLayer("lines-selected")) map.setFilter("lines-selected", ["==", ["get", "id"], p.selectedId ?? ""]);
 }

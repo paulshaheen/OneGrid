@@ -270,3 +270,18 @@ export function weatherCells(): { key: string; lat: number; lon: number }[] {
 
 /** Bounding box of the network (lon/lat), padded — also the Aurora corridor export box. */
 export const NETWORK_BBOX = { minLon: -89, minLat: 30, maxLon: -80.5, maxLat: 35.5 };
+
+/** Regular 0.5° grid over the network for the map's weather layer (rows north→south). */
+export const WEATHER_GRID = (() => {
+  const lats: number[] = [];
+  const lons: number[] = [];
+  for (let la = NETWORK_BBOX.maxLat; la >= NETWORK_BBOX.minLat - 1e-9; la -= 0.5) lats.push(Number(la.toFixed(2)));
+  for (let lo = NETWORK_BBOX.minLon; lo <= NETWORK_BBOX.maxLon + 1e-9; lo += 0.5) lons.push(Number(lo.toFixed(2)));
+  return { lats, lons };
+})();
+
+export function gridCells(): { key: string; lat: number; lon: number }[] {
+  return WEATHER_GRID.lats.flatMap((lat) =>
+    WEATHER_GRID.lons.map((lon) => ({ key: cellKey(lat, lon), lat, lon })),
+  );
+}
