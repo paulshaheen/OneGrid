@@ -1,12 +1,13 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import type { FeatureCollection } from "geojson";
-import { CloudSnow, Gauge, Loader2, Pause, Play, Thermometer, Truck, Wind, Zap } from "lucide-react";
+import { CloudSnow, Crosshair, Gauge, Loader2, Pause, Play, Thermometer, Truck, Wind, Zap } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { RiskBadge, StatCell } from "@/components/ops/RiskBadge";
 import {
   CONDUCTORS,
+  NETWORK_BBOX,
   SERVICE_AREAS,
   SUBSTATIONS,
   TX_LINES,
@@ -14,9 +15,12 @@ import {
 } from "@/lib/data/se-transmission";
 import {
   analyzeCorridors,
+  focusCounts,
+  focusItems,
   iceClass,
   levelFromScore,
   type CorridorAnalysis,
+  type FocusItem,
   type Level,
   type LineHour,
   type LineResult,
@@ -138,6 +142,60 @@ export function TransmissionWeatherPage() {
   const sel = analysis?.lines.find((l) => l.line.id === selected) ?? null;
   const loading = q.isLoading || (source === "compare" && gfsQ.isLoading);
 
+  // Attention: everything Elevated or worse for the active source, and badge counts.
+  const items = useMemo(() => (analysis ? focusItems(analysis) : []), [analysis]);
+  const counts = useMemo(() => focusCounts(items), [items]);
+  // Badge every source pill with its critical + high issue count, so you can see where to look.
+  const allSources = useQueries({
+    queries: (["gfs", "aurora", "scenario-ice", "scenario-heat"] as CorridorSource[]).map((s) => ({
+      queryKey: ["corridor-weather", s],
+      queryFn: () => getCorridorWeather({ data: { source: s } }),
+      staleTime: 10 * 60_000,
+      enabled: mounted,
+    })),
+  });
+  const sourceBadges = useMemo(() => {
+    const out: Partial<Record<SourceSel, { n: number; worst: Level } | null>> = {};
+    allSources.forEach((r, i) => {
+      const s = (["gfs", "aurora", "scenario-ice", "scenario-heat"] as CorridorSource[])[i]!;
+      if (!r.data?.available) return;
+      const its = focusItems(analyzeCorridors(r.data)).filter((x) => x.level === "critical" || x.level === "high");
+      out[s] = its.length ? { n: its.length, worst: its[0]!.level } : null;
+    });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allSources.map((r) => r.dataUpdatedAt).join(",")]);
+
+  const [focus, setFocus] = useState<{ bounds: [[number, number], [number, number]]; seq: number } | null>(null);
+  const jumpTo = (it: FocusItem) => {
+    setPlaying(false);
+    setTab(it.kind);
+    setHour(it.hour);
+    setSelected(it.lineId ?? null);
+    const lines = it.lineId ? TX_LINES.filter((l) => l.id === it.lineId) : TX_LINES.filter((l) => l.area === it.areaId);
+    const pts = lines.flatMap(linePath);
+    const area = SERVICE_AREAS.find((a) => a.id === it.areaId);
+    if (area) pts.push([area.depot.lon, area.depot.lat]);
+    if (!pts.length) return;
+    const lons = pts.map((p) => p[0]);
+    const lats = pts.map((p) => p[1]);
+    setFocus({
+      bounds: [
+        [Math.min(...lons), Math.min(...lats)],
+        [Math.max(...lons), Math.max(...lats)],
+      ],
+      seq: Date.now(),
+    });
+  };
+  const showAll = () =>
+    setFocus({
+      bounds: [
+        [NETWORK_BBOX.minLon, NETWORK_BBOX.minLat],
+        [NETWORK_BBOX.maxLon, NETWORK_BBOX.maxLat],
+      ],
+      seq: Date.now(),
+    });
+
   return (
     <AppShell>
       <PageHeader
@@ -145,19 +203,23 @@ export function TransmissionWeatherPage() {
         description="Corridor-level weather risk for the Southeast 500/230/115 kV network: tree-fall and wind faults, ice loading, dynamic line ratings, heat-driven loading and where to pre-stage crews."
         actions={
           <div className="flex flex-wrap gap-1 rounded-md border bg-card p-1">
-            {SOURCES.map((s) => (
-              <button
-                key={s.id}
-                title={s.hint}
-                onClick={() => setSource(s.id)}
-                className={cn(
-                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                  source === s.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {s.label}
-              </button>
-            ))}
+            {SOURCES.map((s) => {
+              const b = sourceBadges[s.id];
+              return (
+                <button
+                  key={s.id}
+                  title={b ? `${s.hint} — ${b.n} critical/high issues` : s.hint}
+                  onClick={() => setSource(s.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                    source === s.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {s.label}
+                  {b && <CountBadge n={b.n} level={b.worst} />}
+                </button>
+              );
+            })}
           </div>
         }
       />
@@ -167,20 +229,27 @@ export function TransmissionWeatherPage() {
 
         {analysis && <Kpis a={analysis} />}
 
+        {analysis && <FocusStrip items={items} hours={analysis.hours} onPick={jumpTo} selected={selected} tab={tab} />}
+
         <div className="flex flex-wrap gap-1 border-b">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium",
-                tab === t.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <t.icon className="size-3.5" />
-              {t.label}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const c = counts[t.id];
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                title={c.count ? `${c.count} need attention${c.critical ? ` (${c.critical} critical)` : ""}` : "Nothing at Elevated or above"}
+                className={cn(
+                  "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium",
+                  tab === t.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <t.icon className="size-3.5" />
+                {t.label}
+                {c.count > 0 && c.worst && <CountBadge n={c.count} level={c.worst} />}
+              </button>
+            );
+          })}
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -192,6 +261,7 @@ export function TransmissionWeatherPage() {
                     {...fc}
                     arrows={arrows}
                     weather={wxImage}
+                    focus={focus}
                     selectedId={selected}
                     onSelect={setSelected}
                     className="absolute inset-0"
@@ -200,6 +270,13 @@ export function TransmissionWeatherPage() {
               ) : (
                 <MapPlaceholder />
               )}
+              <button
+                onClick={showAll}
+                title="Show the whole network"
+                className="absolute bottom-2 right-2 flex items-center gap-1 rounded-md border bg-card/90 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur hover:text-foreground"
+              >
+                <Crosshair className="size-3" /> Whole network
+              </button>
               <div className="absolute top-2 left-2 flex flex-col gap-1 rounded-md border bg-card/90 p-1.5 text-[11px] backdrop-blur">
                 <span className="px-1 font-semibold text-muted-foreground">Weather layer</span>
                 <div className="flex gap-0.5">
@@ -299,6 +376,93 @@ function MapPlaceholder() {
   return (
     <div className="flex h-full items-center justify-center">
       <span className="label-xs text-muted-foreground">Loading map…</span>
+    </div>
+  );
+}
+
+function CountBadge({ n, level }: { n: number; level: Level }) {
+  return (
+    <span
+      className="num inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] leading-[16px] font-bold"
+      style={{ background: LEVEL_HEX[level], color: level === "elevated" ? "#1a1300" : "#fff" }}
+    >
+      {n}
+    </span>
+  );
+}
+
+const KIND_ICON: Record<FocusItem["kind"], typeof Wind> = { outage: Wind, ice: CloudSnow, rating: Gauge, heat: Thermometer, crews: Truck };
+const KIND_LABEL: Record<FocusItem["kind"], string> = { outage: "Outage", ice: "Ice", rating: "Rating", heat: "Heat", crews: "Crews" };
+
+function FocusStrip({
+  items,
+  hours,
+  onPick,
+  selected,
+  tab,
+}: {
+  items: FocusItem[];
+  hours: string[];
+  onPick: (it: FocusItem) => void;
+  selected: string | null;
+  tab: Tab;
+}) {
+  if (!items.length)
+    return (
+      <div className="rounded-md border border-[#2fbf71]/40 bg-[#2fbf71]/10 px-3 py-2 text-xs">
+        <span className="font-semibold text-[#2fbf71]">Nothing needs attention in the next 5 days.</span>{" "}
+        <span className="text-muted-foreground">No line reaches Elevated for outage, ice, rating or heat with this forecast. Try the Ice storm or Heat dome scenario to see how alerts look.</span>
+      </div>
+    );
+  const crit = items.filter((i) => i.level === "critical").length;
+  const high = items.filter((i) => i.level === "high").length;
+  // The worst item of each hazard first so one hazard can't crowd out the rest, then fill by severity.
+  const picked = new Set<string>();
+  for (const k of Object.keys(KIND_LABEL) as FocusItem["kind"][]) {
+    const f = items.find((i) => i.kind === k);
+    if (f) picked.add(f.id);
+  }
+  for (const i of items) if (picked.size < 6) picked.add(i.id);
+  const top = items.filter((i) => picked.has(i.id)).slice(0, 6);
+  return (
+    <div className="rounded-md border bg-card">
+      <div className="flex items-baseline justify-between gap-2 border-b px-3 py-1.5">
+        <span className="text-sm font-semibold">Where to focus</span>
+        <span className="text-[11px] text-muted-foreground">
+          {items.length} issue{items.length === 1 ? "" : "s"} at Elevated or above
+          {crit ? ` · ${crit} critical` : ""}
+          {high ? ` · ${high} high` : ""}
+          {items.length > top.length ? ` · worst of each hazard shown, tab badges list the rest` : ""} · click to zoom to it at its peak hour
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 p-2 md:grid-cols-3 2xl:grid-cols-6">
+        {top.map((it) => {
+          const Icon = KIND_ICON[it.kind];
+          const active = tab === it.kind && (it.lineId ? selected === it.lineId : !selected);
+          return (
+            <button
+              key={it.id}
+              onClick={() => onPick(it)}
+              className={cn(
+                "flex min-w-0 flex-col gap-0.5 rounded-md border border-l-4 bg-background/40 px-2.5 py-1.5 text-left text-[11px] transition-colors hover:bg-muted/50",
+                active && "ring-1 ring-primary",
+              )}
+              style={{ borderLeftColor: LEVEL_HEX[it.level] }}
+            >
+              <span className="flex items-center gap-1.5">
+                <Icon className="size-3" style={{ color: LEVEL_HEX[it.level] }} />
+                <span className="font-semibold uppercase tracking-wider" style={{ color: LEVEL_HEX[it.level] }}>
+                  {it.level}
+                </span>
+                <span className="text-muted-foreground">· {KIND_LABEL[it.kind]}</span>
+              </span>
+              <span className="truncate font-medium">{it.title}</span>
+              <span className="truncate text-muted-foreground">{it.detail}</span>
+              <span className="num text-[10px] text-muted-foreground">{hourLabel(hours[it.hour], it.hour)}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -494,8 +658,13 @@ function LineCard({ r, hour, hours, onClose }: { r: LineResult; hour: number; ho
 }
 
 function Row({ r, selected, onSelect, children }: { r: LineResult; selected: boolean; onSelect: (id: string) => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLTableRowElement>(null);
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selected]);
   return (
     <tr
+      ref={ref}
       onClick={() => onSelect(r.line.id)}
       className={cn("cursor-pointer border-b last:border-0 hover:bg-muted/40", selected && "bg-primary/10")}
     >

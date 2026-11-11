@@ -18,6 +18,8 @@ export interface CorridorMapProps {
   depots: FeatureCollection;
   arrows: FeatureCollection;
   weather: { url: string; coordinates: Corners } | null;
+  /** Fit the map to these bounds whenever `seq` changes. */
+  focus: { bounds: [[number, number], [number, number]]; seq: number } | null;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   className?: string;
@@ -185,6 +187,11 @@ export default function CorridorMap(props: CorridorMapProps) {
     const map = mapRef.current;
     if (map && readyRef.current) sync(map, props);
   }, [props.lines, props.substations, props.depots, props.arrows, props.weather, props.selectedId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && props.focus) map.fitBounds(props.focus.bounds, { padding: 90, maxZoom: 8.5, duration: 900 });
+  }, [props.focus?.seq]);
 
   // MapLibre sets `position: relative` on its container, so positioning lives on a wrapper.
   return (

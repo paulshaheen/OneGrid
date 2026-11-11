@@ -368,3 +368,77 @@ export function analyzeCorridors(weather: CorridorWeather): CorridorAnalysis {
 export const AREA_NAME: Record<AreaId, string> = Object.fromEntries(
   SERVICE_AREAS.map((a) => [a.id, a.name]),
 ) as Record<AreaId, string>;
+
+// ── Attention list ───────────────────────────────────────────────────────────
+export type FocusKind = "outage" | "ice" | "rating" | "heat" | "crews";
+
+export interface FocusItem {
+  id: string;
+  kind: FocusKind;
+  level: Level;
+  score: number;
+  title: string;
+  detail: string;
+  /** Hour to jump the timeline to (peak of the hazard). */
+  hour: number;
+  lineId?: string;
+  areaId?: AreaId;
+}
+
+const LEVEL_RANK: Record<Level, number> = { normal: 0, monitor: 1, elevated: 2, high: 3, critical: 4 };
+
+/** Everything at Elevated or worse, most severe first: one item per line per hazard,
+ * plus service areas that need mutual-aid crews. */
+export function focusItems(a: CorridorAnalysis): FocusItem[] {
+  const items: FocusItem[] = [];
+  for (const l of a.lines) {
+    const add = (kind: FocusKind, score: number, detail: string, hour: number, level = levelFromScore(score)) => {
+      if (LEVEL_RANK[level] >= LEVEL_RANK.elevated)
+        items.push({ id: `${kind}:${l.line.id}`, kind, level, score, title: l.line.name, detail, hour, lineId: l.line.id });
+    };
+    // Hour the fault probability rises fastest = when the damage is most likely.
+    let faultHour = l.peakGust.hour;
+    let best = 0;
+    for (let h = 1; h < l.hours.length; h++) {
+      const inc = l.hours[h]!.faultProb - l.hours[h - 1]!.faultProb;
+      if (inc > best) {
+        best = inc;
+        faultHour = h;
+      }
+    }
+    add("outage", l.scores.wind, `${Math.round(l.faultProb * 100)}% fault chance · gusts ${Math.round(l.peakGust.ms * 2.237)} mph`, faultHour);
+    // Ice uses the radial-ice classes shown in the Ice table, not the raw score.
+    add("ice", l.scores.ice, `${(l.peakIce.mm / 25.4).toFixed(2)} in radial ice`, l.peakIce.hour, iceClass(l.peakIce.mm).tone);
+    add("rating", l.scores.rating, `Rating falls to ${Math.round(l.minDlr.pct)}% of static`, l.minDlr.hour);
+    add("heat", l.scores.heat, `Loading ${Math.round(l.peakLoad.pct)}% of ambient-adjusted rating`, l.peakLoad.hour);
+  }
+  for (const p of a.areas) {
+    if (p.mutualAid <= 0) continue;
+    const level: Level = p.mutualAid >= 3 ? "critical" : "high";
+    items.push({
+      id: `crews:${p.area.id}`,
+      kind: "crews",
+      level,
+      score: 60 + p.mutualAid * 10,
+      title: `${p.area.name} crews`,
+      detail: `${p.crewsNeeded} crews needed, +${p.mutualAid} mutual aid`,
+      hour: p.stageByHour ?? 0,
+      areaId: p.area.id,
+    });
+  }
+  return items.sort((x, y) => LEVEL_RANK[y.level] - LEVEL_RANK[x.level] || y.score - x.score);
+}
+
+/** Per-tab badge: how many items, and the worst level among them. */
+export function focusCounts(items: FocusItem[]): Record<FocusKind, { count: number; worst: Level | null; critical: number }> {
+  const out = {} as Record<FocusKind, { count: number; worst: Level | null; critical: number }>;
+  for (const k of ["outage", "ice", "rating", "heat", "crews"] as FocusKind[]) {
+    const ks = items.filter((i) => i.kind === k);
+    out[k] = {
+      count: ks.length,
+      worst: ks[0]?.level ?? null,
+      critical: ks.filter((i) => i.level === "critical").length,
+    };
+  }
+  return out;
+}
