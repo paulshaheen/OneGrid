@@ -131,7 +131,8 @@ export function CyberReadinessPage() {
         title="Cyber readiness"
         description="If an attacker reached your operational network tonight, what would go dark, and how fast could you get expert help?"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <RetainerPills ready={ready} onChange={(on) => saveRecord(on ? RETAINER_PRESETS.active : RETAINER_PRESETS.none)} />
             <span
               title={`Demo data: systems come from the synthetic IT/OT estate in Infrastructure. Exposure is modeled at ${usd(COST_ASSUMPTIONS.perCustomerHour)} per customer-hour and ${usd(COST_ASSUMPTIONS.replacementPowerPerMwh)}/MWh replacement power.`}
               className="cursor-help rounded border border-violet-400/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300"
@@ -172,7 +173,6 @@ export function CyberReadinessPage() {
             title={ready ? "CIR datasheet: enhanced two-hour response when purchased proactively as a retainer. Response is not containment." : "Adjust in the retainer card."}
           />
           <Headline label="Exposure before response" value={usd(worst.costPerHour * responseH)} sub={`${usd(worst.costPerHour)}/h × ${responseH} h`} color={mode} />
-          <RetainerSwitch ready={ready} onChange={(on) => saveRecord(on ? RETAINER_PRESETS.active : RETAINER_PRESETS.none)} />
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -212,28 +212,30 @@ export function CyberReadinessPage() {
   );
 }
 
-/** The one control that drives the story: compare the same incident with and without a retainer. */
-function RetainerSwitch({ ready, onChange }: { ready: boolean; onChange: (on: boolean) => void }) {
-  const opt = (on: boolean, label: string) => {
+/** The one control that drives the story: the same incident with and without a retainer. */
+function RetainerPills({ ready, onChange }: { ready: boolean; onChange: (on: boolean) => void }) {
+  const pill = (on: boolean, label: string) => {
     const active = ready === on;
     const color = on ? GREEN : RED;
     return (
       <button
         onClick={() => onChange(on)}
-        className={cn("rounded px-2.5 py-1 text-xs font-semibold transition-colors", !active && "text-muted-foreground hover:text-foreground")}
-        style={active ? { background: `${color}26`, color, boxShadow: `inset 0 0 0 1px ${color}99` } : undefined}
+        title={on ? "Show the page with a Cybersecurity Incident Response retainer in place" : "Show the page without an incident response retainer"}
+        className={cn(
+          "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
+          !active && "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+        )}
+        style={active ? { background: color, color: on ? "#06240f" : "#fff" } : undefined}
       >
+        {on ? <ShieldCheck className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
         {label}
       </button>
     );
   };
   return (
-    <div className="ml-auto">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Incident response retainer</div>
-      <div className="mt-0.5 flex gap-1 rounded-md border bg-background/40 p-0.5">
-        {opt(false, "No retainer")}
-        {opt(true, "CIR retainer")}
-      </div>
+    <div className="flex items-center gap-1 rounded-full border bg-card p-1" role="group" aria-label="Incident response retainer">
+      {pill(false, "No retainer")}
+      {pill(true, "CIR retainer")}
     </div>
   );
 }
@@ -532,6 +534,17 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
   /** The response race starts once the incident is declared (02:41). */
   const declared = !!approval && step >= steps.findIndex((s) => s.t === "02:41");
 
+  // Follow along: keep the current step, then the response race, in view.
+  const stepRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const raceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (step < 0 || waiting || declared) return;
+    stepRefs.current[step]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [step, waiting, declared]);
+  useEffect(() => {
+    if (declared) raceRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [declared]);
+
   const reset = () => {
     setPlaying(false);
     setStep(-1);
@@ -564,7 +577,7 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
             </span>
           </div>
           <div className="text-[11px] text-muted-foreground">
-            OneGrid weighs the evidence, people approve every action, and the incident commander gets a handoff for outside responders. Flip the retainer switch to replay it the other way.
+            OneGrid weighs the evidence, people approve every action, and the incident commander gets a handoff for outside responders. Use the No retainer and CIR retainer pills at the top to replay it the other way.
           </div>
         </div>
         {step < 0 ? (
@@ -598,6 +611,9 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
               {steps.map((s, i) => (
                 <li
                   key={s.t}
+                  ref={(el) => {
+                    stepRefs.current[i] = el;
+                  }}
                   className={cn("rounded border-l-2 px-2 py-1 text-xs", i > step && "opacity-35", i === step && "bg-muted/40")}
                   style={{ borderLeftColor: i <= step ? TONE[s.tone] : "transparent" }}
                 >
@@ -632,7 +648,11 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
           </div>
         </div>
       )}
-      {step >= 0 && <ResponseRace hours={hours} costPerHour={r.costPerHour} ready={ready} started={declared} />}
+      {step >= 0 && (
+        <div ref={raceRef}>
+          <ResponseRace hours={hours} costPerHour={r.costPerHour} ready={ready} started={declared} />
+        </div>
+      )}
     </div>
   );
 }
