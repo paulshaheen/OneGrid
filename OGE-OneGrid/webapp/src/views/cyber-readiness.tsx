@@ -44,6 +44,8 @@ const RETAINER_KEY = "og.cyberRetainer";
 const RED = "#ff4d5e";
 const AMBER = "#f0b429";
 const GREEN = "#2fbf71";
+/** CIR datasheet: "Enhanced two-hour response ... if purchasing ... proactively as a retainer." */
+const CIR_RESPONSE_H = 2;
 
 const usd = (v: number) =>
   v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `$${Math.round(v / 1_000)}K` : `$${Math.round(v)}`;
@@ -109,6 +111,9 @@ export function CyberReadinessPage() {
   const score = READINESS.filter((r) => (r.retainer ? ready : checks[r.id])).length;
   const worst = radii[0]!;
   const [hours, setHours] = useState(48);
+  /** Hours until outside experts respond under the selected setup. */
+  const responseH = ready ? CIR_RESPONSE_H : hours;
+  const mode = ready ? GREEN : RED;
 
   const tabletopRef = useRef<HTMLDivElement>(null);
   const [autoplay, setAutoplay] = useState(false);
@@ -141,30 +146,66 @@ export function CyberReadinessPage() {
       />
 
       <div className="flex flex-col gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-md border border-primary/40 bg-card px-4 py-3">
-          <div className="min-w-[200px]">
-            <div className="text-sm font-semibold">Worst case: {worst.jewel.role}</div>
-            <div className="text-[11px] text-muted-foreground">{worst.asset.name} reaches every site · modeled</div>
+        <div
+          className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-md border bg-card px-4 py-3 transition-colors"
+          style={{ borderColor: `${mode}99`, backgroundImage: `linear-gradient(90deg, ${mode}1f, transparent 55%)` }}
+        >
+          <div className="min-w-[260px]">
+            <div className="flex items-center gap-1.5 text-base font-semibold" style={{ color: mode }}>
+              {ready ? <ShieldCheck className="size-4" /> : <AlertTriangle className="size-4" />}
+              {ready ? "With a CIR retainer" : "Without a retainer"}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {ready ? "Documented engagement path; enhanced two-hour response" : "Outside help is found and contracted during the incident"}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              Worst case: {worst.jewel.role} ({worst.asset.name}), modeled
+            </div>
           </div>
           <Headline label="Customers" value={num(worst.customers)} />
           <Headline label="Generation" value={`${worst.genMw} MW`} />
-          <Headline label="Exposure" value={`${usd(worst.costPerHour)}/h`} color={RED} />
-          <Headline label="Readiness" value={`${score} of ${READINESS.length}`} color={score >= 8 ? GREEN : AMBER} />
+          <Headline
+            label="Expert response"
+            value={`${responseH} h`}
+            sub={ready ? "enhanced response (datasheet)" : "your estimate"}
+            color={mode}
+            title={ready ? "CIR datasheet: enhanced two-hour response when purchased proactively as a retainer. Response is not containment." : "Adjust in the retainer card."}
+          />
+          <Headline label="Exposure before response" value={usd(worst.costPerHour * responseH)} sub={`${usd(worst.costPerHour)}/h × ${responseH} h`} color={mode} />
           <RetainerSwitch ready={ready} onChange={(on) => saveRecord(on ? RETAINER_PRESETS.active : RETAINER_PRESETS.none)} />
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <JewelTable radii={radii} />
-          <ReadinessCard checks={checks} onToggle={toggle} record={record} onSave={saveRecord} ready={ready} worst={worst} hours={hours} onHours={setHours} />
+          <JewelTable radii={radii} responseH={responseH} color={mode} />
+          <ReadinessCard checks={checks} onToggle={toggle} record={record} onSave={saveRecord} ready={ready} worst={worst} hours={hours} onHours={setHours} score={score} />
         </div>
 
         <div ref={tabletopRef} id="tabletop" className="scroll-mt-4">
           <Tabletop record={record} hours={hours} autoplay={autoplay} onAutoplayDone={() => setAutoplay(false)} />
         </div>
 
-        <div className="rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Path to readiness:</span> threat briefing, then a proactive compromise assessment, then an incident response
-          retainer from Microsoft Services, with your CSAM coordinating proactive work. Talk to your Microsoft account team.
+        <div className="rounded-md border bg-card px-3 py-2 text-xs" style={{ borderColor: `${mode}66` }}>
+          {ready ? (
+            <>
+              <span className="font-medium" style={{ color: GREEN }}>
+                Keep it ready:
+              </span>{" "}
+              <span className="text-muted-foreground">
+                run a tabletop every year, keep the retainer record and engagement steps current, and use your CSAM to schedule proactive services such as compromise
+                assessments and threat briefings.
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="font-medium" style={{ color: RED }}>
+                Next step:
+              </span>{" "}
+              <span className="text-muted-foreground">
+                talk to your Microsoft account team about a Cybersecurity Incident Response retainer. The path is a threat briefing, then a proactive compromise
+                assessment, then a retainer proposal from Microsoft Services.
+              </span>
+            </>
+          )}
         </div>
       </div>
     </AppShell>
@@ -197,19 +238,20 @@ function RetainerSwitch({ ready, onChange }: { ready: boolean; onChange: (on: bo
   );
 }
 
-function Headline({ label, value, color }: { label: string; value: string; color?: string }) {
+function Headline({ label, value, color, sub, title }: { label: string; value: string; color?: string; sub?: string; title?: string }) {
   return (
-    <div>
+    <div title={title} className={cn(title && "cursor-help")}>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="num text-lg font-semibold" style={color ? { color } : undefined}>
         {value}
       </div>
+      {sub && <div className="text-[10px] text-muted-foreground">{sub}</div>}
     </div>
   );
 }
 
 // ── Crown jewels ─────────────────────────────────────────────────────────────
-function JewelTable({ radii }: { radii: BlastRadius[] }) {
+function JewelTable({ radii, responseH, color }: { radii: BlastRadius[]; responseH: number; color: string }) {
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const rows = all ? radii : radii.slice(0, 5);
@@ -217,12 +259,12 @@ function JewelTable({ radii }: { radii: BlastRadius[] }) {
     <div className="rounded-md border bg-card">
       <div className="flex items-baseline justify-between px-3 pt-2">
         <span className="text-sm font-semibold">Crown jewels</span>
-        <span className="text-[11px] text-muted-foreground">What a compromise of each system would reach · click for detail</span>
+        <span className="text-[11px] text-muted-foreground">Modeled exposure before expert response ({responseH} h) · click for detail</span>
       </div>
       <table className="mt-1 w-full text-xs">
         <tbody>
           {rows.map((r) => (
-            <JewelRow key={r.jewel.id} r={r} open={open === r.jewel.id} onToggle={() => setOpen((o) => (o === r.jewel.id ? null : r.jewel.id))} />
+            <JewelRow key={r.jewel.id} r={r} responseH={responseH} color={color} open={open === r.jewel.id} onToggle={() => setOpen((o) => (o === r.jewel.id ? null : r.jewel.id))} />
           ))}
         </tbody>
       </table>
@@ -235,7 +277,7 @@ function JewelTable({ radii }: { radii: BlastRadius[] }) {
   );
 }
 
-function JewelRow({ r, open, onToggle }: { r: BlastRadius; open: boolean; onToggle: () => void }) {
+function JewelRow({ r, responseH, color, open, onToggle }: { r: BlastRadius; responseH: number; color: string; open: boolean; onToggle: () => void }) {
   return (
     <>
       <tr onClick={onToggle} className={cn("cursor-pointer border-t hover:bg-muted/40", open && "bg-muted/30")}>
@@ -246,8 +288,17 @@ function JewelRow({ r, open, onToggle }: { r: BlastRadius; open: boolean; onTogg
         <td className="py-2 text-muted-foreground">
           {r.sites.length ? r.sites.map((s) => shortSite(s.name)).join(", ") : r.analyticsBlind ? "Operators lose visibility" : "Contained"}
         </td>
-        <td className="num px-3 py-2 text-right font-semibold" style={{ color: r.costPerHour >= 150_000 ? RED : r.costPerHour ? AMBER : undefined }}>
-          {r.costPerHour ? `${usd(r.costPerHour)}/h` : "–"}
+        <td className="num px-3 py-2 text-right">
+          {r.costPerHour ? (
+            <>
+              <div className="font-semibold transition-colors" style={{ color }}>
+                {usd(r.costPerHour * responseH)}
+              </div>
+              <div className="text-[10px] text-muted-foreground">{usd(r.costPerHour)}/h</div>
+            </>
+          ) : (
+            "–"
+          )}
         </td>
       </tr>
       {open && (
@@ -281,6 +332,7 @@ function ReadinessCard({
   worst,
   hours,
   onHours,
+  score,
 }: {
   checks: Record<string, boolean>;
   onToggle: (id: string) => void;
@@ -290,6 +342,7 @@ function ReadinessCard({
   worst: BlastRadius;
   hours: number;
   onHours: (h: number) => void;
+  score: number;
 }) {
   const gaps = [...retainerGaps(record), ...READINESS.filter((r) => !r.retainer && !checks[r.id] && r.id !== "tabletop").map((r) => `${r.label}: not in place.`)];
   return (
@@ -355,7 +408,7 @@ function ReadinessCard({
         <More label="Retainer record">
           <RetainerRecordView record={record} onSave={onSave} />
         </More>
-        <More label={`Readiness checklist (${READINESS.filter((r) => (r.retainer ? ready : checks[r.id])).length} of ${READINESS.length})`}>
+        <More label={`Readiness checklist (${score} of ${READINESS.length})`}>
           <div className="flex flex-col">
             {READINESS.map((r) => {
               const on = r.retainer ? ready : !!checks[r.id];
@@ -554,6 +607,134 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
           </div>
         </div>
       )}
+      {done && approval && <ResponseRace hours={hours} costPerHour={r.costPerHour} ready={isRetainerReady(record)} />}
+    </div>
+  );
+}
+
+// ── Response, side by side ───────────────────────────────────────────────────
+const RACE_MS = 9000;
+const T0_MIN = 2 * 60 + 41; // 02:41, Sev 1 declared
+
+const clock = (elapsedH: number) => {
+  const m = Math.round(T0_MIN + elapsedH * 60);
+  const day = Math.floor(m / 1440);
+  const hh = Math.floor((m % 1440) / 60);
+  const mm = m % 60;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}${day ? ` (+${day}d)` : ""}`;
+};
+
+interface Milestone {
+  at: number;
+  text: string;
+  key?: boolean;
+}
+
+function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHour: number; ready: boolean }) {
+  const total = Math.max(hours, CIR_RESPONSE_H);
+  const [e, setE] = useState(0);
+  const [run, setRun] = useState(0);
+  useEffect(() => {
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / RACE_MS);
+      setE(p * total);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [total, run]);
+
+  const lanes: { on: boolean; title: string; color: string; end: number; steps: Milestone[] }[] = [
+    {
+      on: false,
+      title: "Without a retainer",
+      color: RED,
+      end: hours,
+      steps: [
+        { at: 0.07, text: "Incident commander decides outside help is needed" },
+        { at: hours * 0.2, text: "Find a provider and agree the scope" },
+        { at: hours * 0.55, text: "Contract, legal and purchasing approvals" },
+        { at: hours, text: "Responders engaged (your estimate)", key: true },
+      ],
+    },
+    {
+      on: true,
+      title: "With a CIR retainer",
+      color: GREEN,
+      end: CIR_RESPONSE_H,
+      steps: [
+        { at: 0.07, text: "Incident commander follows the documented engagement steps and sends the handoff" },
+        { at: 0.12, text: "CSAM notified" },
+        { at: CIR_RESPONSE_H, text: "Enhanced two-hour response (CIR datasheet)", key: true },
+        { at: CIR_RESPONSE_H, text: "Assigned Incident Response Coordinator guides the engagement; evidence already preserved" },
+      ],
+    },
+  ];
+  const diff = costPerHour * Math.max(0, hours - CIR_RESPONSE_H);
+
+  return (
+    <div className="border-t px-3 py-3 text-xs">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="text-sm font-semibold">Response, side by side</span>
+        <span className="text-muted-foreground">Same incident from 02:41, with and without a retainer</span>
+        <span className="num ml-auto text-sm font-semibold">{clock(e)}</span>
+        <button onClick={() => setRun((x) => x + 1)} className="flex items-center gap-1 rounded border px-2 py-0.5 text-muted-foreground hover:text-foreground">
+          <RotateCcw className="size-3" /> Replay
+        </button>
+      </div>
+      <div className="mt-2 grid gap-3 md:grid-cols-2">
+        {lanes.map((l) => {
+          const reached = e >= l.end;
+          const exposure = costPerHour * Math.min(e, l.end);
+          return (
+            <div
+              key={l.title}
+              className="rounded-md border px-3 py-2"
+              style={{ borderColor: `${l.color}${l.on === ready ? "cc" : "55"}`, background: `${l.color}${l.on === ready ? "12" : "08"}` }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-semibold" style={{ color: l.color }}>
+                  {l.title}
+                </span>
+                {l.on === ready && <span className="rounded border px-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">your current setup</span>}
+                <span className="ml-auto text-muted-foreground">{reached ? `Response at ${clock(l.end)}` : "Waiting for expert help…"}</span>
+              </div>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded bg-muted">
+                <div className="h-full rounded transition-[width] duration-100" style={{ width: `${Math.min(100, (e / total) * 100)}%`, background: reached ? `${l.color}55` : l.color }} />
+              </div>
+              <ol className="mt-2 flex flex-col gap-1">
+                {l.steps.map((s) => (
+                  <li key={s.text} className={cn("flex gap-2 transition-opacity", e < s.at && "opacity-30")}>
+                    <span className="num w-[86px] shrink-0 text-muted-foreground">{clock(s.at)}</span>
+                    <span className={cn(s.key && "font-semibold")} style={s.key && e >= s.at ? { color: l.color } : undefined}>
+                      {s.text}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-2 flex items-baseline justify-between border-t pt-1.5">
+                <span className="text-muted-foreground">Modeled exposure before response</span>
+                <span className="num text-base font-semibold" style={{ color: l.color }}>
+                  {usd(exposure)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 text-muted-foreground">
+        {e >= total && diff > 0 && (
+          <span>
+            Difference in modeled exposure before expert response: <span className="num font-semibold text-foreground">{usd(diff)}</span>.
+          </span>
+        )}
+        <span className="text-[10.5px]">
+          Response is not containment. Times after 02:45 are illustrative; the time without a retainer is your estimate. Exposure is modeled for the Bayou plant at{" "}
+          {usd(costPerHour)}/h.
+        </span>
+      </div>
     </div>
   );
 }
