@@ -30,7 +30,6 @@ import {
   RETAINER_STATUS_LABEL,
   TABLETOP,
   TABLETOP_JEWEL,
-  type TabletopStep,
   blastRadius,
   retainerGaps,
   type BlastRadius,
@@ -519,24 +518,6 @@ interface Approval {
   actions: string[];
 }
 
-/** The tabletop's last step depends on whether a retainer and engagement path exist. */
-const FINAL_STEP: Record<"ready" | "none", TabletopStep> = {
-  ready: {
-    t: "02:47",
-    title: "Handoff sent through the documented engagement path",
-    body: "The incident commander follows the steps in the retainer record: engage Microsoft Incident Response, share this package and notify the CSAM. The enhanced two-hour response window applies.",
-    highlight: [],
-    tone: "action",
-  },
-  none: {
-    t: "02:47",
-    title: "Handoff ready, but no engagement path",
-    body: "The package is ready, but there's no retainer and no documented path. Leadership starts finding and contracting outside responders in the middle of the night.",
-    highlight: [],
-    tone: "critical",
-  },
-};
-
 function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: RetainerRecord; hours: number; autoplay: boolean; onAutoplayDone: () => void }) {
   const [step, setStep] = useState(-1);
   const [playing, setPlaying] = useState(false);
@@ -544,10 +525,12 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
   const r = useMemo(() => blastRadius(CROWN_JEWELS.find((j) => j.id === TABLETOP_JEWEL)!), []);
   const ready = isRetainerReady(record);
   const mode = ready ? GREEN : RED;
-  const steps = useMemo(() => [...TABLETOP.slice(0, -1), FINAL_STEP[ready ? "ready" : "none"]], [ready]);
+  const steps = TABLETOP;
   const last = steps.length - 1;
   const done = step >= last;
   const waiting = step >= 0 && !!steps[step]!.decision && !approval;
+  /** The response race starts once the incident is declared (02:41). */
+  const declared = !!approval && step >= steps.findIndex((s) => s.t === "02:41");
 
   const reset = () => {
     setPlaying(false);
@@ -566,7 +549,7 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
       setPlaying(false);
       return;
     }
-    const t = window.setTimeout(() => setStep((s) => s + 1), step < 0 ? 300 : 2400);
+    const t = window.setTimeout(() => setStep((s) => s + 1), step < 0 ? 300 : 1800);
     return () => window.clearTimeout(t);
   }, [playing, step, done, waiting]);
 
@@ -604,19 +587,22 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
 
       {step >= 0 && (
         <div className="grid gap-3 border-t p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-          <ol className="flex flex-col gap-1">
-            {steps.map((s, i) => (
-              <li
-                key={s.t}
-                className={cn("rounded border-l-2 px-2 py-1 text-xs", i > step && "opacity-35", i === step && "bg-muted/40")}
-                style={{ borderLeftColor: i <= step ? TONE[s.tone] : "transparent" }}
-              >
-                <span className="num mr-2 text-muted-foreground">{s.t}</span>
-                <span className="font-medium">{s.title}</span>
-                {i === step && <div className="mt-0.5 text-[11px] text-muted-foreground">{s.body}</div>}
-              </li>
-            ))}
-          </ol>
+          <div>
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Detection · the same either way</div>
+            <ol className="flex flex-col gap-1">
+              {steps.map((s, i) => (
+                <li
+                  key={s.t}
+                  className={cn("rounded border-l-2 px-2 py-1 text-xs", i > step && "opacity-35", i === step && "bg-muted/40")}
+                  style={{ borderLeftColor: i <= step ? TONE[s.tone] : "transparent" }}
+                >
+                  <span className="num mr-2 text-muted-foreground">{s.t}</span>
+                  <span className="font-medium">{s.title}</span>
+                  {i === step && <div className="mt-0.5 text-[11px] text-muted-foreground">{s.body}</div>}
+                </li>
+              ))}
+            </ol>
+          </div>
 
           <div className="flex flex-col gap-2">
             {done && approval ? (
@@ -636,7 +622,7 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
           </div>
         </div>
       )}
-      {done && approval && <ResponseRace hours={hours} costPerHour={r.costPerHour} ready={isRetainerReady(record)} />}
+      {step >= 0 && <ResponseRace hours={hours} costPerHour={r.costPerHour} ready={ready} started={declared} />}
     </div>
   );
 }
@@ -659,11 +645,13 @@ interface Milestone {
   key?: boolean;
 }
 
-function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHour: number; ready: boolean }) {
+function ResponseRace({ hours, costPerHour, ready, started }: { hours: number; costPerHour: number; ready: boolean; started: boolean }) {
   const total = Math.max(hours, CIR_RESPONSE_H);
   const [e, setE] = useState(0);
   const [run, setRun] = useState(0);
   useEffect(() => {
+    setE(0);
+    if (!started) return;
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
@@ -673,7 +661,7 @@ function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHou
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [total, run]);
+  }, [total, run, started]);
 
   const lanes: { on: boolean; title: string; color: string; end: number; steps: Milestone[] }[] = [
     {
@@ -682,7 +670,8 @@ function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHou
       color: RED,
       end: hours,
       steps: [
-        { at: 0.07, text: "Incident commander decides outside help is needed" },
+        { at: 0.1, text: "Handoff ready, but no documented path: no one to send it to" },
+        { at: 0.15, text: "Incident commander decides outside help is needed" },
         { at: hours * 0.2, text: "Find a provider and agree the scope" },
         { at: hours * 0.55, text: "Contract, legal and purchasing approvals" },
         { at: hours, text: "Responders engaged (your estimate)", key: true },
@@ -694,7 +683,7 @@ function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHou
       color: GREEN,
       end: CIR_RESPONSE_H,
       steps: [
-        { at: 0.07, text: "Incident commander follows the documented engagement steps and sends the handoff" },
+        { at: 0.1, text: "Handoff sent through the documented engagement steps" },
         { at: 0.12, text: "CSAM notified" },
         { at: CIR_RESPONSE_H, text: "Enhanced two-hour response (CIR datasheet)", key: true },
         { at: CIR_RESPONSE_H, text: "Assigned Incident Response Coordinator guides the engagement; evidence already preserved" },
@@ -706,12 +695,18 @@ function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHou
   return (
     <div className="border-t px-3 py-3 text-xs">
       <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-sm font-semibold">Response, side by side</span>
-        <span className="text-muted-foreground">Same incident from 02:41, with and without a retainer</span>
-        <span className="num ml-auto text-sm font-semibold">{clock(e)}</span>
-        <button onClick={() => setRun((x) => x + 1)} className="flex items-center gap-1 rounded border px-2 py-0.5 text-muted-foreground hover:text-foreground">
-          <RotateCcw className="size-3" /> Replay
-        </button>
+        <span className="text-sm font-semibold">Response · where it diverges</span>
+        <span className="text-muted-foreground">The same incident, with and without a retainer</span>
+        {started ? (
+          <>
+            <span className="num ml-auto text-sm font-semibold">{clock(e)}</span>
+            <button onClick={() => setRun((x) => x + 1)} className="flex items-center gap-1 rounded border px-2 py-0.5 text-muted-foreground hover:text-foreground">
+              <RotateCcw className="size-3" /> Replay
+            </button>
+          </>
+        ) : (
+          <span className="ml-auto text-muted-foreground">Starts when the incident is declared at 02:41</span>
+        )}
       </div>
       <div className="mt-2 grid gap-3 md:grid-cols-2">
         {[...lanes].sort((a, b) => Number(b.on === ready) - Number(a.on === ready)).map((l) => {
@@ -729,7 +724,7 @@ function ResponseRace({ hours, costPerHour, ready }: { hours: number; costPerHou
                   {l.title}
                 </span>
                 {l.on === ready && <span className="rounded border px-1 text-[9.5px] uppercase tracking-wider text-muted-foreground">your current setup</span>}
-                <span className="ml-auto text-muted-foreground">{reached ? `Response at ${clock(l.end)}` : "Waiting for expert help…"}</span>
+                <span className="ml-auto text-muted-foreground">{!started ? "Not started" : reached ? `Response at ${clock(l.end)}` : "Waiting for expert help…"}</span>
               </div>
               <div className="mt-1.5 h-1.5 overflow-hidden rounded bg-muted">
                 <div className="h-full rounded transition-[width] duration-100" style={{ width: `${Math.min(100, (e / total) * 100)}%`, background: reached ? `${l.color}55` : l.color }} />
