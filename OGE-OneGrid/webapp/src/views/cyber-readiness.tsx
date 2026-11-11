@@ -126,15 +126,21 @@ export function CyberReadinessPage() {
         title="Cyber readiness"
         description="If an attacker reached your operational network tonight, what would go dark, and how fast could you get expert help?"
         actions={
-          <button onClick={runTabletop} className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
-            <Play className="size-3.5" /> Run the tabletop
-          </button>
+          <div className="flex items-center gap-2">
+            <span
+              title={`Demo data: systems come from the synthetic IT/OT estate in Infrastructure. Exposure is modeled at ${usd(COST_ASSUMPTIONS.perCustomerHour)} per customer-hour and ${usd(COST_ASSUMPTIONS.replacementPowerPerMwh)}/MWh replacement power.`}
+              className="cursor-help rounded border border-violet-400/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300"
+            >
+              Demo data
+            </span>
+            <button onClick={runTabletop} className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+              <Play className="size-3.5" /> Run the tabletop
+            </button>
+          </div>
         }
       />
 
       <div className="flex flex-col gap-3 p-4">
-        <Notice />
-
         <div className="flex flex-wrap items-center gap-x-8 gap-y-2 rounded-md border border-primary/40 bg-card px-4 py-3">
           <div className="min-w-[200px]">
             <div className="text-sm font-semibold">Worst case: {worst.jewel.role}</div>
@@ -144,7 +150,7 @@ export function CyberReadinessPage() {
           <Headline label="Generation" value={`${worst.genMw} MW`} />
           <Headline label="Exposure" value={`${usd(worst.costPerHour)}/h`} color={RED} />
           <Headline label="Readiness" value={`${score} of ${READINESS.length}`} color={score >= 8 ? GREEN : AMBER} />
-          <Headline label="IR retainer" value={RETAINER_STATUS_LABEL[record.status]} color={ready ? GREEN : RED} />
+          <RetainerSwitch ready={ready} onChange={(on) => saveRecord(on ? RETAINER_PRESETS.active : RETAINER_PRESETS.none)} />
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -165,14 +171,28 @@ export function CyberReadinessPage() {
   );
 }
 
-function Notice() {
+/** The one control that drives the story: compare the same incident with and without a retainer. */
+function RetainerSwitch({ ready, onChange }: { ready: boolean; onChange: (on: boolean) => void }) {
+  const opt = (on: boolean, label: string) => {
+    const active = ready === on;
+    const color = on ? GREEN : RED;
+    return (
+      <button
+        onClick={() => onChange(on)}
+        className={cn("rounded px-2.5 py-1 text-xs font-semibold transition-colors", !active && "text-muted-foreground hover:text-foreground")}
+        style={active ? { background: `${color}26`, color, boxShadow: `inset 0 0 0 1px ${color}99` } : undefined}
+      >
+        {label}
+      </button>
+    );
+  };
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs">
-      <span className="rounded border border-violet-400/50 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300">Synthetic exercise</span>
-      <span className="font-medium">No Microsoft engagement is initiated from OneGrid.</span>
-      <span className="text-muted-foreground" title={`Systems come from the synthetic IT/OT estate in Infrastructure. ${usd(COST_ASSUMPTIONS.perCustomerHour)} per customer-hour, ${usd(COST_ASSUMPTIONS.replacementPowerPerMwh)}/MWh replacement power.`}>
-        Exposure figures are modeled and illustrative.
-      </span>
+    <div className="ml-auto">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Incident response retainer</div>
+      <div className="mt-0.5 flex gap-1 rounded-md border bg-background/40 p-0.5">
+        {opt(false, "No retainer")}
+        {opt(true, "CIR retainer")}
+      </div>
     </div>
   );
 }
@@ -280,15 +300,16 @@ function ReadinessCard({
         <span className="rounded border px-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: ready ? GREEN : RED, borderColor: `${ready ? GREEN : RED}99` }}>
           {RETAINER_STATUS_LABEL[record.status]}
         </span>
-        <span className="ml-auto flex gap-2 text-[11px]">
-          <button onClick={() => onSave(RETAINER_PRESETS.none)} className={cn("hover:underline", !ready ? "font-semibold text-foreground" : "text-primary")}>
-            Not in place
-          </button>
-          <button onClick={() => onSave(RETAINER_PRESETS.active)} className={cn("hover:underline", ready ? "font-semibold text-foreground" : "text-primary")}>
-            Active retainer
-          </button>
-        </span>
       </div>
+
+      {ready && (
+        <div className="flex gap-1.5" style={{ color: GREEN }}>
+          <CheckCircle2 className="mt-0.5 size-3 shrink-0" />
+          <span>
+            CIR retainer active with a documented engagement path. The datasheet describes an enhanced two-hour response and an assigned coordinator, subject to your agreement.
+          </span>
+        </div>
+      )}
 
       {gaps.length > 0 ? (
         <div className="flex flex-col gap-0.5">
@@ -658,13 +679,14 @@ function Handoff({ record, approval, r, hours }: { record: RetainerRecord; appro
           </div>
         ))}
       </dl>
-      <div className="flex gap-2 border-t px-2 py-1.5">
+      <div className="flex items-center gap-2 border-t px-2 py-1.5">
         <button onClick={() => void navigator.clipboard?.writeText(handoffText(record, approval, r)).then(() => setCopied(true))} className="flex items-center gap-1 rounded border px-2 py-1 hover:bg-muted/40">
           <ClipboardCopy className="size-3" /> {copied ? "Copied" : "Copy"}
         </button>
         <button onClick={() => setSent(true)} className="flex items-center gap-1 rounded bg-primary px-2.5 py-1 font-semibold text-primary-foreground">
           <Send className="size-3" /> Send (simulated)
         </button>
+        <span className="text-[10.5px] text-muted-foreground">Simulated: nothing is sent to Microsoft.</span>
       </div>
       {sent && (
         <div className="border-t px-2 py-1.5" style={{ background: ready ? `${GREEN}0d` : "#ff8a3d0d" }}>
