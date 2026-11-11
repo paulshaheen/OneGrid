@@ -137,6 +137,7 @@ export interface ReadinessItem {
   detail: string;
   /** Demo default. */
   done: boolean;
+  /** Derived from the retainer record instead of toggled. */
   retainer?: boolean;
 }
 
@@ -149,7 +150,83 @@ export const READINESS: ReadinessItem[] = [
   { id: "pam", label: "Privileged access protected", detail: "MFA and privileged access workstations for OT administrators.", done: true },
   { id: "soc", label: "24/7 security operations coverage", detail: "Someone watching alerts nights and weekends.", done: true },
   { id: "oob", label: "Out-of-band communications plan", detail: "How leaders, operators and responders talk if email and Teams are down.", done: false },
-  { id: "retainer", label: "Incident response retainer in place", detail: "For example the Microsoft Cybersecurity Incident Response retainer (CIR), with prioritized access to Microsoft Incident Response (DART).", done: false, retainer: true },
+  { id: "retainer", label: "Incident response retainer with a documented engagement path", detail: "Set from the retainer record below.", done: false, retainer: true },
+];
+
+// ── Incident response retainer record ────────────────────────────────────────
+export type RetainerStatus = "active" | "proposal" | "expired" | "none";
+
+export interface RetainerRecord {
+  status: RetainerStatus;
+  provider: string;
+  termStart: string;
+  termEnd: string;
+  csam: string;
+  /** The customer's own documented steps for engaging incident response. */
+  engagementSteps: string;
+  incidentCommander: string;
+  lastExercise: string;
+  lastVerified: string;
+  source: "Customer-reported" | "Verified with Microsoft Services";
+}
+
+export const RETAINER_STATUS_LABEL: Record<RetainerStatus, string> = {
+  active: "Active",
+  proposal: "Proposal in progress",
+  expired: "Expired",
+  none: "Not in place",
+};
+
+export const RETAINER_PRESETS: Record<"none" | "active", RetainerRecord> = {
+  none: {
+    status: "none",
+    provider: "",
+    termStart: "",
+    termEnd: "",
+    csam: "",
+    engagementSteps: "",
+    incidentCommander: "Plant manager, Bayou Generating Plant",
+    lastExercise: "",
+    lastVerified: "2026-11-11",
+    source: "Customer-reported",
+  },
+  active: {
+    status: "active",
+    provider: "Microsoft Cybersecurity Incident Response (CIR)",
+    termStart: "2026-07-01",
+    termEnd: "2027-06-30",
+    csam: "Assigned CSAM (name and contact in the agreement)",
+    engagementSteps:
+      "1. The incident commander, or a delegate named in the IR plan, engages Microsoft Incident Response using the contact process in our CIR agreement.\n2. Reference the retainer and share this handoff package.\n3. Notify our CSAM to coordinate.\n4. Brief executives on the plant operating decision.",
+    incidentCommander: "Plant manager, Bayou Generating Plant",
+    lastExercise: "2026-03-18",
+    lastVerified: "2026-10-02",
+    source: "Customer-reported",
+  },
+};
+
+const daysBetween = (a: string, b: Date) => (b.getTime() - new Date(`${a}T00:00:00`).getTime()) / 86_400_000;
+
+/** Readiness gaps the record reveals, most important first. */
+export function retainerGaps(r: RetainerRecord, today = new Date()): string[] {
+  const gaps: string[] = [];
+  if (r.status !== "active") gaps.push("No active incident response retainer: outside help would be arranged during the incident.");
+  if (!r.engagementSteps.trim()) gaps.push("No documented path for engaging outside incident responders.");
+  if (r.status === "active" && r.termEnd && daysBetween(r.termEnd, today) > -90)
+    gaps.push(`Retainer term ends ${r.termEnd}: plan the renewal.`);
+  if (!r.lastExercise || daysBetween(r.lastExercise, today) > 365) gaps.push("No tabletop exercise in the last 12 months.");
+  if (r.lastVerified && daysBetween(r.lastVerified, today) > 180) gaps.push("Retainer details not verified in the last 6 months.");
+  return gaps;
+}
+
+/** Quoted from the Microsoft Cybersecurity Incident Response datasheet. */
+export const CIR_DATASHEET_URL =
+  "https://cdn-dynmedia-1.microsoft.com/is/content/microsoftcorp/microsoft/unisp/documents/presentations/Cybersecurity%20Incident%20Response%20Datasheet.pdf";
+export const CIR_DATASHEET: string[] = [
+  "“Enhanced two-hour response in the event of a security incident (if purchasing Cybersecurity Incident Response proactively as a retainer).”",
+  "“Assigned Incident Response Coordinator: a Microsoft incident response expert to guide your engagement during an active security incident.”",
+  "“Assigned Customer Success Account Manager (CSAM): your point of contact to schedule proactive services.”",
+  "Proactive compromise assessments and threat briefings tailored to your industry.",
 ];
 
 // ── Tabletop: historian tampering at Bayou Generating Plant ─────────────────
@@ -160,6 +237,8 @@ export interface TabletopStep {
   /** Infra asset ids to highlight on the path diagram. */
   highlight: string[];
   tone: "info" | "warn" | "critical" | "action";
+  /** Playback stops here until an operator decides. */
+  decision?: boolean;
 }
 
 export const TABLETOP_JEWEL = "historian-edge";
@@ -175,37 +254,86 @@ export const TABLETOP: TabletopStep[] = [
   {
     t: "02:31",
     title: "14 sensors flatline in the same second",
-    body: "Steam pressure, turbine vibration and bearing temperatures on GT1 and unit 2 stop changing at once. The control room HMI still looks normal.",
+    body: "Steam pressure, turbine vibration and bearing temperatures on GT1 and unit 2 stop changing at once. The control room HMI keeps updating.",
     highlight: ["sensor-plant-steam", "plc-plant-1", "plc-plant-2"],
     tone: "warn",
   },
   {
     t: "02:32",
-    title: "OneGrid: this is not an instrument failure",
-    body: "One failed transducer flatlines one tag. Fourteen tags across two units in the same second, values that repeat an earlier hour, and the HMI and historian disagreeing point to replayed or tampered data.",
+    title: "OneGrid weighs the explanations",
+    body: "OneGrid ranks the possible causes with the evidence for and against each, and flags the event for people to decide. It does not conclude on its own.",
     highlight: ["historian-edge", "vm-historian", "eventhouse-eh"],
     tone: "critical",
   },
   {
     t: "02:34",
-    title: "Agent recommends: isolate, preserve, escalate",
-    body: "Switch operators to local panels, isolate the historian conduit, preserve logs and memory, and page the SOC. Do not reboot anything yet: that destroys evidence.",
+    title: "Recommended actions wait for operator approval",
+    body: "OneGrid recommends preserving evidence, checking values on local panels and opening a SOC investigation. Isolating any OT link is an operations decision.",
     highlight: ["historian-edge", "fw-dc"],
     tone: "action",
+    decision: true,
   },
   {
     t: "02:41",
-    title: "SOC confirms: Sev 1 cyber incident declared",
-    body: "Unknown outbound connection from the plant historian. Leadership must decide on unit operation and bring in outside incident responders.",
+    title: "SOC corroborates; incident commander declares Sev 1",
+    body: "The SOC finds an unknown outbound connection from the plant historian. The plant manager, as incident commander, declares a Sev 1 cyber incident.",
     highlight: ["historian-edge", "scada-gw-plant", "plc-plant-1", "plc-plant-2", "rtu-plant"],
     tone: "critical",
   },
+  {
+    t: "02:47",
+    title: "Handoff package ready for outside responders",
+    body: "OneGrid assembles the evidence, open questions, affected systems and modeled exposure for the incident commander to review and send through the documented engagement path.",
+    highlight: ["historian-edge"],
+    tone: "action",
+  },
 ];
 
-export const FAILURE_VS_TAMPER: { signal: string; failure: string; tamper: string }[] = [
-  { signal: "How many sensors", failure: "One sensor or one instrument loop", tamper: "Many sensors across units at the same moment" },
-  { signal: "What the value does", failure: "Drops to 0, or to a fixed fault value", tamper: "Freezes at a plausible value, or replays an earlier period" },
-  { signal: "HMI vs historian", failure: "Agree (both show the fault)", tamper: "Disagree (the control room sees one thing, the historian another)" },
-  { signal: "Configuration", failure: "No changes", tamper: "Changes outside the change window, no ticket" },
-  { signal: "Network", failure: "Normal", tamper: "New or unusual connections from OT-facing servers" },
+export interface Hypothesis {
+  name: string;
+  confidence: "High" | "Medium" | "Low" | "Very low";
+  evidenceFor: string[];
+  evidenceAgainst: string[];
+}
+
+export const HYPOTHESES: Hypothesis[] = [
+  {
+    name: "Tampering or replayed data",
+    confidence: "High",
+    evidenceFor: ["Configuration change at 02:14 with no ticket", "Values repeat the 01:31–01:32 window exactly", "HMI and historian disagree"],
+    evidenceAgainst: ["No malware alert yet"],
+  },
+  {
+    name: "Historian or interface failure",
+    confidence: "Medium",
+    evidenceFor: ["Would freeze many tags at once"],
+    evidenceAgainst: ["Doesn't explain the configuration change or the repeated values"],
+  },
+  {
+    name: "Network loss to the gateway",
+    confidence: "Low",
+    evidenceFor: ["Would freeze tags from both units"],
+    evidenceAgainst: ["HMI still updating; plant network healthy"],
+  },
+  {
+    name: "Instrument failure",
+    confidence: "Very low",
+    evidenceFor: [],
+    evidenceAgainst: ["14 tags across 2 units in the same second"],
+  },
+];
+
+export interface RecommendedAction {
+  id: string;
+  label: string;
+  note: string;
+  /** Pre-selected for approval. */
+  recommended: boolean;
+}
+
+export const ACTIONS: RecommendedAction[] = [
+  { id: "preserve", label: "Preserve historian logs and memory; don't reboot", note: "Rebooting destroys evidence responders need.", recommended: true },
+  { id: "verify", label: "Check process values on local panels", note: "Operators trust local instruments, not the historian, until cleared.", recommended: true },
+  { id: "soc", label: "Open a SOC investigation", note: "Security operations look for the attacker's access.", recommended: true },
+  { id: "isolate", label: "Isolate the historian's link to the SCADA gateway", note: "Operations decision: the plant runs on local control and loses remote history.", recommended: false },
 ];

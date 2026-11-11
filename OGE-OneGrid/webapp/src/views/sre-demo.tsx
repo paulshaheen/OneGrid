@@ -568,9 +568,9 @@ function CyberTabletopCard() {
           </span>
         </div>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Fourteen plant sensors flatline in the same second. OneGrid tells tampering from an instrument failure, the agent
-          recommends isolate, preserve and escalate, and the outcome shows the difference an incident response retainer makes.
-          Scripted and presenter-safe; nothing in Azure is changed.
+          Fourteen plant sensors freeze in the same second. OneGrid weighs tampering against equipment and network
+          failures, operators approve every action, and the incident commander gets a handoff package for outside
+          responders. Synthetic exercise; no Microsoft engagement is initiated and nothing in Azure is changed.
         </p>
       </div>
       <OpsLink to="/cyber-readiness" hash="tabletop" className={PRIMARY_BUTTON}>
