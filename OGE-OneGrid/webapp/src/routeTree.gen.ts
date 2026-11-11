@@ -41,6 +41,7 @@ import { Route as AuthenticatedAppAssetsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAppCommandRouteImport } from './routes/_authenticated/app.command'
 import { Route as AuthenticatedAppControlRoomRouteImport } from './routes/_authenticated/app.control-room'
 import { Route as AuthenticatedAppCopilotRouteImport } from './routes/_authenticated/app.copilot'
+import { Route as AuthenticatedAppCyberReadinessRouteImport } from './routes/_authenticated/app.cyber-readiness'
 import { Route as AuthenticatedAppDeploymentRouteImport } from './routes/_authenticated/app.deployment'
 import { Route as AuthenticatedAppDistributionNetworkRouteImport } from './routes/_authenticated/app.distribution-network'
 import { Route as AuthenticatedAppEsuPlannerRouteImport } from './routes/_authenticated/app.esu-planner'
@@ -223,6 +224,12 @@ const AuthenticatedAppCopilotRoute = AuthenticatedAppCopilotRouteImport.update({
   path: '/app/copilot',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppCyberReadinessRoute =
+  AuthenticatedAppCyberReadinessRouteImport.update({
+    id: '/app/cyber-readiness',
+    path: '/app/cyber-readiness',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppDeploymentRoute =
   AuthenticatedAppDeploymentRouteImport.update({
     id: '/app/deployment',
@@ -367,6 +374,7 @@ export interface FileRoutesByFullPath {
   '/app/command': typeof AuthenticatedAppCommandRoute
   '/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
+  '/app/cyber-readiness': typeof AuthenticatedAppCyberReadinessRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
   '/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
@@ -420,6 +428,7 @@ export interface FileRoutesByTo {
   '/app/command': typeof AuthenticatedAppCommandRoute
   '/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/app/copilot': typeof AuthenticatedAppCopilotRoute
+  '/app/cyber-readiness': typeof AuthenticatedAppCyberReadinessRoute
   '/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
   '/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
@@ -475,6 +484,7 @@ export interface FileRoutesById {
   '/_authenticated/app/command': typeof AuthenticatedAppCommandRoute
   '/_authenticated/app/control-room': typeof AuthenticatedAppControlRoomRoute
   '/_authenticated/app/copilot': typeof AuthenticatedAppCopilotRoute
+  '/_authenticated/app/cyber-readiness': typeof AuthenticatedAppCyberReadinessRoute
   '/_authenticated/app/deployment': typeof AuthenticatedAppDeploymentRoute
   '/_authenticated/app/distribution-network': typeof AuthenticatedAppDistributionNetworkRoute
   '/_authenticated/app/esu-planner': typeof AuthenticatedAppEsuPlannerRoute
@@ -530,6 +540,7 @@ export interface FileRouteTypes {
     | '/app/command'
     | '/app/control-room'
     | '/app/copilot'
+    | '/app/cyber-readiness'
     | '/app/deployment'
     | '/app/distribution-network'
     | '/app/esu-planner'
@@ -583,6 +594,7 @@ export interface FileRouteTypes {
     | '/app/command'
     | '/app/control-room'
     | '/app/copilot'
+    | '/app/cyber-readiness'
     | '/app/deployment'
     | '/app/distribution-network'
     | '/app/esu-planner'
@@ -637,6 +649,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/command'
     | '/_authenticated/app/control-room'
     | '/_authenticated/app/copilot'
+    | '/_authenticated/app/cyber-readiness'
     | '/_authenticated/app/deployment'
     | '/_authenticated/app/distribution-network'
     | '/_authenticated/app/esu-planner'
@@ -914,6 +927,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCopilotRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/cyber-readiness': {
+      id: '/_authenticated/app/cyber-readiness'
+      path: '/app/cyber-readiness'
+      fullPath: '/app/cyber-readiness'
+      preLoaderRoute: typeof AuthenticatedAppCyberReadinessRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/deployment': {
       id: '/_authenticated/app/deployment'
       path: '/app/deployment'
@@ -1064,6 +1084,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppCommandRoute: typeof AuthenticatedAppCommandRoute
   AuthenticatedAppControlRoomRoute: typeof AuthenticatedAppControlRoomRoute
   AuthenticatedAppCopilotRoute: typeof AuthenticatedAppCopilotRoute
+  AuthenticatedAppCyberReadinessRoute: typeof AuthenticatedAppCyberReadinessRoute
   AuthenticatedAppDeploymentRoute: typeof AuthenticatedAppDeploymentRoute
   AuthenticatedAppDistributionNetworkRoute: typeof AuthenticatedAppDistributionNetworkRoute
   AuthenticatedAppEsuPlannerRoute: typeof AuthenticatedAppEsuPlannerRoute
@@ -1094,6 +1115,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppCommandRoute: AuthenticatedAppCommandRoute,
   AuthenticatedAppControlRoomRoute: AuthenticatedAppControlRoomRoute,
   AuthenticatedAppCopilotRoute: AuthenticatedAppCopilotRoute,
+  AuthenticatedAppCyberReadinessRoute: AuthenticatedAppCyberReadinessRoute,
   AuthenticatedAppDeploymentRoute: AuthenticatedAppDeploymentRoute,
   AuthenticatedAppDistributionNetworkRoute:
     AuthenticatedAppDistributionNetworkRoute,

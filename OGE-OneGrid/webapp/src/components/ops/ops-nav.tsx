@@ -12,6 +12,8 @@ export function useOpsBase(): OpsBase {
 type OpsLinkProps = Omit<ComponentPropsWithoutRef<"a">, "href"> & {
   /** Path relative to the console root, e.g. "/risk" or "/" for the overview. */
   to: string;
+  /** Optional fragment to scroll to, without the "#". */
+  hash?: string;
 };
 
 export function OpsLink({ to, ...rest }: OpsLinkProps) {

@@ -29,6 +29,7 @@ import {
   Settings,
   ShieldAlert,
   ShieldCheck,
+  ShieldHalf,
   SlidersHorizontal,
   Timer,
   UserCog,
@@ -252,6 +253,7 @@ const ADMIN: Group = {
     { to: "/infrastructure", label: "Infrastructure", icon: Server },
     { to: "/thresholds", label: "Thresholds", icon: SlidersHorizontal },
     { to: "/governance", label: "Governance & Security", icon: ShieldCheck },
+    { to: "/cyber-readiness", label: "Cyber Readiness", icon: ShieldHalf },
     { to: "/deployment", label: "Deployment", icon: ServerCog },
   ],
 };
@@ -291,6 +293,7 @@ const MOBILE_ROUTES = [
   { to: "/infrastructure", label: "Infrastructure" },
   { to: "/thresholds", label: "Thresholds" },
   { to: "/governance", label: "Governance & Security" },
+  { to: "/cyber-readiness", label: "Cyber Readiness" },
   { to: "/deployment", label: "Deployment" },
   { to: "/alerts", label: "Alerts" },
 ];

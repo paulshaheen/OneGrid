@@ -15,6 +15,7 @@ import {
   RotateCcw,
   ServerCrash,
   ShieldCheck,
+  ShieldHalf,
   Siren,
   Wrench,
   X,
@@ -25,6 +26,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/ops/AppShell";
+import { OpsLink } from "@/components/ops/ops-nav";
 import { relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -442,6 +444,7 @@ export function SreDemoPage() {
               )}
           </div>
         )}
+        <CyberTabletopCard />
         {status?.alertsError && (
           <p className="text-xs text-muted-foreground">Alerts unavailable: {status.alertsError}</p>
         )}
@@ -548,6 +551,33 @@ function scenarioStage(firing: boolean, agent?: ScenarioAgent): number {
   if (agent?.proposal || agent?.status === "complete") return 3;
   if (firing || agent?.status === "investigating") return 2;
   return 1;
+}
+
+/** Cyber scenario: a scripted tabletop on the Cyber Readiness page (it doesn't touch Azure). */
+function CyberTabletopCard() {
+  return (
+    <Panel className="flex flex-wrap items-center gap-3 p-4">
+      <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+        <ShieldHalf className="size-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">Cyber: historian tampering</span>
+          <span className="rounded border border-violet-400/50 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300">
+            Tabletop
+          </span>
+        </div>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Fourteen plant sensors flatline in the same second. OneGrid tells tampering from an instrument failure, the agent
+          recommends isolate, preserve and escalate, and the outcome shows the difference an incident response retainer makes.
+          Scripted and presenter-safe; nothing in Azure is changed.
+        </p>
+      </div>
+      <OpsLink to="/cyber-readiness" hash="tabletop" className={PRIMARY_BUTTON}>
+        Run the tabletop
+      </OpsLink>
+    </Panel>
+  );
 }
 
 function ScenarioCard({
