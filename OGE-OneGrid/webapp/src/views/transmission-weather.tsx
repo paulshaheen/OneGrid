@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import type { FeatureCollection } from "geojson";
-import { CloudSnow, Crosshair, Gauge, Loader2, Pause, Play, Thermometer, Truck, Wind, Zap } from "lucide-react";
+import { ChevronDown, CloudSnow, Crosshair, ExternalLink, Gauge, Loader2, Pause, Play, Sparkles, Thermometer, Truck, Wind, Zap } from "lucide-react";
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import { RiskBadge, StatCell } from "@/components/ops/RiskBadge";
@@ -26,6 +26,7 @@ import {
   type LineResult,
 } from "@/lib/services/corridor/engine";
 import { getCorridorWeather, type CorridorSource, type CorridorWeather } from "@/lib/services/corridor/server";
+import { ILLUSTRATIVE_NOTE, alignHours, decisionDiff, illustrativeGfs, type DecisionDiff } from "@/lib/services/corridor/compare";
 import type { RiskLevel } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 import { WX_LEGEND, renderWeather, weatherSummary, windArrows, type WxLayer } from "@/components/transmission/weather-layer";
@@ -37,17 +38,19 @@ type SourceSel = CorridorSource | "compare";
 
 /** Weather layer shown by default for each analytics tab. */
 const TAB_WX: Record<Tab, WxLayer> = { outage: "gust", ice: "precip", rating: "temp", heat: "temp", crews: "precip" };
-const WX_OPTIONS: { id: WxLayer; label: string }[] = [
+const WX_OPTIONS: { id: WxLayer; label: string; compareOnly?: boolean }[] = [
   { id: "precip", label: "Precipitation" },
   { id: "temp", label: "Temperature" },
   { id: "gust", label: "Gusts" },
+  { id: "dtemp", label: "Δ Temp", compareOnly: true },
+  { id: "dgust", label: "Δ Gust", compareOnly: true },
   { id: "off", label: "Off" },
 ];
 
 const SOURCES: { id: SourceSel; label: string; hint: string }[] = [
+  { id: "compare", label: "Aurora vs NOAA", hint: "What changes when you forecast with Aurora instead of NOAA GFS" },
   { id: "gfs", label: "NOAA GFS", hint: "Public baseline forecast" },
   { id: "aurora", label: "Aurora", hint: "Microsoft Aurora AI forecast" },
-  { id: "compare", label: "Compare", hint: "Aurora vs NOAA GFS, line by line" },
   { id: "scenario-ice", label: "Ice storm", hint: "Synthetic demo scenario" },
   { id: "scenario-heat", label: "Heat dome", hint: "Synthetic demo scenario" },
 ];
@@ -94,7 +97,7 @@ function lineColor(tab: Tab, x: LineHour | undefined): string {
 }
 
 export function TransmissionWeatherPage() {
-  const [source, setSource] = useState<SourceSel>("gfs");
+  const [source, setSource] = useState<SourceSel>("compare");
   const [tab, setTab] = useState<Tab>("outage");
   const [hour, setHour] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -102,7 +105,16 @@ export function TransmissionWeatherPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const primary: CorridorSource = source === "compare" ? "aurora" : source;
+  const compare = source === "compare";
+  const auroraQ = useQuery({
+    queryKey: ["corridor-weather", "aurora"],
+    queryFn: () => getCorridorWeather({ data: { source: "aurora" } }),
+    staleTime: 10 * 60_000,
+    enabled: compare || source === "aurora",
+  });
+  // Without a published Aurora corridor run, Compare falls back to a clearly labelled illustrative pair.
+  const illustrative = compare && auroraQ.isSuccess && !auroraQ.data.available;
+  const primary: CorridorSource = compare ? (illustrative ? "scenario-ice" : "aurora") : source;
   const q = useQuery({
     queryKey: ["corridor-weather", primary],
     queryFn: () => getCorridorWeather({ data: { source: primary } }),
@@ -112,14 +124,21 @@ export function TransmissionWeatherPage() {
     queryKey: ["corridor-weather", "gfs"],
     queryFn: () => getCorridorWeather({ data: { source: "gfs" } }),
     staleTime: 10 * 60_000,
-    enabled: source === "compare",
+    enabled: compare && !illustrative,
   });
-  const weather = q.data;
+  const weather = useMemo<CorridorWeather | undefined>(() => {
+    const w = q.data;
+    if (!w || !illustrative) return w;
+    return { ...w, source: "aurora", label: "Microsoft Aurora (illustrative)", detail: "the ice storm + squall line scenario stands in for an Aurora run" };
+  }, [q.data, illustrative]);
+  const baseWeather = useMemo<CorridorWeather | null>(() => {
+    if (!compare || !weather?.available) return null;
+    if (illustrative) return q.data ? illustrativeGfs(q.data) : null;
+    return gfsQ.data?.available ? alignHours(gfsQ.data, weather.hours) : null;
+  }, [compare, illustrative, weather, q.data, gfsQ.data]);
   const analysis = useMemo(() => (weather?.available ? analyzeCorridors(weather) : null), [weather]);
-  const baseline = useMemo(
-    () => (source === "compare" && gfsQ.data?.available ? analyzeCorridors(gfsQ.data) : null),
-    [source, gfsQ.data],
-  );
+  const baseline = useMemo(() => (baseWeather ? analyzeCorridors(baseWeather) : null), [baseWeather]);
+  const diff = useMemo(() => (analysis && baseline ? decisionDiff(analysis, baseline) : null), [analysis, baseline]);
   const n = analysis?.hours.length ?? 0;
   const h = Math.min(hour, Math.max(0, n - 1));
 
@@ -132,15 +151,19 @@ export function TransmissionWeatherPage() {
   const fc = useMemo(() => buildFeatures(analysis, tab, h), [analysis, tab, h]);
   const [wxSel, setWxSel] = useState<WxLayer | "auto">("auto");
   const [showArrows, setShowArrows] = useState(true);
-  const wxLayer: WxLayer = wxSel === "auto" ? TAB_WX[tab] : wxSel;
-  const wxImage = useMemo(() => (mounted ? renderWeather(weather, wxLayer, h) : null), [mounted, weather, wxLayer, h]);
+  const wxLayer: WxLayer =
+    wxSel === "auto" || (!baseWeather && (wxSel === "dtemp" || wxSel === "dgust")) ? TAB_WX[tab] : wxSel;
+  const wxImage = useMemo(
+    () => (mounted ? renderWeather(weather, wxLayer, h, baseWeather) : null),
+    [mounted, weather, wxLayer, h, baseWeather],
+  );
   const arrows = useMemo(
     () => (showArrows ? windArrows(weather, h) : ({ type: "FeatureCollection", features: [] } as FeatureCollection)),
     [showArrows, weather, h],
   );
   const wxNow = useMemo(() => weatherSummary(weather, h), [weather, h]);
   const sel = analysis?.lines.find((l) => l.line.id === selected) ?? null;
-  const loading = q.isLoading || (source === "compare" && gfsQ.isLoading);
+  const loading = q.isLoading || (compare && (auroraQ.isLoading || (!illustrative && gfsQ.isLoading)));
 
   // Attention: everything Elevated or worse for the active source, and badge counts.
   const items = useMemo(() => (analysis ? focusItems(analysis) : []), [analysis]);
@@ -213,8 +236,10 @@ export function TransmissionWeatherPage() {
                   className={cn(
                     "flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors",
                     source === s.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    s.id === "compare" && source !== s.id && "text-primary",
                   )}
                 >
+                  {s.id === "compare" && <Sparkles className="size-3" />}
                   {s.label}
                   {b && <CountBadge n={b.n} level={b.worst} />}
                 </button>
@@ -225,11 +250,29 @@ export function TransmissionWeatherPage() {
       />
 
       <div className="flex flex-col gap-3 p-4">
-        <SourceBanner weather={weather} loading={loading} compare={source === "compare"} baseline={gfsQ.data} />
+        <SourceBanner
+          weather={weather}
+          loading={loading}
+          baseline={baseWeather}
+          illustrative={illustrative}
+          auroraMissing={source === "aurora"}
+          onCompare={() => setSource("compare")}
+        />
+
+        {(compare || source === "aurora") && <WhyAurora diff={diff} illustrative={illustrative} hours={analysis?.hours ?? []} />}
 
         {analysis && <Kpis a={analysis} />}
 
-        {analysis && <FocusStrip items={items} hours={analysis.hours} onPick={jumpTo} selected={selected} tab={tab} />}
+        {analysis && (
+          <FocusStrip
+            items={items}
+            hours={analysis.hours}
+            onPick={jumpTo}
+            selected={selected}
+            tab={tab}
+            baselineLevel={diff?.baselineLevel ?? null}
+          />
+        )}
 
         <div className="flex flex-wrap gap-1 border-b">
           {TABS.map((t) => {
@@ -280,7 +323,7 @@ export function TransmissionWeatherPage() {
               <div className="absolute top-2 left-2 flex flex-col gap-1 rounded-md border bg-card/90 p-1.5 text-[11px] backdrop-blur">
                 <span className="px-1 font-semibold text-muted-foreground">Weather layer</span>
                 <div className="flex gap-0.5">
-                  {WX_OPTIONS.map((o) => (
+                  {WX_OPTIONS.filter((o) => !o.compareOnly || baseWeather).map((o) => (
                     <button
                       key={o.id}
                       onClick={() => setWxSel(o.id)}
@@ -356,7 +399,7 @@ export function TransmissionWeatherPage() {
           <div className="flex min-h-0 flex-col gap-3">
             {analysis ? (
               <>
-                {source === "compare" && <ComparePanel aurora={analysis} gfs={baseline} />}
+                {compare && baseline && <ComparePanel aurora={analysis} gfs={baseline} onSelect={setSelected} />}
                 <TabPanel tab={tab} a={analysis} hour={h} onSelect={setSelected} selected={selected} />
               </>
             ) : (
@@ -394,18 +437,39 @@ function CountBadge({ n, level }: { n: number; level: Level }) {
 const KIND_ICON: Record<FocusItem["kind"], typeof Wind> = { outage: Wind, ice: CloudSnow, rating: Gauge, heat: Thermometer, crews: Truck };
 const KIND_LABEL: Record<FocusItem["kind"], string> = { outage: "Outage", ice: "Ice", rating: "Rating", heat: "Heat", crews: "Crews" };
 
+const LEVEL_ORDER: Level[] = ["normal", "monitor", "elevated", "high", "critical"];
+
+/** What NOAA GFS says about the same item, shown on focus cards in the comparison. */
+function BaselineTag({ aurora, gfs }: { aurora: Level; gfs: Level }) {
+  const d = LEVEL_ORDER.indexOf(aurora) - LEVEL_ORDER.indexOf(gfs);
+  const text = d === 0 ? "GFS agrees" : LEVEL_ORDER.indexOf(gfs) < 2 ? "GFS misses it" : `GFS: ${gfs}`;
+  return (
+    <span
+      title={`NOAA GFS rates this ${gfs}`}
+      className={cn(
+        "rounded px-1 py-px text-[9.5px] font-semibold uppercase tracking-wider",
+        d === 0 ? "bg-muted text-muted-foreground" : d > 0 ? "bg-[#ff8a3d]/20 text-[#ff8a3d]" : "bg-[#4aa3ff]/20 text-[#4aa3ff]",
+      )}
+    >
+      {text}
+    </span>
+  );
+}
+
 function FocusStrip({
   items,
   hours,
   onPick,
   selected,
   tab,
+  baselineLevel,
 }: {
   items: FocusItem[];
   hours: string[];
   onPick: (it: FocusItem) => void;
   selected: string | null;
   tab: Tab;
+  baselineLevel: Map<string, Level> | null;
 }) {
   if (!items.length)
     return (
@@ -458,7 +522,10 @@ function FocusStrip({
               </span>
               <span className="truncate font-medium">{it.title}</span>
               <span className="truncate text-muted-foreground">{it.detail}</span>
-              <span className="num text-[10px] text-muted-foreground">{hourLabel(hours[it.hour], it.hour)}</span>
+              <span className="flex items-center justify-between gap-1">
+                <span className="num text-[10px] text-muted-foreground">{hourLabel(hours[it.hour], it.hour)}</span>
+                {baselineLevel && <BaselineTag aurora={it.level} gfs={baselineLevel.get(it.id) ?? "normal"} />}
+              </span>
             </button>
           );
         })}
@@ -510,13 +577,17 @@ function buildFeatures(a: CorridorAnalysis | null, tab: Tab, h: number) {
 function SourceBanner({
   weather,
   loading,
-  compare,
   baseline,
+  illustrative,
+  auroraMissing,
+  onCompare,
 }: {
   weather: CorridorWeather | undefined;
   loading: boolean;
-  compare: boolean;
-  baseline: CorridorWeather | undefined;
+  baseline: CorridorWeather | null;
+  illustrative: boolean;
+  auroraMissing: boolean;
+  onCompare: () => void;
 }) {
   if (loading)
     return (
@@ -525,6 +596,16 @@ function SourceBanner({
       </div>
     );
   if (!weather) return null;
+  if (illustrative)
+    return (
+      <div className="rounded-md border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs">
+        <span className="mr-1.5 rounded bg-violet-500/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
+          Illustrative
+        </span>
+        <span className="font-semibold">Microsoft Aurora vs NOAA GFS</span>
+        <span className="text-muted-foreground"> · {ILLUSTRATIVE_NOTE}</span>
+      </div>
+    );
   const scenario = weather.source.startsWith("scenario");
   return (
     <div
@@ -534,10 +615,146 @@ function SourceBanner({
       )}
     >
       <span className="font-semibold">{weather.label}</span>
-      {compare && baseline?.available && <span className="font-semibold"> vs {baseline.label}</span>}
+      {baseline && <span className="font-semibold"> vs {baseline.label}</span>}
       <span className="text-muted-foreground"> · {weather.detail}</span>
       {weather.available && !scenario && (
         <span className="text-muted-foreground"> · issued {new Date(weather.issuedIso).toLocaleString()}</span>
+      )}
+      {!weather.available && auroraMissing && (
+        <button onClick={onCompare} className="ml-1.5 font-medium text-primary hover:underline">
+          See the illustrative Aurora vs NOAA comparison →
+        </button>
+      )}
+    </div>
+  );
+}
+
+const NATURE_URL = "https://www.nature.com/articles/s41586-025-09005-y";
+const MSR_URL = "https://www.microsoft.com/en-us/research/blog/introducing-aurora-the-first-large-scale-foundation-model-of-the-atmosphere/";
+
+/** The case for Aurora: published evidence plus what it changes on this network. */
+function WhyAurora({ diff, illustrative, hours }: { diff: DecisionDiff | null; illustrative: boolean; hours: string[] }) {
+  const [open, setOpen] = useState(true);
+  const pillars: { title: string; stat: string; body: string }[] = [
+    {
+      title: "More accurate",
+      stat: "92%",
+      body: "of targets where Aurora's 10-day forecast beat ECMWF's HRES, the benchmark global model. Its 5-day hurricane tracks beat 7 operational forecasting centres on every target (Nature, 2025).",
+    },
+    {
+      title: "Fast enough to rerun",
+      stat: "~5,000×",
+      body: "faster than ECMWF's IFS (Microsoft Research estimate). A 5-day run takes minutes on one GPU, so you can rerun as each new analysis lands and afford ensembles.",
+    },
+    {
+      title: "Yours to run",
+      stat: "Your tenant",
+      body: "Runs in your Azure subscription over your territory on your schedule. Results land in Fabric beside the asset model, not in a vendor portal.",
+    },
+    {
+      title: "Adapts to you",
+      stat: "Fine-tune",
+      body: "A foundation model: fine-tune it on your own weather stations, line sensors and outage history. Fine-tuned versions already beat operational air-quality (74%) and ocean-wave (86%) models.",
+    },
+  ];
+  const sign = (v: number, d = 0) => `${v > 0 ? "+" : ""}${v.toFixed(d)}`;
+  const at = (x: number | null) => (x == null ? "none" : hourLabel(hours[x], x));
+  return (
+    <div className="rounded-md border border-primary/40 bg-gradient-to-r from-primary/10 via-card to-card">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
+        <span className="flex items-center gap-1.5 text-sm font-semibold">
+          <Sparkles className="size-3.5 text-primary" /> Why Aurora for transmission weather
+        </span>
+        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="grid gap-3 border-t px-3 py-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            {pillars.map((p) => (
+              <div key={p.title} className="rounded-md border bg-background/40 px-2.5 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{p.title}</div>
+                <div className="num text-lg font-semibold text-primary">{p.stat}</div>
+                <div className="text-[11px] leading-snug text-muted-foreground">{p.body}</div>
+              </div>
+            ))}
+            <div className="col-span-2 text-[10.5px] text-muted-foreground md:col-span-4">
+              Aurora starts from the same NOAA or ECMWF analysis, so it builds on public data rather than replacing it. The 0.25° model used here does not forecast precipitation, gusts or sunshine, so those come from GFS.{" "}
+              <a href={NATURE_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+                Nature paper <ExternalLink className="size-2.5" />
+              </a>{" "}
+              ·{" "}
+              <a href={MSR_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+                Microsoft Research <ExternalLink className="size-2.5" />
+              </a>
+            </div>
+          </div>
+          <div className="rounded-md border bg-background/40 px-3 py-2 text-[11.5px]">
+            <div className="mb-1 flex items-center gap-1.5 font-semibold">
+              What changes on this network
+              {illustrative && (
+                <span className="rounded bg-violet-500/30 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-violet-200">Illustrative</span>
+              )}
+            </div>
+            {!diff ? (
+              <div className="text-muted-foreground">Open Aurora vs NOAA to compare the two forecasts line by line.</div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {[
+                    ["Lines with ≥ ¼ in ice", diff.iceLines.aurora, diff.iceLines.gfs, 0],
+                    ["Expected faults", diff.faults.aurora, diff.faults.gfs, 1],
+                    ["Crews to pre-stage", diff.crewTotal.aurora, diff.crewTotal.gfs, 0],
+                    ["Flagged by only one", diff.onlyAurora.length, diff.onlyGfs.length, 0],
+                  ].map(([label, a, g, d]) => (
+                    <div key={label as string} className="rounded border px-1.5 py-1">
+                      <div className="text-[9.5px] uppercase tracking-wider text-muted-foreground">{label}</div>
+                      <div className="num text-base font-semibold">
+                        {(a as number).toFixed(d as number)}
+                        <span className="text-[11px] font-normal text-muted-foreground"> vs {(g as number).toFixed(d as number)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[10px] text-muted-foreground">Aurora vs NOAA GFS. The last tile counts high or critical lines that only one forecast flags.</div>
+                {diff.onlyAurora.length > 0 && (
+                  <div>
+                    <span className="font-medium text-[#ff8a3d]">GFS would under-call: </span>
+                    {diff.onlyAurora.slice(0, 4).map((x, i) => (
+                      <span key={x.name + x.kind}>
+                        {i ? "; " : ""}
+                        {x.name} ({KIND_LABEL[x.kind].toLowerCase()}, {x.aurora} vs {x.gfs})
+                      </span>
+                    ))}
+                    {diff.onlyAurora.length > 4 ? ` and ${diff.onlyAurora.length - 4} more` : ""}
+                  </div>
+                )}
+                {diff.onlyGfs.length > 0 && (
+                  <div>
+                    <span className="font-medium text-[#4aa3ff]">GFS alone would flag: </span>
+                    {diff.onlyGfs.slice(0, 3).map((x) => x.name).join("; ")}
+                  </div>
+                )}
+                {diff.crews.length > 0 && (
+                  <div>
+                    <span className="font-medium">Crews: </span>
+                    {diff.crews.slice(0, 4).map((c, i) => (
+                      <span key={c.area}>
+                        {i ? " · " : ""}
+                        {c.area} {sign(c.aurora - c.gfs)}
+                      </span>
+                    ))}{" "}
+                    <span className="text-muted-foreground">(Aurora minus GFS)</span>
+                  </div>
+                )}
+                <div>
+                  <span className="font-medium">Peak damage window: </span>
+                  Aurora {at(diff.peakHour.aurora)} · GFS {at(diff.peakHour.gfs)}
+                </div>
+                <div className="text-[10px] text-muted-foreground">Use Δ Temp or Δ Gust on the map to see where the two forecasts disagree.</div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -820,45 +1037,62 @@ function TabPanel({ tab, a, hour, onSelect, selected }: { tab: Tab; a: CorridorA
   );
 }
 
-function ComparePanel({ aurora, gfs }: { aurora: CorridorAnalysis; gfs: CorridorAnalysis | null }) {
+function ComparePanel({ aurora, gfs, onSelect }: { aurora: CorridorAnalysis; gfs: CorridorAnalysis | null; onSelect: (id: string) => void }) {
   if (!gfs) return null;
   const g = new Map(gfs.lines.map((l) => [l.line.id, l]));
+  const rank = (l: Level) => LEVEL_ORDER.indexOf(l);
   const rows = aurora.lines
     .map((l) => {
       const b = g.get(l.line.id)!;
       return {
         l,
+        b,
+        dLevel: rank(l.level) - rank(b.level),
         dGust: mph(l.peakGust.ms) - mph(b.peakGust.ms),
         dIce: inches(l.peakIce.mm) - inches(b.peakIce.mm),
         dDlr: l.minDlr.pct - b.minDlr.pct,
         dP: (l.faultProb - b.faultProb) * 100,
-        b,
       };
     })
-    .sort((x, y) => Math.abs(y.dGust) + Math.abs(y.dDlr) / 3 + Math.abs(y.dP) - (Math.abs(x.dGust) + Math.abs(x.dDlr) / 3 + Math.abs(x.dP)))
+    .sort(
+      (x, y) =>
+        Math.abs(y.dLevel) - Math.abs(x.dLevel) ||
+        Math.abs(y.dGust) + Math.abs(y.dIce) * 40 + Math.abs(y.dDlr) / 3 + Math.abs(y.dP) -
+          (Math.abs(x.dGust) + Math.abs(x.dIce) * 40 + Math.abs(x.dDlr) / 3 + Math.abs(x.dP)),
+    )
     .slice(0, 8);
   const sign = (v: number, d = 0) => `${v >= 0 ? "+" : ""}${v.toFixed(d)}`;
   return (
     <div className="rounded-md border border-primary/40 bg-card">
       <div className="border-b px-3 py-2">
-        <div className="flex items-center gap-1.5 text-sm font-semibold"><Zap className="size-3.5 text-primary" /> Aurora vs NOAA GFS</div>
+        <div className="flex items-center gap-1.5 text-sm font-semibold"><Zap className="size-3.5 text-primary" /> Aurora vs NOAA GFS, line by line</div>
         <div className="text-[11px] text-muted-foreground">
-          Expected faults {aurora.totals.expectedFaults.toFixed(1)} vs {gfs.totals.expectedFaults.toFixed(1)} · crews {aurora.totals.crewsNeeded} vs {gfs.totals.crewsNeeded} · median DLR uplift {Math.round(aurora.totals.dlrUpliftPct)}% vs {Math.round(gfs.totals.dlrUpliftPct)}%. Largest line-level differences:
+          Lines where the two forecasts lead to a different risk level come first. Deltas are Aurora minus GFS at each line's peak. Click a line to open it on the map.
         </div>
       </div>
       <table className="w-full px-3 text-xs">
         <thead>
           <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="px-3 py-1 text-left">Line</th><th className="py-1 text-left">Δ gust</th><th className="py-1 text-left">Δ ice</th><th className="py-1 text-left">Δ min DLR</th><th className="py-1 text-left">Δ fault</th>
+            <th className="px-3 py-1 text-left">Line</th>
+            <th className="py-1 text-left">Aurora</th>
+            <th className="py-1 text-left">GFS</th>
+            <th className="py-1 text-left">Δ gust</th>
+            <th className="py-1 text-left">Δ ice</th>
+            <th className="py-1 text-left">Δ fault</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.l.line.id} className="border-t">
+            <tr
+              key={r.l.line.id}
+              onClick={() => onSelect(r.l.line.id)}
+              className={cn("cursor-pointer border-t hover:bg-muted/40", r.dLevel !== 0 && "bg-[#ff8a3d]/5")}
+            >
               <td className="px-3 py-1">{r.l.line.name}</td>
+              <td className="py-1"><RiskBadge level={lvl(r.l.level)} /></td>
+              <td className="py-1"><RiskBadge level={lvl(r.b.level)} /></td>
               <td className="num py-1">{sign(r.dGust)} mph</td>
               <td className="num py-1">{sign(r.dIce, 2)} in</td>
-              <td className="num py-1">{sign(r.dDlr)} pts</td>
               <td className="num py-1">{sign(r.dP)} pts</td>
             </tr>
           ))}
@@ -878,6 +1112,7 @@ function Method() {
         <li><b>Ice:</b> CRREL simple freezing-rain model (Jones, 1998) whenever the surface is at or below 0.5 °C with a warm layer (&gt; 0 °C) at 850 hPa; ice melts off above 1 °C.</li>
         <li><b>Ratings:</b> IEEE 738 steady-state heat balance per point at the conductor's maximum operating temperature; the line rating is its weakest point. Static rating assumes 40 °C, 2 ft/s crosswind and full sun.</li>
         <li><b>Aurora:</b> Aurora forecasts temperature, wind and the 850 hPa profile; precipitation, the gust-to-wind ratio and sunshine come from GFS at the same time because Aurora does not predict them.</li>
+        <li><b>Aurora vs NOAA:</b> both forecasts run through the same engine over the same valid hours, so every difference in lines, crews and ratings comes from the forecast alone. Until an Aurora corridor run is published, this view uses a labelled illustrative pair built from the ice-storm scenario.</li>
         <li>The network, its loadings and crew counts are synthetic. Calibrate the fragility curves against the utility's own outage history before operational use.</li>
       </ul>
     </details>

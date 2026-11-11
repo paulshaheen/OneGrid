@@ -5,9 +5,27 @@ import type { FeatureCollection } from "geojson";
 
 import type { CorridorWeather } from "@/lib/services/corridor/server";
 
-export type WxLayer = "precip" | "temp" | "gust" | "off";
+export type WxLayer = "precip" | "temp" | "gust" | "dtemp" | "dgust" | "off";
 type Rgba = [number, number, number, number];
 type Stop = [number, Rgba];
+
+// Diverging ramps for Aurora − GFS: blue = Aurora colder / calmer, red = warmer / windier.
+const DTEMP: Stop[] = [
+  [-4, [37, 99, 235, 200]],
+  [-1.5, [96, 165, 250, 150]],
+  [-0.4, [147, 197, 253, 0]],
+  [0.4, [252, 165, 165, 0]],
+  [1.5, [248, 113, 113, 150]],
+  [4, [220, 38, 38, 200]],
+];
+const DGUST: Stop[] = [
+  [-15, [37, 99, 235, 200]],
+  [-5, [96, 165, 250, 150]],
+  [-1.5, [147, 197, 253, 0]],
+  [1.5, [252, 165, 165, 0]],
+  [5, [248, 113, 113, 150]],
+  [15, [220, 38, 38, 200]],
+];
 
 const TEMP: Stop[] = [
   [-10, [107, 63, 160, 150]],
@@ -74,23 +92,38 @@ export const WX_LEGEND: Record<Exclude<WxLayer, "off">, { title: string; stops: 
     title: "Wind gusts (mph)",
     stops: [["rgb(74,163,255)", "12"], ["rgb(47,191,113)", "22"], ["rgb(240,180,41)", "32"], ["rgb(255,138,61)", "45"], ["rgb(255,77,94)", "60+"]],
   },
+  dtemp: {
+    title: "Aurora − GFS temperature",
+    stops: [["rgb(37,99,235)", "Aurora 4 °C colder"], ["rgb(96,165,250)", "1.5 °C colder"], ["rgb(248,113,113)", "1.5 °C warmer"], ["rgb(220,38,38)", "4 °C warmer"]],
+  },
+  dgust: {
+    title: "Aurora − GFS gusts",
+    stops: [["rgb(37,99,235)", "Aurora 15 mph lower"], ["rgb(96,165,250)", "5 mph lower"], ["rgb(248,113,113)", "5 mph higher"], ["rgb(220,38,38)", "15 mph higher"]],
+  },
 };
 
 const PX_PER_CELL = 18;
 
-/** Smooth weather image for hour `h` and the map corners it covers, or null. */
+/** Smooth weather image for hour `h` and the map corners it covers, or null.
+ * The difference layers (dtemp, dgust) need `base`, sampled at the same valid time. */
 export function renderWeather(
   w: CorridorWeather | undefined,
   layer: WxLayer,
   h: number,
+  base?: CorridorWeather | null,
 ): { url: string; coordinates: [[number, number], [number, number], [number, number], [number, number]] } | null {
   const g = w?.grid;
   if (!g || layer === "off" || typeof document === "undefined") return null;
+  const diff = layer === "dtemp" || layer === "dgust";
+  const bg = base?.grid;
+  const hb = diff && base ? base.hours.indexOf(w.hours[h] ?? "") : -1;
+  if (diff && (!bg || hb < 0 || bg.cells.length !== g.cells.length)) return null;
   const nLat = g.lats.length;
   const nLon = g.lons.length;
   const W = (nLon - 1) * PX_PER_CELL;
   const H = (nLat - 1) * PX_PER_CELL;
   const at = (k: "t2m" | "gust" | "precip" | "t850", i: number, j: number) => g.cells[i * nLon + j]?.[k][h] ?? 0;
+  const atB = (k: "t2m" | "gust", i: number, j: number) => bg?.cells[i * nLon + j]?.[k][hb] ?? 0;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -109,7 +142,13 @@ export function renderWeather(
         (at(k, i, j) * (1 - fx) + at(k, i, j + 1) * fx) * (1 - fy) +
         (at(k, i + 1, j) * (1 - fx) + at(k, i + 1, j + 1) * fx) * fy;
       let c: Rgba;
-      if (layer === "temp") c = ramp(TEMP, bi("t2m"));
+      if (diff) {
+        const k = layer === "dtemp" ? "t2m" : "gust";
+        const bb =
+          (atB(k, i, j) * (1 - fx) + atB(k, i, j + 1) * fx) * (1 - fy) +
+          (atB(k, i + 1, j) * (1 - fx) + atB(k, i + 1, j + 1) * fx) * fy;
+        c = layer === "dtemp" ? ramp(DTEMP, bi(k) - bb) : ramp(DGUST, (bi(k) - bb) * 2.237);
+      } else if (layer === "temp") c = ramp(TEMP, bi("t2m"));
       else if (layer === "gust") c = ramp(GUST, bi("gust") * 2.237);
       else {
         const p = bi("precip");
