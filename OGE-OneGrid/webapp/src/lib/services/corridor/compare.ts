@@ -1,5 +1,4 @@
-// Aurora vs NOAA GFS: hour alignment, the illustrative baseline used when no Aurora
-// corridor run has been published, and the decision-level differences between two
+// Aurora vs NOAA GFS: hour alignment and the decision-level differences between two
 // analyses. Pure functions, safe for the client bundle.
 import type { CellSeries, CorridorWeather } from "@/lib/services/corridor/server";
 import { focusItems, type CorridorAnalysis, type FocusItem, type Level } from "@/lib/services/corridor/engine";
@@ -28,39 +27,8 @@ export function alignHours(base: CorridorWeather, hours: string[]): CorridorWeat
   };
 }
 
-export const ILLUSTRATIVE_NOTE =
-  "Illustrative: both forecasts are synthetic. “Aurora” is the ice-storm scenario; “NOAA GFS” is the same storm with two differences forecasters often see between models in Southeast ice events: the cold-air wedge eroding about 2 °C too fast, and the day-4 squall line arriving 6 hours later and 15% weaker. It shows how a forecast difference becomes a different line, crew and rating decision. It is not a measured Aurora result; a live comparison replaces it as soon as an Aurora corridor run is published.";
-
-/** The baseline for the illustrative comparison, derived from the ice-storm scenario. */
-export function illustrativeGfs(w: CorridorWeather): CorridorWeather {
-  const LAG = 6;
-  const SQUALL_FROM = 70;
-  const shift = (s: CellSeries): CellSeries => {
-    const out: CellSeries = { ...s, t2m: [], wind: [], windDir: [], gust: [], precip: [], sw: [...s.sw], t850: [] };
-    for (let h = 0; h < s.t2m.length; h++) {
-      const src = h >= SQUALL_FROM ? Math.max(0, h - LAG) : h;
-      const lateSquall = h >= SQUALL_FROM;
-      const t = s.t2m[src]!;
-      // Warm bias in the shallow cold wedge: largest near freezing, gone by 5 °C.
-      const warm = t < 5 ? 2 * Math.min(1, (5 - t) / 4) : 0;
-      out.t2m.push(t + warm);
-      out.wind.push(s.wind[src]! * (lateSquall ? 0.85 : 1));
-      out.windDir.push(s.windDir[src]!);
-      out.gust.push(s.gust[src]! * (lateSquall ? 0.85 : 1));
-      out.precip.push(s.precip[src]!);
-      out.t850.push(s.t850[src]!);
-    }
-    return out;
-  };
-  return {
-    ...w,
-    source: "gfs",
-    label: "NOAA GFS (illustrative)",
-    detail: "Synthetic baseline for the illustrative comparison.",
-    cells: w.cells.map(shift),
-    grid: w.grid ? { ...w.grid, cells: w.grid.cells.map(shift) } : null,
-  };
-}
+export const SYNTHETIC_NOTE =
+  "Synthetic Aurora and GFS runs of the same winter storm, generated until a real Aurora corridor run is published. They differ the way forecasters often see the models differ in Southeast ice events: GFS erodes the cold-air wedge about 1.5 °C too fast and brings the day-3 wrap-around winds 6 hours later and weaker. Use it to show how a forecast difference becomes a different line, crew and rating decision; it is not a measured Aurora result.";
 
 /** Hour when the network's fault probability rises fastest, or null if it never rises. */
 function peakDamageHour(a: CorridorAnalysis): number | null {

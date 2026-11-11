@@ -26,7 +26,7 @@ import {
   type LineResult,
 } from "@/lib/services/corridor/engine";
 import { getCorridorWeather, type CorridorSource, type CorridorWeather } from "@/lib/services/corridor/server";
-import { ILLUSTRATIVE_NOTE, alignHours, decisionDiff, illustrativeGfs, type DecisionDiff } from "@/lib/services/corridor/compare";
+import { SYNTHETIC_NOTE, alignHours, decisionDiff, type DecisionDiff } from "@/lib/services/corridor/compare";
 import type { RiskLevel } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 import { WX_LEGEND, renderWeather, weatherSummary, windArrows, type WxLayer } from "@/components/transmission/weather-layer";
@@ -106,36 +106,26 @@ export function TransmissionWeatherPage() {
   useEffect(() => setMounted(true), []);
 
   const compare = source === "compare";
-  const auroraQ = useQuery({
-    queryKey: ["corridor-weather", "aurora"],
-    queryFn: () => getCorridorWeather({ data: { source: "aurora" } }),
-    staleTime: 10 * 60_000,
-    enabled: compare || source === "aurora",
-  });
-  // Without a published Aurora corridor run, Compare falls back to a clearly labelled illustrative pair.
-  const illustrative = compare && auroraQ.isSuccess && !auroraQ.data.available;
-  const primary: CorridorSource = compare ? (illustrative ? "scenario-ice" : "aurora") : source;
+  const primary: CorridorSource = compare ? "aurora" : source;
   const q = useQuery({
     queryKey: ["corridor-weather", primary],
     queryFn: () => getCorridorWeather({ data: { source: primary } }),
     staleTime: 10 * 60_000,
   });
+  // A synthetic Aurora run (no real run published yet) is compared with the synthetic GFS run of the same storm.
+  const synthetic = !!q.data?.synthetic;
+  const baseSource: CorridorSource = synthetic ? "gfs-synthetic" : "gfs";
   const gfsQ = useQuery({
-    queryKey: ["corridor-weather", "gfs"],
-    queryFn: () => getCorridorWeather({ data: { source: "gfs" } }),
+    queryKey: ["corridor-weather", baseSource],
+    queryFn: () => getCorridorWeather({ data: { source: baseSource } }),
     staleTime: 10 * 60_000,
-    enabled: compare && !illustrative,
+    enabled: compare && q.isSuccess,
   });
-  const weather = useMemo<CorridorWeather | undefined>(() => {
-    const w = q.data;
-    if (!w || !illustrative) return w;
-    return { ...w, source: "aurora", label: "Microsoft Aurora (illustrative)", detail: "the ice storm + squall line scenario stands in for an Aurora run" };
-  }, [q.data, illustrative]);
+  const weather = q.data;
   const baseWeather = useMemo<CorridorWeather | null>(() => {
-    if (!compare || !weather?.available) return null;
-    if (illustrative) return q.data ? illustrativeGfs(q.data) : null;
-    return gfsQ.data?.available ? alignHours(gfsQ.data, weather.hours) : null;
-  }, [compare, illustrative, weather, q.data, gfsQ.data]);
+    if (!compare || !weather?.available || !gfsQ.data?.available) return null;
+    return alignHours(gfsQ.data, weather.hours);
+  }, [compare, weather, gfsQ.data]);
   const analysis = useMemo(() => (weather?.available ? analyzeCorridors(weather) : null), [weather]);
   const baseline = useMemo(() => (baseWeather ? analyzeCorridors(baseWeather) : null), [baseWeather]);
   const diff = useMemo(() => (analysis && baseline ? decisionDiff(analysis, baseline) : null), [analysis, baseline]);
@@ -163,7 +153,7 @@ export function TransmissionWeatherPage() {
   );
   const wxNow = useMemo(() => weatherSummary(weather, h), [weather, h]);
   const sel = analysis?.lines.find((l) => l.line.id === selected) ?? null;
-  const loading = q.isLoading || (compare && (auroraQ.isLoading || (!illustrative && gfsQ.isLoading)));
+  const loading = q.isLoading || (compare && gfsQ.isLoading);
 
   // Attention: everything Elevated or worse for the active source, and badge counts.
   const items = useMemo(() => (analysis ? focusItems(analysis) : []), [analysis]);
@@ -250,16 +240,9 @@ export function TransmissionWeatherPage() {
       />
 
       <div className="flex flex-col gap-3 p-4">
-        <SourceBanner
-          weather={weather}
-          loading={loading}
-          baseline={baseWeather}
-          illustrative={illustrative}
-          auroraMissing={source === "aurora"}
-          onCompare={() => setSource("compare")}
-        />
+        <SourceBanner weather={weather} loading={loading} baseline={baseWeather} />
 
-        {(compare || source === "aurora") && <WhyAurora diff={diff} illustrative={illustrative} hours={analysis?.hours ?? []} />}
+        {(compare || source === "aurora") && <WhyAurora diff={diff} synthetic={synthetic} hours={analysis?.hours ?? []} />}
 
         {analysis && <Kpis a={analysis} />}
 
@@ -578,16 +561,10 @@ function SourceBanner({
   weather,
   loading,
   baseline,
-  illustrative,
-  auroraMissing,
-  onCompare,
 }: {
   weather: CorridorWeather | undefined;
   loading: boolean;
   baseline: CorridorWeather | null;
-  illustrative: boolean;
-  auroraMissing: boolean;
-  onCompare: () => void;
 }) {
   if (loading)
     return (
@@ -596,14 +573,15 @@ function SourceBanner({
       </div>
     );
   if (!weather) return null;
-  if (illustrative)
+  if (weather.synthetic)
     return (
       <div className="rounded-md border border-violet-500/50 bg-violet-500/10 px-3 py-2 text-xs">
         <span className="mr-1.5 rounded bg-violet-500/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-200">
-          Illustrative
+          Synthetic
         </span>
-        <span className="font-semibold">Microsoft Aurora vs NOAA GFS</span>
-        <span className="text-muted-foreground"> · {ILLUSTRATIVE_NOTE}</span>
+        <span className="font-semibold">{weather.label}</span>
+        {baseline && <span className="font-semibold"> vs {baseline.label}</span>}
+        <span className="text-muted-foreground"> · {weather.detail} {SYNTHETIC_NOTE}</span>
       </div>
     );
   const scenario = weather.source.startsWith("scenario");
@@ -620,11 +598,6 @@ function SourceBanner({
       {weather.available && !scenario && (
         <span className="text-muted-foreground"> · issued {new Date(weather.issuedIso).toLocaleString()}</span>
       )}
-      {!weather.available && auroraMissing && (
-        <button onClick={onCompare} className="ml-1.5 font-medium text-primary hover:underline">
-          See the illustrative Aurora vs NOAA comparison →
-        </button>
-      )}
     </div>
   );
 }
@@ -633,7 +606,7 @@ const NATURE_URL = "https://www.nature.com/articles/s41586-025-09005-y";
 const MSR_URL = "https://www.microsoft.com/en-us/research/blog/introducing-aurora-the-first-large-scale-foundation-model-of-the-atmosphere/";
 
 /** The case for Aurora: published evidence plus what it changes on this network. */
-function WhyAurora({ diff, illustrative, hours }: { diff: DecisionDiff | null; illustrative: boolean; hours: string[] }) {
+function WhyAurora({ diff, synthetic, hours }: { diff: DecisionDiff | null; synthetic: boolean; hours: string[] }) {
   const [open, setOpen] = useState(true);
   const pillars: { title: string; stat: string; body: string }[] = [
     {
@@ -691,8 +664,8 @@ function WhyAurora({ diff, illustrative, hours }: { diff: DecisionDiff | null; i
           <div className="rounded-md border bg-background/40 px-3 py-2 text-[11.5px]">
             <div className="mb-1 flex items-center gap-1.5 font-semibold">
               What changes on this network
-              {illustrative && (
-                <span className="rounded bg-violet-500/30 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-violet-200">Illustrative</span>
+              {synthetic && (
+                <span className="rounded bg-violet-500/30 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-violet-200">Synthetic</span>
               )}
             </div>
             {!diff ? (
@@ -1112,7 +1085,7 @@ function Method() {
         <li><b>Ice:</b> CRREL simple freezing-rain model (Jones, 1998) whenever the surface is at or below 0.5 °C with a warm layer (&gt; 0 °C) at 850 hPa; ice melts off above 1 °C.</li>
         <li><b>Ratings:</b> IEEE 738 steady-state heat balance per point at the conductor's maximum operating temperature; the line rating is its weakest point. Static rating assumes 40 °C, 2 ft/s crosswind and full sun.</li>
         <li><b>Aurora:</b> Aurora forecasts temperature, wind and the 850 hPa profile; precipitation, the gust-to-wind ratio and sunshine come from GFS at the same time because Aurora does not predict them.</li>
-        <li><b>Aurora vs NOAA:</b> both forecasts run through the same engine over the same valid hours, so every difference in lines, crews and ratings comes from the forecast alone. Until an Aurora corridor run is published, this view uses a labelled illustrative pair built from the ice-storm scenario.</li>
+        <li><b>Aurora vs NOAA:</b> both forecasts run through the same engine over the same valid hours, so every difference in lines, crews and ratings comes from the forecast alone. Until an Aurora corridor run is published, the Aurora source serves a labelled synthetic Aurora run of a winter storm, compared with a synthetic GFS run of the same storm.</li>
         <li>The network, its loadings and crew counts are synthetic. Calibrate the fragility curves against the utility's own outage history before operational use.</li>
       </ul>
     </details>

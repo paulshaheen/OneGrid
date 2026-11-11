@@ -6,13 +6,16 @@
 //                 Aurora pipeline), interpolated to hourly. Aurora predicts temperature,
 //                 wind and the 850 hPa thermal profile but not precipitation, gusts or
 //                 sunshine, so those come from GFS at the same valid time (labelled hybrid).
+//                 Until a run is published, a synthetic Aurora run is served instead
+//                 (flagged `synthetic`), paired with `gfs-synthetic`: the same storm as
+//                 GFS typically forecasts it, for the Aurora vs NOAA comparison.
 //   scenario-ice  Synthetic Southeast ice storm (cold-air damming) + a squall line.
 //   scenario-heat Synthetic heat dome with afternoon pop-up thunderstorms.
 import { createServerFn } from "@tanstack/react-start";
 
 import { WEATHER_GRID, gridCells, weatherCells } from "@/lib/data/se-transmission";
 
-export type CorridorSource = "gfs" | "aurora" | "scenario-ice" | "scenario-heat";
+export type CorridorSource = "gfs" | "aurora" | "gfs-synthetic" | "scenario-ice" | "scenario-heat";
 
 export interface CellSeries {
   key: string;
@@ -45,6 +48,8 @@ export interface CorridorWeather {
   cells: CellSeries[];
   /** Regular 0.5° grid over the region (drives the map's weather layer), rows north→south. */
   grid: { lats: number[]; lons: number[]; cells: CellSeries[] } | null;
+  /** True for the synthetic Aurora/GFS pair used before a real Aurora run is published. */
+  synthetic?: boolean;
 }
 
 const HOURS = 120;
@@ -190,20 +195,9 @@ function bilinear(grid: number[][], lats: number[], lons: number[], lat: number,
 
 async function fetchAurora(): Promise<CorridorWeather> {
   if (auroraCache && Date.now() - auroraCache.at < GFS_TTL_MS) return auroraCache.val;
-  const [file, gfs] = await Promise.all([readAuroraFile().catch(() => null), fetchGfs()]);
-  if (!file) {
-    return {
-      source: "aurora",
-      available: false,
-      label: "Microsoft Aurora",
-      detail:
-        "No Aurora corridor forecast has been published yet. Deploy the Aurora GPU endpoint and run the forecast pipeline to generate corridor-fields.json.",
-      issuedIso: new Date().toISOString(),
-      hours: [],
-      cells: [],
-      grid: null,
-    };
-  }
+  const file = await readAuroraFile().catch(() => null);
+  if (!file) return syntheticRun("aurora");
+  const gfs = await fetchGfs();
   const t0 = Date.parse(file.analysisTimeIso);
   const validMs = file.steps.map((s) => t0 + s * 3_600_000);
   // Keep only the GFS hours the Aurora run covers, so the two sources line up hour for hour.
@@ -333,6 +327,69 @@ function buildScenario(kind: "scenario-ice" | "scenario-heat"): CorridorWeather 
   };
 }
 
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
+/** How each model resolves the synthetic winter storm. GFS's numbers reflect two biases
+ * forecasters often report in Southeast ice events: the shallow cold-air wedge eroding too
+ * fast (warmer, retreating north) and the wrap-around wind arriving later and weaker. */
+const MODEL_RUN = {
+  aurora: { wedgeEdge: 32.7, wedgeDepth: 10.5, windPeakH: 64, windExtra: 19, seed: 1.3 },
+  gfs: { wedgeEdge: 33.0, wedgeDepth: 9, windPeakH: 70, windExtra: 15.5, seed: 4.1 },
+} as const;
+
+/** Synthetic 5-day model run: a cold-air-damming ice storm (days 1–2) followed by strong
+ * north-west wrap-around winds behind the departing low (day 3). Hour 0 is the latest
+ * 6-hourly analysis time. */
+function syntheticRun(model: keyof typeof MODEL_RUN): CorridorWeather {
+  const p = MODEL_RUN[model];
+  const t0 = new Date();
+  t0.setUTCHours(Math.floor(t0.getUTCHours() / 6) * 6, 0, 0, 0);
+  const hours = Array.from({ length: HOURS }, (_, h) => new Date(t0.getTime() + h * 3_600_000).toISOString());
+  const series = (c: { key: string; lat: number; lon: number }): CellSeries => {
+    const s: CellSeries = { ...c, t2m: [], wind: [], windDir: [], gust: [], precip: [], sw: [], t850: [] };
+    hours.forEach((iso, h) => {
+      const localHour = (new Date(iso).getUTCHours() - 5 + 24) % 24;
+      const sun = Math.max(0, Math.sin(((localHour - 6) / 12) * Math.PI));
+      // Small, model-specific texture so the two runs look like different models, not copies.
+      const tex = 0.5 * Math.sin(c.lat * 3.1 + c.lon * 2.3 + h / 9 + p.seed);
+      const wtex = 1 + 0.08 * Math.sin(c.lat * 2.2 - c.lon * 3.7 + h / 7 + p.seed);
+      // Cold dome dammed against the Appalachians: deepest in the north-east of the region.
+      const active = h >= 12 && h <= 56 ? 1 : h > 56 && h < 70 ? 0.4 : 0;
+      const wedge = clamp01((c.lat - p.wedgeEdge) / 1.6) * (0.55 + 0.45 * clamp01((c.lon + 88.5) / 3)) * active;
+      // Warm, moist air overrunning the wedge: a precipitation shield moving west to east.
+      const bandLon = -89.5 + (h - 12) * 0.22;
+      const inBand = h >= 12 && h <= 56 ? gauss(c.lon - bandLon, 1.3) * (c.lat > 31.8 ? 1 : 0.4) : 0;
+      // Day 3: north-west winds wrap around the departing low, strongest over the northern ridges.
+      const pulse = gauss(h - p.windPeakH, 7) * (0.6 + 0.4 * clamp01((c.lat - 32) / 2));
+      const gust = Math.max((4 + 3 * inBand) * 1.5, 6 + p.windExtra * pulse) * wtex;
+      const wind = pulse > 0.1 ? gust / 1.55 : (4 + 3 * inBand) * wtex;
+      s.t2m.push(h > 56 ? 3 + 5 * sun - 2 * pulse + tex - wedge * p.wedgeDepth : 6 + 3 * sun - wedge * p.wedgeDepth + tex);
+      s.wind.push(wind);
+      s.windDir.push(pulse > 0.1 ? 310 : 70);
+      s.gust.push(gust);
+      s.precip.push(3.2 * inBand);
+      s.sw.push(780 * sun * (1 - Math.min(1, inBand * 1.4)));
+      s.t850.push(3.5 + 3 * inBand);
+    });
+    return s;
+  };
+  const cycle = `${hours[0]!.slice(0, 10)} ${hours[0]!.slice(11, 13)}Z`;
+  return {
+    source: model === "aurora" ? "aurora" : "gfs-synthetic",
+    available: true,
+    synthetic: true,
+    label: model === "aurora" ? "Microsoft Aurora (synthetic)" : "NOAA GFS (synthetic)",
+    detail:
+      model === "aurora"
+        ? `Synthetic Aurora run from the ${cycle} analysis: cold-air-damming ice storm across north Georgia and Alabama, then strong wrap-around winds on day 3.`
+        : `Synthetic GFS run from the ${cycle} analysis of the same storm.`,
+    issuedIso: hours[0]!,
+    hours,
+    cells: weatherCells().map(series),
+    grid: { ...WEATHER_GRID, cells: gridCells().map(series) },
+  };
+}
+
 /** Round to keep the payload small (the grid adds ~200 points × 7 variables × 120 h). */
 function compact(w: CorridorWeather): CorridorWeather {
   const r = (a: number[], d: number) => a.map((v) => Math.round(v * 10 ** d) / 10 ** d);
@@ -353,6 +410,7 @@ export const getCorridorWeather = createServerFn({ method: "GET" })
   .validator((data: { source: CorridorSource }) => data)
   .handler(async ({ data }): Promise<CorridorWeather> => {
     if (data.source === "scenario-ice" || data.source === "scenario-heat") return compact(buildScenario(data.source));
+    if (data.source === "gfs-synthetic") return compact(syntheticRun("gfs"));
     try {
       return compact(data.source === "aurora" ? await fetchAurora() : await fetchGfs());
     } catch (e) {
