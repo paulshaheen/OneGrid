@@ -20,6 +20,24 @@ Only **two** things can never be produced by code and are the real inputs you su
 Everything else — finding the storms, calling the model, tracking each storm,
 shaping the result for the map — is automated by this pipeline.
 
+### Why Aurora rather than a weather feed
+
+NOAA GFS (or a vendor feed built on it) is a product you receive on someone else's
+schedule. Aurora is a foundation model you run in your own tenant, over your own
+territory, whenever you want, and it has published skill above the benchmark
+(Bodnar et al., *Nature* 2025, [arXiv:2405.13063](https://arxiv.org/abs/2405.13063)):
+
+- Beat ECMWF IFS HRES on **92%** of 10-day targets (0.1°).
+- 5-day tropical-cyclone tracks beat **seven operational centres on 100%** of targets.
+- About **5,000×** faster than IFS (Microsoft Research), so it takes minutes on one GPU
+  and can be rerun as each analysis arrives.
+- Fine-tunable: it already beats operational air-quality (74%) and wave (86%) models.
+
+It starts from the same NOAA or ECMWF analysis, so it complements public data rather
+than replacing it. The full case, with the transmission-utility angle, is on the
+[Weather Intelligence](https://red-grass-0423adb0f.7.azurestaticapps.net/weather.html#why-aurora)
+docs page. OneGrid's Transmission Weather view shows it as *Aurora vs NOAA*.
+
 ---
 
 ## 1. What is real vs. computed (the honesty contract)
