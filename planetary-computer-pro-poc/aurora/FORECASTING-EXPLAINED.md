@@ -182,6 +182,8 @@ All are environment variables on the job (validated up front by `config.py`):
 | `STORM_FILTER` | Which detected systems to publish: `nhc` (only NHC-tracked storms, named by position), `tropical` (equatorward of `TROPICAL_MAX_LAT`), or `none`. | `nhc` (default) |
 | `NHC_MATCH_KM` / `TROPICAL_MAX_LAT` | Max distance from an NHC storm to count as a match; latitude cutoff for the fallback filter. | `350` / `30` |
 | `STORM_NAMES` | Fallback labels (detection order) used only when the NHC feed is unavailable. | `Hurricane Ida` |
+| `CORRIDOR_BBOX` | Optional. Also publish 2 m temperature, 10 m wind and 850 hPa temperature over this box at every step to `CORRIDOR_BLOB_NAME`, for OneGrid's Transmission Weather view. The endpoint is then called even when no storms are detected. | `-89,30,-80.5,35.5` (Georgia + Alabama network) |
+| `CORRIDOR_BLOB_NAME` | Blob name for the corridor fields. | `corridor-fields.json` (default) |
 | `AURORA_ENDPOINT` / `AURORA_ENDPOINT_TOKEN` | Endpoint URI + key. | scoring URI + secret |
 
 **Historical vs. live:** pin `ANALYSIS_TIME` to a past date to reproduce a known storm

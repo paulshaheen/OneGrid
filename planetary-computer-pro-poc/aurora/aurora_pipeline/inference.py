@@ -64,17 +64,20 @@ def _endpoint_token(config: Config) -> str:
     return DefaultAzureCredential().get_token("https://ml.azure.com/.default").token
 
 
-def run_and_track(config: Config, initial_condition: Batch, seeds) -> list:
+def run_and_track(config: Config, initial_condition: Batch, seeds) -> tuple[list, dict | None]:
     """Submit the forecast and propagate each seed with ``aurora.Tracker``.
 
-    Returns a list of :class:`aurora_pipeline.tracking.Track`. When there are no
-    seeds the endpoint is not called at all — no storms means no forecast to run.
+    Returns ``(tracks, corridor)``: a list of :class:`aurora_pipeline.tracking.Track`,
+    and — when ``CORRIDOR_BBOX`` is set — the regional surface fields at every step
+    (see :func:`extract_corridor`). With no seeds and no corridor export the endpoint
+    is not called at all: no storms means no forecast to run.
     """
     from .tracking import Centre, Track, is_valid_track
 
-    if not seeds:
+    corridor_bbox = config.corridor_bbox
+    if not seeds and corridor_bbox is None:
         log.info("No cyclones detected in the analysis; skipping endpoint call.")
-        return []
+        return [], None
 
     from aurora import Tracker
     from aurora.foundry import BlobStorageChannel, FoundryClient, submit
@@ -82,6 +85,9 @@ def run_and_track(config: Config, initial_condition: Batch, seeds) -> list:
     from .blob_sas import resolve_channel_url
 
     analysis_time = initial_condition.metadata.time[-1]
+    corridor = None
+    if corridor_bbox is not None:
+        corridor = extract_corridor(initial_condition, corridor_bbox, analysis_time)
 
     # One official tracker per detected storm, seeded at its analysis position.
     trackers = [
@@ -100,6 +106,8 @@ def run_and_track(config: Config, initial_condition: Batch, seeds) -> list:
         foundry_client=foundry_client,
         channel=channel,
     ):
+        if corridor is not None:
+            _append_corridor(corridor, extract_corridor(prediction, corridor_bbox, analysis_time))
         for i in list(active):
             try:
                 trackers[i].step(prediction)
@@ -112,7 +120,45 @@ def run_and_track(config: Config, initial_condition: Batch, seeds) -> list:
         track = _results_to_track(seed, tracker.results(), analysis_time, Centre)
         if is_valid_track(track):
             tracks.append(track)
-    return tracks
+    return tracks, corridor
+
+
+def extract_corridor(batch: Batch, bbox, analysis_time: datetime) -> dict:
+    """Surface fields over ``bbox`` for one state: 2 m temperature and 850 hPa
+    temperature (°C) and 10 m wind components (m/s), on Aurora's 0.25° grid with
+    longitudes in -180..180 ascending and latitudes as Aurora orders them."""
+    lat = _to_numpy(batch.metadata.lat)
+    lon = ((_to_numpy(batch.metadata.lon) + 180.0) % 360.0) - 180.0
+    pad = 0.5
+    lat_idx = np.where((lat >= bbox.min_lat - pad) & (lat <= bbox.max_lat + pad))[0]
+    lon_idx = np.where((lon >= bbox.min_lon - pad) & (lon <= bbox.max_lon + pad))[0]
+    lon_idx = lon_idx[np.argsort(lon[lon_idx])]
+
+    def sub(grid: np.ndarray) -> list:
+        return np.round(grid[np.ix_(lat_idx, lon_idx)], 2).tolist()
+
+    levels = list(batch.metadata.atmos_levels)
+    t_atmos = _to_numpy(batch.atmos_vars["t"])
+    while t_atmos.ndim > 3:
+        t_atmos = t_atmos[-1]  # (levels, H, W) at the newest time
+    valid_time = batch.metadata.time[-1]
+    return {
+        "lats": np.round(lat[lat_idx], 3).tolist(),
+        "lons": np.round(lon[lon_idx], 3).tolist(),
+        "steps": [round((valid_time - analysis_time).total_seconds() / 3600)],
+        "fields": {
+            "t2m_c": [sub(_last_step(batch.surf_vars["2t"]) - 273.15)],
+            "u10": [sub(_last_step(batch.surf_vars["10u"]))],
+            "v10": [sub(_last_step(batch.surf_vars["10v"]))],
+            "t850_c": [sub(t_atmos[levels.index(850)] - 273.15)],
+        },
+    }
+
+
+def _append_corridor(corridor: dict, frame: dict) -> None:
+    corridor["steps"].extend(frame["steps"])
+    for name, grids in frame["fields"].items():
+        corridor["fields"][name].extend(grids)
 
 
 def _results_to_track(seed, frame, analysis_time: datetime, Centre) -> list:

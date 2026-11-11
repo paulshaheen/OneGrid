@@ -15,6 +15,7 @@ import {
   Layers,
   LayoutGrid,
   Waypoints,
+  Zap,
   LogOut,
   Map as MapIcon,
   Network,
@@ -281,6 +282,7 @@ const MOBILE_ROUTES = [
   { to: "/events", label: "Forecast Timeline" },
   { to: "/risk", label: "Storm Exposure" },
   { to: "/posture", label: "Response Posture" },
+  { to: "/transmission-weather", label: "Transmission Weather" },
   { to: "/ontology", label: "Ontology" },
   { to: "/esu-planner", label: "ESU Planner" },
   { to: "/sap", label: "SAP S/4HANA" },
@@ -387,7 +389,13 @@ export function AppShell({
   const solution = useSolution();
   const brand = solutionBrand(solution);
   const navEntries = useMemo<Entry[]>(() => {
-    if (solution !== "og") return NAV;
+    if (solution !== "og") {
+      // Corridor weather for transmission lines is an Energy-only view.
+      const tw: Leaf = { to: "/transmission-weather", label: "Transmission Weather", icon: Zap };
+      return NAV.map((e) =>
+        e.kind === "group" && e.id === "weather" ? { ...e, children: [...e.children, tw] } : e,
+      );
+    }
     const dn: Leaf = {
       to: "/distribution-network",
       label: "Distribution Network",

@@ -6,7 +6,7 @@ import type { StyleSpecification } from "maplibre-gl";
  * The operational map renders on a real tiled basemap (true coastlines,
  * country/state borders, cities). The tile provider is swappable: when an
  * Azure Maps key is present we use Azure Maps render tiles, otherwise we fall
- * back to the keyless CARTO dark basemap so the console works out of the box.
+ * back to the keyless Esri dark gray canvas so the console works out of the box.
  */
 export type BasemapId = "dark" | "bathymetry" | "satellite";
 
@@ -15,7 +15,7 @@ const AZURE_KEY = import.meta.env["VITE_AZURE_MAPS_KEY"] as string | undefined;
 const ATTRIB_ESRI = "Imagery &copy; Esri, Maxar, Earthstar Geographics";
 const ATTRIB_ESRI_OCEAN = "Bathymetry &copy; Esri, GEBCO, NOAA, National Geographic";
 const ATTRIB_AZURE = "&copy; Microsoft, &copy; TomTom";
-const ATTRIB_CARTO = "&copy; OpenStreetMap contributors, &copy; CARTO";
+const ATTRIB_ESRI_CANVAS = "&copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors";
 
 function rasterStyle(
   layers: { tiles: string[]; opacity?: number }[],
@@ -104,15 +104,25 @@ export function basemapStyle(id: BasemapId): StyleSpecification | string {
     );
   }
 
+  // Keyless fallback: Esri Dark Gray Canvas (CARTO's keyless tiles now return an
+  // "API key required" watermark instead of the map).
   return rasterStyle(
     [
       {
-        tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
+        tiles: [
+          "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        ],
+      },
+      {
+        tiles: [
+          "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+        ],
+        opacity: 0.9,
       },
     ],
-    ATTRIB_CARTO,
+    ATTRIB_ESRI_CANVAS,
     "#08111c",
   );
 }
 
-export const basemapProviderLabel = AZURE_KEY ? "Azure Maps" : "CARTO / OpenStreetMap";
+export const basemapProviderLabel = AZURE_KEY ? "Azure Maps" : "Esri";

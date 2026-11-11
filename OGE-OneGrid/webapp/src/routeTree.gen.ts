@@ -60,6 +60,7 @@ import { Route as AuthenticatedAppSimulationRouteImport } from './routes/_authen
 import { Route as AuthenticatedAppSreRouteImport } from './routes/_authenticated/app.sre'
 import { Route as AuthenticatedAppThresholdsRouteImport } from './routes/_authenticated/app.thresholds'
 import { Route as AuthenticatedAppTimelineRouteImport } from './routes/_authenticated/app.timeline'
+import { Route as AuthenticatedAppTransmissionWeatherRouteImport } from './routes/_authenticated/app.transmission-weather'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -328,6 +329,12 @@ const AuthenticatedAppTimelineRoute =
     path: '/app/timeline',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAppTransmissionWeatherRoute =
+  AuthenticatedAppTransmissionWeatherRouteImport.update({
+    id: '/app/transmission-weather',
+    path: '/app/transmission-weather',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -379,6 +386,7 @@ export interface FileRoutesByFullPath {
   '/app/sre': typeof AuthenticatedAppSreRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
+  '/app/transmission-weather': typeof AuthenticatedAppTransmissionWeatherRoute
   '/app/': typeof AuthenticatedAppIndexRoute
 }
 export interface FileRoutesByTo {
@@ -431,6 +439,7 @@ export interface FileRoutesByTo {
   '/app/sre': typeof AuthenticatedAppSreRoute
   '/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/app/timeline': typeof AuthenticatedAppTimelineRoute
+  '/app/transmission-weather': typeof AuthenticatedAppTransmissionWeatherRoute
   '/app': typeof AuthenticatedAppIndexRoute
 }
 export interface FileRoutesById {
@@ -485,6 +494,7 @@ export interface FileRoutesById {
   '/_authenticated/app/sre': typeof AuthenticatedAppSreRoute
   '/_authenticated/app/thresholds': typeof AuthenticatedAppThresholdsRoute
   '/_authenticated/app/timeline': typeof AuthenticatedAppTimelineRoute
+  '/_authenticated/app/transmission-weather': typeof AuthenticatedAppTransmissionWeatherRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
 }
 export interface FileRouteTypes {
@@ -539,6 +549,7 @@ export interface FileRouteTypes {
     | '/app/sre'
     | '/app/thresholds'
     | '/app/timeline'
+    | '/app/transmission-weather'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -591,6 +602,7 @@ export interface FileRouteTypes {
     | '/app/sre'
     | '/app/thresholds'
     | '/app/timeline'
+    | '/app/transmission-weather'
     | '/app'
   id:
     | '__root__'
@@ -644,6 +656,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/sre'
     | '/_authenticated/app/thresholds'
     | '/_authenticated/app/timeline'
+    | '/_authenticated/app/transmission-weather'
     | '/_authenticated/app/'
   fileRoutesById: FileRoutesById
 }
@@ -1034,6 +1047,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppTimelineRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/transmission-weather': {
+      id: '/_authenticated/app/transmission-weather'
+      path: '/app/transmission-weather'
+      fullPath: '/app/transmission-weather'
+      preLoaderRoute: typeof AuthenticatedAppTransmissionWeatherRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -1063,6 +1083,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppSreRoute: typeof AuthenticatedAppSreRoute
   AuthenticatedAppThresholdsRoute: typeof AuthenticatedAppThresholdsRoute
   AuthenticatedAppTimelineRoute: typeof AuthenticatedAppTimelineRoute
+  AuthenticatedAppTransmissionWeatherRoute: typeof AuthenticatedAppTransmissionWeatherRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
 }
 
@@ -1093,6 +1114,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppSreRoute: AuthenticatedAppSreRoute,
   AuthenticatedAppThresholdsRoute: AuthenticatedAppThresholdsRoute,
   AuthenticatedAppTimelineRoute: AuthenticatedAppTimelineRoute,
+  AuthenticatedAppTransmissionWeatherRoute:
+    AuthenticatedAppTransmissionWeatherRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
 }
 

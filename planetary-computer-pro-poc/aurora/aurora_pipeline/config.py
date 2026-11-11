@@ -104,6 +104,12 @@ class Config:
     output_sas_url: str | None
     output_blob_name: str
 
+    # Optional regional field export for transmission-corridor weather. When set, every
+    # run also publishes 2 m temperature, 10 m wind and 850 hPa temperature over this
+    # box at each forecast step (even when no storms are detected).
+    corridor_bbox: BBox | None
+    corridor_blob_name: str
+
     @property
     def horizon_hours(self) -> int:
         return self.num_steps * 6
@@ -116,16 +122,16 @@ def _require(name: str) -> str:
     return value
 
 
-def _parse_bbox(raw: str) -> BBox:
+def _parse_bbox(raw: str, name: str = "DETECTION_BBOX") -> BBox:
     parts = [p.strip() for p in raw.split(",")]
     if len(parts) != 4:
-        raise SystemExit("DETECTION_BBOX must be 'minLon,minLat,maxLon,maxLat'.")
+        raise SystemExit(f"{name} must be 'minLon,minLat,maxLon,maxLat'.")
     try:
         min_lon, min_lat, max_lon, max_lat = (float(p) for p in parts)
     except ValueError as exc:  # noqa: BLE001 - surface a clear config error
-        raise SystemExit(f"DETECTION_BBOX values must be numbers: {exc}") from exc
+        raise SystemExit(f"{name} values must be numbers: {exc}") from exc
     if min_lon >= max_lon or min_lat >= max_lat:
-        raise SystemExit("DETECTION_BBOX must have min < max for both lon and lat.")
+        raise SystemExit(f"{name} must have min < max for both lon and lat.")
     return BBox(min_lon, min_lat, max_lon, max_lat)
 
 
@@ -235,4 +241,6 @@ def load_config() -> Config:
         output_container_url=output_container,
         output_sas_url=output_sas,
         output_blob_name=os.environ.get("OUTPUT_BLOB_NAME", "weather-events.json").strip(),
+        corridor_bbox=_parse_bbox(os.environ["CORRIDOR_BBOX"], "CORRIDOR_BBOX") if os.environ.get("CORRIDOR_BBOX", "").strip() else None,
+        corridor_blob_name=os.environ.get("CORRIDOR_BLOB_NAME", "corridor-fields.json").strip(),
     )

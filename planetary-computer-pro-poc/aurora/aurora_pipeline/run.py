@@ -21,7 +21,7 @@ from .inference import detect_seeds, run_and_track
 from .initial_conditions import build_initial_condition
 from .nhc import fetch_active_storms, filter_seeds
 from .normalize import tracks_to_events
-from .publish import publish_events
+from .publish import publish_corridor, publish_events
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,13 +68,16 @@ def main() -> int:
     log.info("Seeded %d cyclone tracker(s).", len(seeds))
 
     log.info("Submitting to Aurora endpoint %s and tracking…", config.endpoint)
-    tracks = run_and_track(config, initial_condition, seeds)
+    tracks, corridor = run_and_track(config, initial_condition, seeds)
     log.info("Produced %d qualifying track(s).", len(tracks))
 
     events = tracks_to_events(config, tracks, official)
 
     blob_url = publish_events(config, events)
     log.info("Published %d event(s) to %s", len(events), blob_url)
+    if corridor is not None:
+        corridor_url = publish_corridor(config, corridor)
+        log.info("Published corridor fields (%d steps) to %s", len(corridor["steps"]), corridor_url)
     return 0
 
 

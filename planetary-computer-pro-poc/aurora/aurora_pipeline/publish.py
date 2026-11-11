@@ -21,9 +21,24 @@ def publish_events(config: Config, events: list[dict]) -> str:
         "horizonHours": config.horizon_hours,
         "eventCount": len(events),
     }
+    return _upload(config, config.output_blob_name, payload)
+
+
+def publish_corridor(config: Config, corridor: dict) -> str:
+    """Publish the regional corridor fields read by OneGrid's Transmission Weather view."""
+    payload = {
+        "analysisTimeIso": config.analysis_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generatedAtIso": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "model": config.model_name,
+        **corridor,
+    }
+    return _upload(config, config.corridor_blob_name, payload)
+
+
+def _upload(config: Config, blob_name: str, payload: dict) -> str:
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
-    blob_client = _blob_client(config)
+    blob_client = _blob_client(config, blob_name)
     from azure.storage.blob import ContentSettings
 
     blob_client.upload_blob(
@@ -34,12 +49,12 @@ def publish_events(config: Config, events: list[dict]) -> str:
     return blob_client.url
 
 
-def _blob_client(config: Config):
+def _blob_client(config: Config, blob_name: str):
     from azure.storage.blob import BlobClient
 
     if config.output_sas_url:
         base, _, query = config.output_sas_url.partition("?")
-        blob_url = f"{base.rstrip('/')}/{config.output_blob_name}"
+        blob_url = f"{base.rstrip('/')}/{blob_name}"
         if query:
             blob_url = f"{blob_url}?{query}"
         return BlobClient.from_blob_url(blob_url)
@@ -47,5 +62,5 @@ def _blob_client(config: Config):
     assert config.output_container_url is not None
     from azure.identity import DefaultAzureCredential
 
-    blob_url = f"{config.output_container_url.rstrip('/')}/{config.output_blob_name}"
+    blob_url = f"{config.output_container_url.rstrip('/')}/{blob_name}"
     return BlobClient.from_blob_url(blob_url, credential=DefaultAzureCredential())
