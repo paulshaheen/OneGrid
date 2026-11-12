@@ -19,28 +19,24 @@ import {
 
 import { AppShell, PageHeader } from "@/components/ops/AppShell";
 import {
-  ACTIONS,
   CIR_DATASHEET,
   CIR_DATASHEET_URL,
-  COST_ASSUMPTIONS,
-  CROWN_JEWELS,
-  HYPOTHESES,
   READINESS,
-  RETAINER_PRESETS,
   RETAINER_STATUS_LABEL,
-  TABLETOP,
-  TABLETOP_JEWEL,
   blastRadius,
+  getEstate,
   retainerGaps,
+  retainerPresets,
   type BlastRadius,
+  type Estate,
   type RetainerRecord,
   type RetainerStatus,
 } from "@/lib/cyber/cyber-data";
-import { SITE_BY_ID } from "@/lib/infra/infra-data";
+import { useSolution } from "@/lib/solution";
 import { cn } from "@/lib/utils";
 
-const CHECKS_KEY = "og.cyberReadiness";
-const RETAINER_KEY = "og.cyberRetainer";
+// Energy keeps its original keys; OneRig gets its own so the two demos don't share state.
+const storageKey = (base: string, estate: Estate) => (estate.id === "og" ? `${base}.onerig` : base);
 const RED = "#ff4d5e";
 const AMBER = "#f0b429";
 const GREEN = "#2fbf71";
@@ -49,13 +45,11 @@ const CIR_RESPONSE_H = 2;
 
 const usd = (v: number) =>
   v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : v >= 1_000 ? `$${Math.round(v / 1_000)}K` : `$${Math.round(v)}`;
-const num = (v: number) => v.toLocaleString("en-US");
 const mdy = (iso: string) => {
   if (!iso) return "not recorded";
   const [y, m, d] = iso.split("-");
   return `${m}/${d}/${y}`;
 };
-const shortSite = (n: string) => n.replace(" Substation", "").replace(" Generating Plant", " plant");
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -89,23 +83,27 @@ function More({ label, children, defaultOpen = false }: { label: string; childre
 }
 
 export function CyberReadinessPage() {
-  const radii = useMemo(() => CROWN_JEWELS.map(blastRadius).sort((a, b) => b.costPerHour - a.costPerHour), []);
+  const estate = getEstate(useSolution());
+  const presets = useMemo(() => retainerPresets(estate), [estate]);
+  const checksKey = storageKey("og.cyberReadiness", estate);
+  const retainerKey = storageKey("og.cyberRetainer", estate);
+  const radii = useMemo(() => estate.jewels.map((j) => blastRadius(estate, j)).sort((a, b) => b.costPerHour - a.costPerHour), [estate]);
   const defaults = useMemo(() => Object.fromEntries(READINESS.map((r) => [r.id, r.done])), []);
   const [checks, setChecks] = useState<Record<string, boolean>>(defaults);
-  const [record, setRecord] = useState<RetainerRecord>(RETAINER_PRESETS.none);
+  const [record, setRecord] = useState<RetainerRecord>(presets.none);
   useEffect(() => {
-    setChecks(readJson(CHECKS_KEY, defaults));
-    setRecord(readJson(RETAINER_KEY, RETAINER_PRESETS.none));
-  }, [defaults]);
+    setChecks(readJson(checksKey, defaults));
+    setRecord(readJson(retainerKey, presets.none));
+  }, [defaults, checksKey, retainerKey, presets]);
   const toggle = (id: string) =>
     setChecks((c) => {
       const next = { ...c, [id]: !c[id] };
-      writeJson(CHECKS_KEY, next);
+      writeJson(checksKey, next);
       return next;
     });
   const saveRecord = (r: RetainerRecord) => {
     setRecord(r);
-    writeJson(RETAINER_KEY, r);
+    writeJson(retainerKey, r);
   };
   const ready = isRetainerReady(record);
   const score = READINESS.filter((r) => (r.retainer ? ready : checks[r.id])).length;
@@ -132,9 +130,9 @@ export function CyberReadinessPage() {
         description="If an attacker reached your operational network tonight, what would go dark, and how fast could you get expert help?"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <RetainerPills ready={ready} onChange={(on) => saveRecord(on ? RETAINER_PRESETS.active : RETAINER_PRESETS.none)} />
+            <RetainerPills ready={ready} onChange={(on) => saveRecord(on ? presets.active : presets.none)} />
             <span
-              title={`Demo data: systems come from the synthetic IT/OT estate in Infrastructure. Exposure is modeled at ${usd(COST_ASSUMPTIONS.perCustomerHour)} per customer-hour and ${usd(COST_ASSUMPTIONS.replacementPowerPerMwh)}/MWh replacement power.`}
+              title={`Demo data: systems come from a synthetic IT/OT estate. Exposure is modeled at ${estate.assumptions}.`}
               className="cursor-help rounded border border-violet-400/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300"
             >
               Demo data
@@ -163,8 +161,8 @@ export function CyberReadinessPage() {
               Worst case: {worst.jewel.role} ({worst.asset.name}), modeled
             </div>
           </div>
-          <Headline label="Customers" value={num(worst.customers)} />
-          <Headline label="Generation" value={`${worst.genMw} MW`} />
+          <Headline label={estate.metrics.a.label} value={estate.metrics.a.fmt(worst.a)} />
+          <Headline label={estate.metrics.b.label} value={estate.metrics.b.fmt(worst.b)} />
           <Headline
             label="Expert response"
             value={`${responseH} h`}
@@ -176,12 +174,12 @@ export function CyberReadinessPage() {
         </div>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <JewelTable radii={radii} responseH={responseH} color={mode} />
+          <JewelTable estate={estate} radii={radii} responseH={responseH} color={mode} />
           <ReadinessCard checks={checks} onToggle={toggle} record={record} onSave={saveRecord} ready={ready} worst={worst} hours={hours} onHours={setHours} score={score} />
         </div>
 
         <div ref={tabletopRef} id="tabletop" className="scroll-mt-4">
-          <Tabletop record={record} hours={hours} autoplay={autoplay} onAutoplayDone={() => setAutoplay(false)} />
+          <Tabletop key={estate.id} estate={estate} record={record} hours={hours} autoplay={autoplay} onAutoplayDone={() => setAutoplay(false)} />
         </div>
 
         <div className="rounded-md border bg-card px-3 py-2 text-xs" style={{ borderColor: `${mode}66` }}>
@@ -253,7 +251,7 @@ function Headline({ label, value, color, sub, title }: { label: string; value: s
 }
 
 // ── Crown jewels ─────────────────────────────────────────────────────────────
-function JewelTable({ radii, responseH, color }: { radii: BlastRadius[]; responseH: number; color: string }) {
+function JewelTable({ estate, radii, responseH, color }: { estate: Estate; radii: BlastRadius[]; responseH: number; color: string }) {
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const rows = all ? radii : radii.slice(0, 5);
@@ -266,7 +264,7 @@ function JewelTable({ radii, responseH, color }: { radii: BlastRadius[]; respons
       <table className="mt-1 w-full text-xs">
         <tbody>
           {rows.map((r) => (
-            <JewelRow key={r.jewel.id} r={r} responseH={responseH} color={color} open={open === r.jewel.id} onToggle={() => setOpen((o) => (o === r.jewel.id ? null : r.jewel.id))} />
+            <JewelRow key={r.jewel.id} estate={estate} r={r} responseH={responseH} color={color} open={open === r.jewel.id} onToggle={() => setOpen((o) => (o === r.jewel.id ? null : r.jewel.id))} />
           ))}
         </tbody>
       </table>
@@ -279,7 +277,7 @@ function JewelTable({ radii, responseH, color }: { radii: BlastRadius[]; respons
   );
 }
 
-function JewelRow({ r, responseH, color, open, onToggle }: { r: BlastRadius; responseH: number; color: string; open: boolean; onToggle: () => void }) {
+function JewelRow({ estate, r, responseH, color, open, onToggle }: { estate: Estate; r: BlastRadius; responseH: number; color: string; open: boolean; onToggle: () => void }) {
   return (
     <>
       <tr onClick={onToggle} className={cn("cursor-pointer border-t hover:bg-muted/40", open && "bg-muted/30")}>
@@ -288,7 +286,7 @@ function JewelRow({ r, responseH, color, open, onToggle }: { r: BlastRadius; res
           <div className="text-[10.5px] text-muted-foreground">{r.asset.name}</div>
         </td>
         <td className="py-2 text-muted-foreground">
-          {r.sites.length ? r.sites.map((s) => shortSite(s.name)).join(", ") : r.analyticsBlind ? "Operators lose visibility" : "Contained"}
+          {r.sites.length ? r.sites.map((s) => estate.shortSite(s.name)).join(", ") : r.analyticsBlind ? "Operators lose visibility" : "Contained"}
         </td>
         <td className="num px-3 py-2 text-right">
           {r.costPerHour ? (
@@ -310,12 +308,12 @@ function JewelRow({ r, responseH, color, open, onToggle }: { r: BlastRadius; res
             {r.sites.map((s) => (
               <div key={s.siteId} className="mt-0.5">
                 <span className="font-medium">{s.name}:</span> <span className="text-muted-foreground">{s.effect}</span>
-                {s.customers > 0 && <span className="text-muted-foreground"> · {num(s.customers)} customers</span>}
-                {s.genMw > 0 && <span className="text-muted-foreground"> · {s.genMw} MW</span>}
+                {s.a > 0 && <span className="text-muted-foreground"> · {estate.id === "og" ? estate.metrics.a.fmt(s.a) : `${estate.metrics.a.fmt(s.a)} customers`}</span>}
+                {s.b > 0 && <span className="text-muted-foreground"> · {estate.metrics.b.fmt(s.b)}</span>}
               </div>
             ))}
             <div className="mt-0.5 text-muted-foreground">
-              {r.reached.filter((x) => x.depth > 0).length} systems reachable from {SITE_BY_ID.get(r.asset.siteId)?.name}.
+              {r.reached.filter((x) => x.depth > 0).length} systems reachable from {estate.siteName(r.asset.siteId)}.
             </div>
           </td>
         </tr>
@@ -520,14 +518,15 @@ interface Approval {
   actions: string[];
 }
 
-function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: RetainerRecord; hours: number; autoplay: boolean; onAutoplayDone: () => void }) {
+function Tabletop({ estate, record, hours, autoplay, onAutoplayDone }: { estate: Estate; record: RetainerRecord; hours: number; autoplay: boolean; onAutoplayDone: () => void }) {
   const [step, setStep] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const [approval, setApproval] = useState<Approval | null>(null);
-  const r = useMemo(() => blastRadius(CROWN_JEWELS.find((j) => j.id === TABLETOP_JEWEL)!), []);
+  const tt = estate.tabletop;
+  const r = useMemo(() => blastRadius(estate, estate.jewels.find((j) => j.id === tt.jewelId)!), [estate, tt]);
   const ready = isRetainerReady(record);
   const mode = ready ? GREEN : RED;
-  const steps = TABLETOP;
+  const steps = tt.steps;
   const last = steps.length - 1;
   const done = step >= last;
   const waiting = step >= 0 && !!steps[step]!.decision && !approval;
@@ -571,13 +570,13 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
       <div className="flex flex-wrap items-center gap-2 px-3 py-2" style={{ backgroundImage: `linear-gradient(90deg, ${mode}1a, transparent 60%)` }}>
         <div className="mr-auto">
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
-            Tabletop: suspected historian tampering at Bayou plant
+            Tabletop: {tt.title.charAt(0).toLowerCase() + tt.title.slice(1)}
             <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: mode, boxShadow: `inset 0 0 0 1px ${mode}99` }}>
               {ready ? "With a CIR retainer" : "Without a retainer"}
             </span>
           </div>
           <div className="text-[11px] text-muted-foreground">
-            OneGrid weighs the evidence, people approve every action, and the incident commander gets a handoff for outside responders. Use the No retainer and CIR retainer pills at the top to replay it the other way.
+            {estate.brand} weighs the evidence, people approve every action, and the incident commander gets a handoff for outside responders. Use the No retainer and CIR retainer pills at the top to replay it the other way.
           </div>
         </div>
         {step < 0 ? (
@@ -632,11 +631,11 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
 
           <div className="flex flex-col gap-2">
             {done && approval ? (
-              <Handoff record={record} approval={approval} r={r} hours={hours} />
+              <Handoff estate={estate} record={record} approval={approval} r={r} hours={hours} />
             ) : (
               <>
-                {step >= 2 && <Hypotheses />}
-                {waiting && <ApprovalCard onApprove={(a) => { setApproval(a); setPlaying(true); }} />}
+                {step >= 2 && <Hypotheses estate={estate} />}
+                {waiting && <ApprovalCard estate={estate} onApprove={(a) => { setApproval(a); setPlaying(true); }} />}
                 {approval && (
                   <div className="text-xs" style={{ color: GREEN }}>
                     <CheckCircle2 className="mr-1 inline size-3.5" />
@@ -650,7 +649,7 @@ function Tabletop({ record, hours, autoplay, onAutoplayDone }: { record: Retaine
       )}
       {step >= 0 && (
         <div ref={raceRef}>
-          <ResponseRace hours={hours} costPerHour={r.costPerHour} ready={ready} started={declared} />
+          <ResponseRace place={tt.place} hours={hours} costPerHour={r.costPerHour} ready={ready} started={declared} />
         </div>
       )}
     </div>
@@ -675,7 +674,7 @@ interface Milestone {
   key?: boolean;
 }
 
-function ResponseRace({ hours, costPerHour, ready, started }: { hours: number; costPerHour: number; ready: boolean; started: boolean }) {
+function ResponseRace({ place, hours, costPerHour, ready, started }: { place: string; hours: number; costPerHour: number; ready: boolean; started: boolean }) {
   const total = Math.max(hours, CIR_RESPONSE_H);
   const [e, setE] = useState(0);
   const [run, setRun] = useState(0);
@@ -786,7 +785,7 @@ function ResponseRace({ hours, costPerHour, ready, started }: { hours: number; c
           </span>
         )}
         <span className="text-[10.5px]">
-          Response is not containment. Times after 02:45 are illustrative; the time without a retainer is your estimate. Exposure is modeled for the Bayou plant at{" "}
+          Response is not containment. Times after 02:45 are illustrative; the time without a retainer is your estimate. Exposure is modeled for {place} at{" "}
           {usd(costPerHour)}/h.
         </span>
       </div>
@@ -794,11 +793,11 @@ function ResponseRace({ hours, costPerHour, ready, started }: { hours: number; c
   );
 }
 
-function Hypotheses() {
+function Hypotheses({ estate }: { estate: Estate }) {
   return (
     <div className="rounded border text-xs">
       <div className="border-b px-2 py-1 font-semibold">Possible explanations</div>
-      {HYPOTHESES.map((h) => (
+      {estate.tabletop.hypotheses.map((h) => (
         <div key={h.name} className="flex items-start gap-2 border-t px-2 py-1 first-of-type:border-t-0" title={[...h.evidenceFor.map((e) => `For: ${e}`), ...h.evidenceAgainst.map((e) => `Against: ${e}`)].join("\n")}>
           <span className="w-16 shrink-0 text-[10px] font-semibold" style={{ color: CONF_COLOR[h.confidence] }}>
             {h.confidence}
@@ -809,14 +808,15 @@ function Hypotheses() {
           </span>
         </div>
       ))}
-      <div className="border-t px-2 py-1 text-[10.5px] text-muted-foreground">OneGrid&apos;s read of the evidence so far, for people to decide on.</div>
+      <div className="border-t px-2 py-1 text-[10.5px] text-muted-foreground">{estate.brand}&apos;s read of the evidence so far, for people to decide on.</div>
     </div>
   );
 }
 
-function ApprovalCard({ onApprove }: { onApprove: (a: Approval) => void }) {
+function ApprovalCard({ estate, onApprove }: { estate: Estate; onApprove: (a: Approval) => void }) {
+  const ACTIONS = estate.tabletop.actions;
   const [sel, setSel] = useState<Set<string>>(() => new Set(ACTIONS.filter((a) => a.recommended).map((a) => a.id)));
-  const [by, setBy] = useState("Shift supervisor, Bayou");
+  const [by, setBy] = useState(estate.tabletop.approver);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -830,7 +830,7 @@ function ApprovalCard({ onApprove }: { onApprove: (a: Approval) => void }) {
       <div className="flex items-center gap-1.5 text-sm font-semibold" style={{ color: AMBER }}>
         <UserCheck className="size-4" /> Your decision: approve the actions to continue
       </div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground">The exercise is paused. Nothing happens on the plant until a person approves.</div>
+      <div className="mt-0.5 text-[11px] text-muted-foreground">The exercise is paused. Nothing happens on the {estate.tabletop.noun} until a person approves.</div>
       <div className="mt-1.5 flex flex-col gap-0.5">
         {ACTIONS.map((a) => (
           <label key={a.id} className="flex items-center gap-2" title={a.note}>
@@ -857,31 +857,24 @@ function ApprovalCard({ onApprove }: { onApprove: (a: Approval) => void }) {
   );
 }
 
-const OPEN_QUESTIONS = [
-  "Is the replay limited to the historian, or are control commands affected?",
-  "How did the configuration push reach the SCADA gateway?",
-  "Are historians at other plants affected?",
-];
-
-function handoffText(record: RetainerRecord, approval: Approval, r: BlastRadius): string {
+function handoffText(estate: Estate, record: RetainerRecord, approval: Approval, r: BlastRadius): string {
+  const tt = estate.tabletop;
   const control = r.reached.filter((x) => x.reach === "control" && x.depth > 0).map((x) => x.asset.name);
   return [
     "INCIDENT RESPONSE HANDOFF (synthetic exercise)",
-    `Site: Bayou Generating Plant · Sev 1 declared 02:41 by ${record.incidentCommander || "incident commander"}`,
+    `Site: ${tt.site} · Sev 1 declared 02:41 by ${record.incidentCommander || "incident commander"}`,
     "",
     "Observed",
-    "- 02:14 configuration change on the SCADA gateway, no change ticket",
-    "- 02:31 14 tags frozen across GT1 and unit 2; HMI still updating",
-    "- 02:41 SOC: unknown outbound connection from the plant historian",
+    ...tt.observedLog.map((l) => `- ${l}`),
     "",
     "Assessment (for responders to confirm)",
-    ...HYPOTHESES.map((h) => `- ${h.name}: ${h.confidence}`),
+    ...tt.hypotheses.map((h) => `- ${h.name}: ${h.confidence}`),
     "",
     "Open questions",
-    ...OPEN_QUESTIONS.map((q) => `- ${q}`),
+    ...tt.openQuestions.map((q) => `- ${q}`),
     "",
     `Systems at risk: ${control.join(", ")}`,
-    `Modeled exposure: ${r.genMw} MW on manual control, about ${usd(r.costPerHour)}/h (illustrative)`,
+    `Modeled exposure: ${tt.atRisk(r)}, about ${usd(r.costPerHour)}/h (illustrative)`,
     "",
     `Actions approved by ${approval.by} at ${approval.at}`,
     ...approval.actions.map((a) => `- ${a}`),
@@ -891,15 +884,17 @@ function handoffText(record: RetainerRecord, approval: Approval, r: BlastRadius)
   ].join("\n");
 }
 
-function Handoff({ record, approval, r, hours }: { record: RetainerRecord; approval: Approval; r: BlastRadius; hours: number }) {
+function Handoff({ estate, record, approval, r, hours }: { estate: Estate; record: RetainerRecord; approval: Approval; r: BlastRadius; hours: number }) {
   const [sent, setSent] = useState(false);
   const [copied, setCopied] = useState(false);
   const ready = isRetainerReady(record);
+  const tt = estate.tabletop;
+  const top = tt.hypotheses[0]!;
   const control = r.reached.filter((x) => x.reach === "control" && x.depth > 0);
   const rows: [string, ReactNode][] = [
-    ["Observed", "Configuration change with no ticket (02:14), 14 tags frozen while the HMI updates (02:31), unknown outbound connection from the historian (02:41)"],
-    ["Assessment", `${HYPOTHESES[0]!.name} (${HYPOTHESES[0]!.confidence.toLowerCase()}); ${OPEN_QUESTIONS.length} open questions for responders`],
-    ["At risk", `${control.length} systems · ${r.genMw} MW on manual control · ${usd(r.costPerHour)}/h modeled`],
+    ["Observed", tt.observed],
+    ["Assessment", `${top.name} (${top.confidence.toLowerCase()}); ${tt.openQuestions.length} open questions for responders`],
+    ["At risk", `${control.length} systems · ${tt.atRisk(r)} · ${usd(r.costPerHour)}/h modeled`],
     ["Approved", `${approval.actions.length} actions by ${approval.by} at ${approval.at}`],
     [
       "Engagement",
@@ -928,7 +923,7 @@ function Handoff({ record, approval, r, hours }: { record: RetainerRecord; appro
         ))}
       </dl>
       <div className="flex items-center gap-2 border-t px-2 py-1.5">
-        <button onClick={() => void navigator.clipboard?.writeText(handoffText(record, approval, r)).then(() => setCopied(true))} className="flex items-center gap-1 rounded border px-2 py-1 hover:bg-muted/40">
+        <button onClick={() => void navigator.clipboard?.writeText(handoffText(estate, record, approval, r)).then(() => setCopied(true))} className="flex items-center gap-1 rounded border px-2 py-1 hover:bg-muted/40">
           <ClipboardCopy className="size-3" /> {copied ? "Copied" : "Copy"}
         </button>
         <button onClick={() => setSent(true)} className="flex items-center gap-1 rounded bg-primary px-2.5 py-1 font-semibold text-primary-foreground">

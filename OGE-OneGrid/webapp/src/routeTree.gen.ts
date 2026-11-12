@@ -51,6 +51,7 @@ import { Route as AuthenticatedAppGovernanceRouteImport } from './routes/_authen
 import { Route as AuthenticatedAppInfrastructureRouteImport } from './routes/_authenticated/app.infrastructure'
 import { Route as AuthenticatedAppMaintenanceRouteImport } from './routes/_authenticated/app.maintenance'
 import { Route as AuthenticatedAppMapRouteImport } from './routes/_authenticated/app.map'
+import { Route as AuthenticatedAppOffshoreWeatherRouteImport } from './routes/_authenticated/app.offshore-weather'
 import { Route as AuthenticatedAppOntologyRouteImport } from './routes/_authenticated/app.ontology'
 import { Route as AuthenticatedAppOverviewLegacyRouteImport } from './routes/_authenticated/app.overview-legacy'
 import { Route as AuthenticatedAppPostureRouteImport } from './routes/_authenticated/app.posture'
@@ -281,6 +282,12 @@ const AuthenticatedAppMapRoute = AuthenticatedAppMapRouteImport.update({
   path: '/app/map',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAppOffshoreWeatherRoute =
+  AuthenticatedAppOffshoreWeatherRouteImport.update({
+    id: '/app/offshore-weather',
+    path: '/app/offshore-weather',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAppOntologyRoute =
   AuthenticatedAppOntologyRouteImport.update({
     id: '/app/ontology',
@@ -384,6 +391,7 @@ export interface FileRoutesByFullPath {
   '/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
   '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/app/map': typeof AuthenticatedAppMapRoute
+  '/app/offshore-weather': typeof AuthenticatedAppOffshoreWeatherRoute
   '/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
@@ -438,6 +446,7 @@ export interface FileRoutesByTo {
   '/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
   '/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/app/map': typeof AuthenticatedAppMapRoute
+  '/app/offshore-weather': typeof AuthenticatedAppOffshoreWeatherRoute
   '/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/app/posture': typeof AuthenticatedAppPostureRoute
@@ -494,6 +503,7 @@ export interface FileRoutesById {
   '/_authenticated/app/infrastructure': typeof AuthenticatedAppInfrastructureRoute
   '/_authenticated/app/maintenance': typeof AuthenticatedAppMaintenanceRoute
   '/_authenticated/app/map': typeof AuthenticatedAppMapRoute
+  '/_authenticated/app/offshore-weather': typeof AuthenticatedAppOffshoreWeatherRoute
   '/_authenticated/app/ontology': typeof AuthenticatedAppOntologyRoute
   '/_authenticated/app/overview-legacy': typeof AuthenticatedAppOverviewLegacyRoute
   '/_authenticated/app/posture': typeof AuthenticatedAppPostureRoute
@@ -550,6 +560,7 @@ export interface FileRouteTypes {
     | '/app/infrastructure'
     | '/app/maintenance'
     | '/app/map'
+    | '/app/offshore-weather'
     | '/app/ontology'
     | '/app/overview-legacy'
     | '/app/posture'
@@ -604,6 +615,7 @@ export interface FileRouteTypes {
     | '/app/infrastructure'
     | '/app/maintenance'
     | '/app/map'
+    | '/app/offshore-weather'
     | '/app/ontology'
     | '/app/overview-legacy'
     | '/app/posture'
@@ -659,6 +671,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/infrastructure'
     | '/_authenticated/app/maintenance'
     | '/_authenticated/app/map'
+    | '/_authenticated/app/offshore-weather'
     | '/_authenticated/app/ontology'
     | '/_authenticated/app/overview-legacy'
     | '/_authenticated/app/posture'
@@ -997,6 +1010,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppMapRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/app/offshore-weather': {
+      id: '/_authenticated/app/offshore-weather'
+      path: '/app/offshore-weather'
+      fullPath: '/app/offshore-weather'
+      preLoaderRoute: typeof AuthenticatedAppOffshoreWeatherRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/app/ontology': {
       id: '/_authenticated/app/ontology'
       path: '/app/ontology'
@@ -1094,6 +1114,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAppInfrastructureRoute: typeof AuthenticatedAppInfrastructureRoute
   AuthenticatedAppMaintenanceRoute: typeof AuthenticatedAppMaintenanceRoute
   AuthenticatedAppMapRoute: typeof AuthenticatedAppMapRoute
+  AuthenticatedAppOffshoreWeatherRoute: typeof AuthenticatedAppOffshoreWeatherRoute
   AuthenticatedAppOntologyRoute: typeof AuthenticatedAppOntologyRoute
   AuthenticatedAppOverviewLegacyRoute: typeof AuthenticatedAppOverviewLegacyRoute
   AuthenticatedAppPostureRoute: typeof AuthenticatedAppPostureRoute
@@ -1126,6 +1147,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAppInfrastructureRoute: AuthenticatedAppInfrastructureRoute,
   AuthenticatedAppMaintenanceRoute: AuthenticatedAppMaintenanceRoute,
   AuthenticatedAppMapRoute: AuthenticatedAppMapRoute,
+  AuthenticatedAppOffshoreWeatherRoute: AuthenticatedAppOffshoreWeatherRoute,
   AuthenticatedAppOntologyRoute: AuthenticatedAppOntologyRoute,
   AuthenticatedAppOverviewLegacyRoute: AuthenticatedAppOverviewLegacyRoute,
   AuthenticatedAppPostureRoute: AuthenticatedAppPostureRoute,

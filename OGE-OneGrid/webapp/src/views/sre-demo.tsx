@@ -29,7 +29,9 @@ import { AppShell } from "@/components/ops/AppShell";
 import { OpsLink } from "@/components/ops/ops-nav";
 import { relativeTime } from "@/lib/format";
 import { useAuth } from "@/lib/hooks/use-auth";
+import { useSolution } from "@/lib/solution";
 import { cn } from "@/lib/utils";
+import { OneRigSreDemo } from "@/views/sre-onerig";
 import {
   AgentWorkOrderCard,
   LiveIncidentPanel,
@@ -166,6 +168,11 @@ const STEPS_LIVE = STEPS.map((s, i) =>
 );
 
 export function SreDemoPage() {
+  // OneRig replays a scripted offshore incident; the energy page drives the live dev site.
+  return useSolution() === "og" ? <OneRigSreDemo cyberCard={<CyberTabletopCard />} /> : <EnergySreDemo />;
+}
+
+function EnergySreDemo() {
   const [status, setStatus] = useState<SreStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -555,6 +562,7 @@ function scenarioStage(firing: boolean, agent?: ScenarioAgent): number {
 
 /** Cyber scenario: a scripted tabletop on the Cyber Readiness page (it doesn't touch Azure). */
 function CyberTabletopCard() {
+  const og = useSolution() === "og";
   return (
     <Panel className="flex flex-wrap items-center gap-3 p-4">
       <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -568,7 +576,10 @@ function CyberTabletopCard() {
           </span>
         </div>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Fourteen plant sensors freeze in the same second. OneGrid weighs tampering against equipment and network
+          {og
+            ? "Fourteen sensors on Titan-1 freeze in the same second. OneRig weighs"
+            : "Fourteen plant sensors freeze in the same second. OneGrid weighs"}{" "}
+          tampering against equipment and network
           failures, operators approve every action, and the incident commander gets a handoff package for outside
           responders. Synthetic exercise; no Microsoft engagement is initiated and nothing in Azure is changed.
         </p>

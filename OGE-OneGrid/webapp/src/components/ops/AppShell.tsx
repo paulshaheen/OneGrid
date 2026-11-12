@@ -15,6 +15,7 @@ import {
   Layers,
   LayoutGrid,
   Waypoints,
+  Waves,
   Zap,
   LogOut,
   Map as MapIcon,
@@ -285,6 +286,7 @@ const MOBILE_ROUTES = [
   { to: "/risk", label: "Storm Exposure" },
   { to: "/posture", label: "Response Posture" },
   { to: "/transmission-weather", label: "Transmission Weather" },
+  { to: "/offshore-weather", label: "Offshore Weather" },
   { to: "/ontology", label: "Ontology" },
   { to: "/esu-planner", label: "ESU Planner" },
   { to: "/sap", label: "SAP S/4HANA" },
@@ -404,8 +406,13 @@ export function AppShell({
       label: "Distribution Network",
       icon: Waypoints,
     };
+    const ow: Leaf = { to: "/offshore-weather", label: "Offshore Weather", icon: Waves };
     return NAV.map((e) =>
-      e.kind === "group" && e.id === "twin" ? { ...e, children: [...e.children, dn] } : e,
+      e.kind === "group" && e.id === "twin"
+        ? { ...e, children: [...e.children, dn] }
+        : e.kind === "group" && e.id === "weather"
+          ? { ...e, children: [...e.children, ow] }
+          : e,
     );
   }, [solution]);
   const path = useRouterState({ select: (s) => s.location.pathname });
