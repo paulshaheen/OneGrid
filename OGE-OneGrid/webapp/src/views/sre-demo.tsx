@@ -351,6 +351,8 @@ function EnergySreDemo() {
           </div>
         )}
 
+        <AgentProposals busy={busy} defaultApprover={approverName} onDecide={(wrId, decision, name) => void decide(wrId, decision, name)} />
+
         {/* flow */}
         <Panel className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
           {(activeScenario?.live || activeScenario?.trigger ? STEPS_LIVE : STEPS).map((s, i) => {
@@ -451,7 +453,6 @@ function EnergySreDemo() {
               )}
           </div>
         )}
-        <AgentProposals busy={busy} defaultApprover={approverName} onDecide={(wrId, decision, name) => void decide(wrId, decision, name)} />
         <CyberTabletopCard />
         {status?.alertsError && (
           <p className="text-xs text-muted-foreground">Alerts unavailable: {status.alertsError}</p>
@@ -591,16 +592,25 @@ function AgentProposals({
   }, []);
   const pending = rows.filter((w) => /pending/i.test(w.wr_status));
   const decided = rows.filter((w) => !/pending/i.test(w.wr_status)).slice(0, 3);
-  if (!rows.length) return null;
   return (
-    <Panel className="space-y-3 p-4">
+    <Panel className="space-y-3 border-primary/30 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <Bot className="size-4 text-primary" />
-        <span className="font-semibold">Agent proposals</span>
-        <span className="text-sm text-muted-foreground">
-          Work orders proposed by the OneGrid asset agent in AgentCraft (Riverside substation). Nothing is raised until you approve.
+        <span className="font-semibold">AgentCraft · Agent proposals</span>
+        {pending.length > 0 && (
+          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600 ring-1 ring-inset ring-amber-500/25 dark:text-amber-400">
+            {pending.length} awaiting approval
+          </span>
+        )}
+        <span className="w-full text-sm text-muted-foreground">
+          Work orders proposed by the OneGrid asset agent from AgentCraft&apos;s Asset Health demo (Riverside substation). Nothing is raised until you approve.
         </span>
       </div>
+      {rows.length === 0 && (
+        <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
+          No proposals yet. In AgentCraft Asset Health, turn on <b>Live: OneGrid</b> and ask: “Propose a work order for T3 now, with the evidence.” It appears here within a few seconds.
+        </div>
+      )}
       {pending.map((w) => (
         <AgentWorkOrderCard key={w.wr_id} wo={null} proposal={w} threadUrl={null} busy={busy} defaultApprover={defaultApprover} onDecide={onDecide} />
       ))}
