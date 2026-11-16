@@ -602,6 +602,14 @@ function AgentProposals({
             {pending.length} awaiting approval
           </span>
         )}
+        <a
+          href="http://127.0.0.1:4181/?view=assets"
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold hover:bg-accent"
+        >
+          Open AgentCraft Asset Health <ArrowUpRight className="size-3" />
+        </a>
         <span className="w-full text-sm text-muted-foreground">
           Work orders proposed by the OneGrid asset agent from AgentCraft&apos;s Asset Health demo (Riverside substation). Nothing is raised until you approve.
         </span>
