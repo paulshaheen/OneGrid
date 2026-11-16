@@ -15,6 +15,7 @@ import { kql } from './fabric.js';
 import { resolveTarget } from './target.js';
 import * as live from './liveIncident.js';
 import * as sre from './sreDemo.js';
+import * as rs from './riverside.js';
 
 const SERVER_INFO = { name: 'onegrid', title: 'OneGrid operations', version: '1.0.0' };
 const PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05'];
@@ -26,7 +27,9 @@ const CLOCK_NOTE = 'OneGrid replays a historian dataset, so raw telemetry timest
 
 const INSTRUCTIONS = 'OneGrid is the operations platform for a fleet of power plants and offshore assets. ' +
   'For equipment alarms use get_active_alarms first; for sensor-fault alerts use get_sensor_health first. Then use get_sensor_trend and get_asset_context to diagnose. ' +
-  'Submit your corrective work order with propose_work_order: a human approves or rejects it in OneGrid, so do not ask for approval in the conversation.';
+  'Submit your corrective work order with propose_work_order: a human approves or rejects it in OneGrid, so do not ask for approval in the conversation. ' +
+  'Riverside substation (132/11 kV) is a historical scenario whose asset ids carry the RS_ prefix (RS_T2 = transformer T2); for it use get_area_status, ' +
+  'get_asset_context, get_sensor_trend (with hours or from/to on its clock), list_work_orders and search_documents / get_document.';
 
 const TOOLS = [
   {
@@ -47,12 +50,17 @@ const TOOLS = [
   {
     name: 'get_sensor_trend',
     title: 'Sensor trend for an asset',
-    description: 'Per-sensor statistics and a downsampled time series for one asset over the most recent N minutes of telemetry (OneGrid Eventhouse PiEvents), compared with the prior 6-hour baseline. Use it to confirm whether readings are rising, how fast, and which sensors moved together.',
+    description: 'Per-sensor statistics and a downsampled time series for one asset over the most recent N minutes of telemetry (OneGrid Eventhouse PiEvents), compared with the prior 6-hour baseline. Use it to confirm whether readings are rising, how fast, and which sensors moved together. ' +
+      'For Riverside assets (RS_*), the window is on the scenario clock: `hours` back from its "now", or an explicit `from`/`to` (site-local ISO, e.g. 2026-10-20T12:00), with alarm/trip settings and SCADA events in the window.',
     inputSchema: {
       type: 'object',
       properties: {
-        asset_id: { type: 'string', description: 'OneGrid asset id, e.g. FV_U1_Steam_Turbine' },
+        asset_id: { type: 'string', description: 'OneGrid asset id, e.g. FV_U1_Steam_Turbine or RS_T2' },
         minutes: { type: 'integer', minimum: 5, maximum: 240, default: 15, description: 'Window size in minutes ending at the newest reading' },
+        hours: { type: 'integer', minimum: 1, maximum: 720, description: 'Riverside only: window in hours ending at the scenario "now"' },
+        from: { type: 'string', description: 'Riverside only: window start, site-local ISO' },
+        to: { type: 'string', description: 'Riverside only: window end, site-local ISO' },
+        tags: { type: 'string', description: 'Riverside only: comma-separated tag fragments to return series for (e.g. TOPOIL,FAN)' },
       },
       required: ['asset_id'],
       additionalProperties: false,
@@ -102,6 +110,41 @@ const TOOLS = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
+    name: 'get_area_status',
+    title: 'Riverside area: substations, lines and assets',
+    description: 'The Riverside area: neighbouring substations with alarms, customers and headline cause, the lines between them with loading, and every Riverside asset with its health score (asset ids RS_*).',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: 'search_documents',
+    title: 'Search Riverside documents',
+    description: 'Search Riverside manuals and procedures (M-*), design documents, specifications, configuration exports, the incident report and tickets. Returns the best matches with a snippet; open one with get_document.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Words to search for, e.g. "oil test deferral sign-off"' },
+        asset_id: { type: 'string', description: 'Optional: only documents about this asset (RS_T2 or T2)' },
+        type: { type: 'string', description: 'Optional document type filter' },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: 'get_document',
+    title: 'Open a Riverside document',
+    description: 'The full document (sections, steps, tables, key facts) by its id from search_documents, e.g. M-DEFER-4 or INC-2026-1020.',
+    inputSchema: {
+      type: 'object',
+      properties: { doc_id: { type: 'string' } },
+      required: ['doc_id'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
   },
 ];
 
@@ -228,11 +271,26 @@ async function proposeWorkOrder(args) {
 const HANDLERS = {
   get_active_alarms: getActiveAlarms,
   get_sensor_health: () => sre.sensorHealth(),
-  get_sensor_trend: getSensorTrend,
-  get_asset_context: getAssetContext,
-  list_work_orders: listWorkOrders,
-  propose_work_order: proposeWorkOrder,
+  get_sensor_trend: (a) => (rs.isRiverside(a.asset_id) ? rs.sensorTrend(a) : getSensorTrend(a)),
+  get_asset_context: (a) => (rs.isRiverside(a.asset_id) ? rs.assetContext(a) : getAssetContext(a)),
+  list_work_orders: (a) => (rs.isRiverside(a.asset_id) ? rs.workOrders(a) : listWorkOrders(a)),
+  propose_work_order: (a) => (rs.isRiverside(a.asset_id) ? riversideProposal(a) : proposeWorkOrder(a)),
+  get_area_status: () => rs.areaStatus(),
+  search_documents: (a) => rs.searchDocuments(a),
+  get_document: (a) => rs.getDocument(a),
 };
+
+async function riversideProposal(args) {
+  const r = await rs.proposeWorkOrder(args);
+  const w = r.workOrder;
+  return {
+    proposed: r.proposed, duplicate: !!r.duplicate,
+    work_order: { wr_id: w.wr_id, asset_id: w.asset_id, problem: w.problem_descr, priority: w.priority, status: w.wr_status, site: w.site_name, created: w.create_date, approved_by: w.approved_by || null },
+    message: r.duplicate
+      ? `A work order already exists for ${w.asset_id}: ${w.wr_id} (${w.wr_status}).`
+      : `Work order ${w.wr_id} is pending approval in OneGrid. Tell the user it is ready for them to approve or reject there; it is raised only when they approve.`,
+  };
+}
 
 async function handleMessage(msg) {
   const { id, method, params } = msg || {};
