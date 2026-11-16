@@ -72,6 +72,8 @@ async function handleApi(req, res, url) {
     if (p === '/api/anomalies') return json(res, 200, await api.anomaliesTop(Number(url.searchParams.get('limit')) || 60));
     if (p === '/api/work-orders') return json(res, 200, await live.mergeWorkOrders(await api.workOrders(Number(url.searchParams.get('limit')) || 80)));
     if (p === '/api/work-orders-summary') return json(res, 200, await live.mergeWorkOrdersSummary(await api.workOrdersSummary()));
+    // Work orders proposed by agents in other apps (AgentCraft demo: scenario agentcraft-riverside), newest first.
+    if (p === '/api/agent-proposals') return json(res, 200, await live.agentRecordsSince(0, 'agentcraft-riverside'));
     if (p === '/api/outages') return json(res, 200, await api.outages());
     if (p === '/api/predictions') return json(res, 200, await api.predictionsDetail());
     if (p.startsWith('/api/asset-workorders/')) { const id = decodeURIComponent(p.split('/api/asset-workorders/')[1]); return json(res, 200, await live.mergeAssetWorkOrders(id, await api.assetWorkOrders(id))); }

@@ -451,6 +451,7 @@ function EnergySreDemo() {
               )}
           </div>
         )}
+        <AgentProposals busy={busy} defaultApprover={approverName} onDecide={(wrId, decision, name) => void decide(wrId, decision, name)} />
         <CyberTabletopCard />
         {status?.alertsError && (
           <p className="text-xs text-muted-foreground">Alerts unavailable: {status.alertsError}</p>
@@ -558,6 +559,63 @@ function scenarioStage(firing: boolean, agent?: ScenarioAgent): number {
   if (agent?.proposal || agent?.status === "complete") return 3;
   if (firing || agent?.status === "investigating") return 2;
   return 1;
+}
+
+/** Work orders proposed by agents in other apps (the AgentCraft Asset Health demo), approved or rejected here. */
+function AgentProposals({
+  busy,
+  defaultApprover,
+  onDecide,
+}: {
+  busy: string | null;
+  defaultApprover: string;
+  onDecide: (wrId: string, decision: "approve" | "reject", name: string) => void;
+}) {
+  const [rows, setRows] = useState<AgentWorkOrder[]>([]);
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      try {
+        const r = await fetch("/api/agent-proposals", { headers: { Accept: "application/json" } });
+        if (r.ok && !stop) setRows((await r.json()) as AgentWorkOrder[]);
+      } catch {
+        /* keep the last list */
+      }
+    };
+    void load();
+    const t = window.setInterval(() => void load(), 5000);
+    return () => {
+      stop = true;
+      window.clearInterval(t);
+    };
+  }, []);
+  const pending = rows.filter((w) => /pending/i.test(w.wr_status));
+  const decided = rows.filter((w) => !/pending/i.test(w.wr_status)).slice(0, 3);
+  if (!rows.length) return null;
+  return (
+    <Panel className="space-y-3 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Bot className="size-4 text-primary" />
+        <span className="font-semibold">Agent proposals</span>
+        <span className="text-sm text-muted-foreground">
+          Work orders proposed by the OneGrid asset agent in AgentCraft (Riverside substation). Nothing is raised until you approve.
+        </span>
+      </div>
+      {pending.map((w) => (
+        <AgentWorkOrderCard key={w.wr_id} wo={null} proposal={w} threadUrl={null} busy={busy} defaultApprover={defaultApprover} onDecide={onDecide} />
+      ))}
+      {decided.map((w) => (
+        <div key={w.wr_id} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+          <span className="font-mono text-xs">{w.wr_id}</span>
+          <span className="font-medium">{w.problem_descr}</span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {w.wr_status}
+            {w.approved_by ? ` · ${w.approved_by}` : ""}
+          </span>
+        </div>
+      ))}
+    </Panel>
+  );
 }
 
 /** Cyber scenario: a scripted tabletop on the Cyber Readiness page (it doesn't touch Azure). */

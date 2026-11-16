@@ -104,11 +104,15 @@ export async function workOrders({ asset_id }) {
   for (const h of history) (hist[h.ticket] ||= []).push(`${h.at} ${h.by || 'system'} ${h.action}: ${h.text}`);
   const agentRows = agent.filter((w) => local(w.asset_id) === id).map((w) => ({
     id: w.wr_id, title: w.problem_descr, status: w.wr_status, priority: w.priority, created: w.create_date, created_by: w.created_by, approved_by: w.approved_by || null,
+    source: 'OneGrid approval queue',
   }));
   return {
     asset_id,
     tickets: tidy(tickets).map((t) => ({ ...t, history: hist[t.id] || [] })),
-    work_orders: [...agentRows, ...tidy(wos)],
+    work_orders: [...agentRows, ...tidy(wos).map((w) => ({
+      ...w, source: 'Riverside EAM record',
+      ...(String(w.status).toLowerCase() === 'draft' ? { approval: 'Draft in the EAM system: not raised, and not awaiting approval in OneGrid.' } : {}),
+    }))],
     story_events: tidy(events),
   };
 }
