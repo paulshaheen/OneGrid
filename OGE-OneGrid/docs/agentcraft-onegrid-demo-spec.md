@@ -128,6 +128,64 @@ folder. No deploy happens before Phase 5, and Phase 5 needs the user's go-ahead.
 
 ## 7. Open questions
 
-1. Confirm the Foundry project for D8.
-2. Do we want T2 visible in OneGrid's own Asset Explorer? That needs a later change to the semantic model (not in this scope).
-3. Who on the AgentCraft side should see this before Phase 5?
+1. Do we want T2 visible in OneGrid's own Asset Explorer? That needs a later change to the semantic model (not in this scope).
+2. Who on the AgentCraft side should see this before Phase 5?
+3. Move the AgentCraft clone out of `%TEMP%` to a stable folder before any real presentation.
+
+## 8. Status (2026-11-16)
+
+| Phase | Result on localhost |
+| --- | --- |
+| 0 Both apps run | Passed. AgentCraft on Windows needed Python 3.12 (wheels), UTF-8 mode, Git Bash as npm's script shell, a built library workspace, and one signal-handler patch (`server/main.py`) |
+| 1 T2 in OneGrid | Passed 20/20 (`p1_gate.py`): Riverside facts match, Fairview tools unchanged |
+| 2 Act 1 agent | Passed: starters 5/5 and 4/5 on two runs; T3 proposal appears and is approved in OneGrid |
+| 3 Act 2 live UI | Passed 8/8 (`p3_gate.py`), three times in a row; AgentCraft's `npm run asset-health:check` still passes |
+| 4 Rehearsal | Launcher `agentcraft-demo.ps1` starts everything; end-to-end run 61–104 s |
+| 5 Deploy | Not started (needs approval) |
+
+Changes from the plan:
+- **D8:** the model runs in `foundryOGE/proj-default` (gpt-4.1); `onegrid-app-0801e1-foundry` has no project.
+- The agent serves on **:8089** (the showcase's own chat agent keeps :8088), wired through `SHOWCASE_ONEGRID_LOCAL_URL`
+  and `POST /api/onegrid/chat`, the same pattern the showcase uses for Seafooder v3.
+- Riverside proposals are approved in OneGrid's **SRE page → Agent proposals** panel (new); approved ones become real
+  work orders like any agent work order.
+- The Design Proposal lens (`reality.json`) is not changed yet: the live state is shown by the **Live: OneGrid** toggle.
+  Changing the lens needs AgentCraft's `making-it-real` schema check; left for a later pass.
+- When an approved work order already covers the work (T2: WO-901), the agent declines to propose a duplicate. The
+  demo's approval moment therefore uses **T3**, whose fix (WO-902) is only a draft.
+
+## 9. Runbook
+
+```powershell
+cd OGE-OneGrid
+.\agentcraft-demo.ps1            # OneGrid :7700 (if not running), agent :8089, AgentCraft :4181; clears Riverside proposals
+.\agentcraft-demo.ps1 -Reset     # between run-throughs: clear Riverside proposals only
+.\agentcraft-demo.ps1 -Stop      # stop the agent and the showcase
+```
+
+If OneGrid was started without `SRE_MCP_KEY`, its `/mcp` answers 404: restart it through the launcher (stop :7700 first).
+
+### Talk track (about 15 minutes)
+
+**Act 1, build it (6–7 min)**
+1. In VS Code, open the AgentCraft repo at `agentcraft-showcase-app/agent/crafted/onegrid-asset/`: `configuration.yaml`
+   (7 tools, gpt-4.1, limits), `prompts/agent.md`, `tools/onegrid.py`. "Every tool is one call to OneGrid's MCP server.
+   The agent never holds a Fabric token; OneGrid reads its Eventhouse with its own identity."
+2. Show OneGrid's MCP tool list (9 tools: the Fairview operations tools plus Riverside area, documents and search).
+3. Optional live tweak: change one line of the prompt and rerun a question, to show the build → run → refine loop.
+
+**Act 2, make it real (6–8 min)**
+4. `http://127.0.0.1:4181/?view=assets`: AgentCraft's Asset Health. Ask "Why did T2 trip?" on the scripted agent:
+   this is the design, replayed over fixtures.
+5. Turn on **Live: OneGrid** (the chat resets). Ask "Brief me on Transformer T2 before we re-energise it". Open
+   **Evidence** to show the OneGrid tool calls. Same UI, now answered from OneGrid's live data: WO-901, Buchholz gas,
+   DGA, sign-off under M-REST-6.
+6. Ask "Is T3 heading the same way?", then "Propose a work order for T3 now, with the evidence." The agent cites draft
+   WO-902 and proposes the work into OneGrid.
+7. Switch to `http://localhost:7700/webapp/app/sre`: **Agent proposals** shows it awaiting approval. Approve it; it
+   becomes a real work order ("Ready to schedule").
+8. Close: "AgentCraft built the agent in an hour. OneGrid grounds every answer in governed data, and a person approves
+   every action."
+
+Fallbacks: if the model is slow or unavailable, turn Live: OneGrid off and continue on the scripted agent. If a proposal
+says a duplicate exists, run `.\agentcraft-demo.ps1 -Reset`.
