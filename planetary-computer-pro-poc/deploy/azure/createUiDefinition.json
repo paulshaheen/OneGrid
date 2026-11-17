@@ -119,6 +119,102 @@
         ]
       },
       {
+        "name": "modules",
+        "label": "App modules",
+        "elements": [
+          {
+            "name": "modulesInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Choose which OneGrid app modules appear in the web app. Core pages (Overview, Asset Explorer, Maintenance, Alerts, Ontology, Thresholds, Governance, Cyber Readiness, Deployment) are always included. Modules can be changed later by re-running this deployment or editing the ONEGRID_MODULES app setting."
+            }
+          },
+          {
+            "name": "appNotSelected",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[not(contains(steps('components').selected, 'oneGridApp'))]",
+            "options": {
+              "icon": "Warning",
+              "text": "The OneGrid web app is not selected on the Components step, so these choices are ignored."
+            }
+          },
+          {
+            "name": "copilotNeedsAi",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[and(contains(steps('modules').selected, 'copilot'), not(contains(steps('components').selected, 'aiAgent')))]",
+            "options": {
+              "icon": "Warning",
+              "text": "Copilot chat needs the AI agent (Azure OpenAI / Foundry) component. Select it on the Components step, or the chat will not be able to answer."
+            }
+          },
+          {
+            "name": "selected",
+            "type": "Microsoft.Common.DropDown",
+            "label": "App modules to enable",
+            "toolTip": "Select one or more modules. Use Select all for the complete OneGrid experience.",
+            "multiselect": true,
+            "selectAll": true,
+            "defaultValue": [
+              { "value": "exec" },
+              { "value": "weather" },
+              { "value": "twin" },
+              { "value": "infra" },
+              { "value": "sap" },
+              { "value": "esu" },
+              { "value": "onerig" },
+              { "value": "copilot" }
+            ],
+            "constraints": {
+              "required": false,
+              "allowedValues": [
+                {
+                  "label": "Executive Brief",
+                  "value": "exec",
+                  "description": "One-page leadership brief: Dashboard, Actions, Scorecard and Workbench views, plus the Executive / Operations switch."
+                },
+                {
+                  "label": "Weather Intelligence",
+                  "value": "weather",
+                  "description": "Live storm map, forecast timeline, storm exposure, response posture, and transmission / offshore corridor weather. Aurora forecasts need the Aurora components."
+                },
+                {
+                  "label": "Digital Twin & Simulation",
+                  "value": "twin",
+                  "description": "3D Control Room, failure simulation and the distribution network view. Maintenance stays available without it."
+                },
+                {
+                  "label": "IT/OT Infrastructure",
+                  "value": "infra",
+                  "description": "Admin plane for the servers, data, network, Azure Local and OT estate behind OneGrid: topology, SQL estate, cost, performance, logs and service tickets."
+                },
+                {
+                  "label": "SAP S/4HANA",
+                  "value": "sap",
+                  "description": "SAP plant maintenance view: equipment, notifications, orders and outage cost tied to OneGrid assets."
+                },
+                {
+                  "label": "ESU Planner",
+                  "value": "esu",
+                  "description": "Extended Security Updates cost and modernization planner for SQL Server and Windows Server."
+                },
+                {
+                  "label": "OneRig (Oil & Gas)",
+                  "value": "onerig",
+                  "description": "Adds the Oil & Gas solution (offshore assets, distribution network, offshore weather) and the Energy / Oil & Gas switch. Without it the app is Energy-only."
+                },
+                {
+                  "label": "Copilot chat",
+                  "value": "copilot",
+                  "description": "The OneGrid assistant dock that answers questions over Fabric data, charts trends and searches manuals. Requires the AI agent component."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
         "name": "aiConfig",
         "label": "AI",
         "elements": [
@@ -448,6 +544,7 @@
       "fabricConnectionId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').createFabricConnection)), steps('fabricConfig').fabricConnectionId, '')]",
       "deployOneGridApp": "[contains(steps('components').selected, 'oneGridApp')]",
       "chatAgentAppServiceSku": "[if(contains(steps('components').selected, 'oneGridApp'), steps('fabricConfig').chatAgentAppServiceSku, 'B1')]",
+      "oneGridModules": "[if(empty(steps('modules').selected), parse('[]'), steps('modules').selected)]",
       "enableEntraSignIn": "[contains(steps('components').selected, 'oneGridApp')]",
       "entraSignInClientId": "[if(and(contains(steps('components').selected, 'oneGridApp'), not(steps('fabricConfig').createSignInApp)), steps('fabricConfig').entraSignInClientId, '')]",
       "deployOneGridData": "[contains(steps('components').selected, 'oneGridData')]"

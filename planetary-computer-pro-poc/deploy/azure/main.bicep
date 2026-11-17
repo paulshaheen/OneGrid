@@ -132,6 +132,18 @@ param deployOneGridApp bool = false
 ])
 param chatAgentAppServiceSku string = 'B1'
 
+@description('OneGrid app modules to enable in the web app (written to the ONEGRID_MODULES app setting). Allowed ids: exec (Executive Brief), weather (Weather Intelligence), twin (Digital Twin and Simulation), infra (IT/OT Infrastructure), sap (SAP S/4HANA), esu (ESU Planner), onerig (Oil and Gas solution), copilot (Copilot chat). Core pages are always on. An empty list enables only the core pages.')
+param oneGridModules array = [
+  'exec'
+  'weather'
+  'twin'
+  'infra'
+  'sap'
+  'esu'
+  'onerig'
+  'copilot'
+]
+
 @description('SOURCE URL of the prebuilt, self-contained OneGrid web app package (zip) published by the "Release OneGrid App" GitHub Actions workflow. The provisioner downloads this and re-hosts it in the deployment\'s own (private) storage account; the web app then mounts it read-only via WEBSITE_RUN_FROM_PACKAGE using its managed identity (no public exposure, no SAS). No server-side build runs; the package already contains the built webapp + node_modules.')
 param oneGridAppPackageUrl string = 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip'
 
@@ -529,6 +541,7 @@ resource chatAgentSite 'Microsoft.Web/sites@2023-12-01' = if (deployOneGridAppEf
         { name: 'WEBSITE_NODE_DEFAULT_VERSION', value: '~22' }
         { name: 'REPORT_PORT', value: '8080' }
         { name: 'WEBSITES_PORT', value: '8080' }
+        { name: 'ONEGRID_MODULES', value: empty(oneGridModules) ? 'none' : join(oneGridModules, ',') }
       ]
     }
   }

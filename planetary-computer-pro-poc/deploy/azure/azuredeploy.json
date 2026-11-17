@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.46.1.21595",
-      "templateHash": "2917180156067318936"
+      "version": "0.43.8.12551",
+      "templateHash": "7841841964491504220"
     }
   },
   "parameters": {
@@ -253,6 +253,22 @@
       ],
       "metadata": {
         "description": "App Service plan pricing tier for the OneGrid chat/report web app. B1 (Basic) is the low-cost default; pick a Premium v3 tier (P0v3/P1v3/P2v3/P3v3) for production-grade CPU/memory, autoscale, and better cold-start. Only applies when the OneGrid web app is deployed."
+      }
+    },
+    "oneGridModules": {
+      "type": "array",
+      "defaultValue": [
+        "exec",
+        "weather",
+        "twin",
+        "infra",
+        "sap",
+        "esu",
+        "onerig",
+        "copilot"
+      ],
+      "metadata": {
+        "description": "OneGrid app modules to enable in the web app (written to the ONEGRID_MODULES app setting). Allowed ids: exec (Executive Brief), weather (Weather Intelligence), twin (Digital Twin and Simulation), infra (IT/OT Infrastructure), sap (SAP S/4HANA), esu (ESU Planner), onerig (Oil and Gas solution), copilot (Copilot chat). Core pages are always on. An empty list enables only the core pages."
       }
     },
     "oneGridAppPackageUrl": {
@@ -604,6 +620,10 @@
             {
               "name": "WEBSITES_PORT",
               "value": "8080"
+            },
+            {
+              "name": "ONEGRID_MODULES",
+              "value": "[if(empty(parameters('oneGridModules')), 'none', join(parameters('oneGridModules'), ','))]"
             }
           ]
         }

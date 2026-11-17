@@ -10,6 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import { parseModules } from "@/lib/modules";
 
 function NotFoundComponent() {
   return (
@@ -175,9 +176,9 @@ function RuntimeConfigScript() {
     // param or saved choice. A wired tenant (GeoCatalog + report API) defaults to
     // Energy; a sample-only / marketing build defaults to Oil & Gas.
     defaultSolution:
-      process.env["USE_SAMPLE_DATA"] === "true" || !process.env["GEOCATALOG_URI"]
-        ? "og"
-        : "energy",
+      process.env["USE_SAMPLE_DATA"] === "true" || !process.env["GEOCATALOG_URI"] ? "og" : "energy",
+    // App modules chosen in the Deploy to Azure form (null = all modules on).
+    modules: parseModules(process.env["ONEGRID_MODULES"]),
   };
   const json = JSON.stringify(config).replace(/</g, "\\u003c");
   return <script dangerouslySetInnerHTML={{ __html: `window.__APP_CONFIG__=${json}` }} />;

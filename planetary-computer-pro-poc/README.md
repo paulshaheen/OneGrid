@@ -206,8 +206,26 @@ in the wizard's **Fabric plane** step.
 ## Deploy to Azure
 
 Click the button, sign in to the Azure portal, choose your components (GeoCatalog is always
-deployed; add the web app and/or sample storage), pick the App Service plan SKU, and select
-**Review + create**.
+deployed; add the web app and/or sample storage), choose which **app modules** the web app
+shows, pick the App Service plan SKU, and select **Review + create**.
+
+The **App modules** step controls which OneGrid capabilities appear in the web app. Core pages
+(Overview, Asset Explorer, Maintenance, Alerts, Ontology, Thresholds, Governance, Cyber
+Readiness, Deployment) are always included. The selection is written to the web app's
+`ONEGRID_MODULES` app setting, so it can be changed later without redeploying:
+
+| Module id | Adds |
+| --- | --- |
+| `exec` | Executive Brief (Dashboard, Actions, Scorecard, Workbench) and the Executive / Operations switch |
+| `weather` | Live storm map, forecast timeline, storm exposure, response posture, transmission and offshore weather |
+| `twin` | 3D Control Room, failure simulation, distribution network |
+| `infra` | IT/OT Infrastructure admin plane |
+| `sap` | SAP S/4HANA plant maintenance view |
+| `esu` | ESU Planner |
+| `onerig` | Oil & Gas (OneRig) solution and the Energy / Oil & Gas switch |
+| `copilot` | Copilot chat dock (needs the AI agent component) |
+
+Leave `ONEGRID_MODULES` unset to show every module; set it to `none` for core pages only.
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2FcreateUiDefinition.json)
 
@@ -487,7 +505,7 @@ against the active forecast.
 | `webapp/` | The web app — a server-rendered React app (TanStack Start + Vite) that signs in with Entra, browses STAC, renders tiles, and drives ingest/GeoAI workflows via managed-identity backend routes. Deployed to Azure App Service (Linux, Node) |
 | `deploy/azure/main.bicep` | Bicep source that provisions the GeoCatalog, optional web app (App Service), and optional sample storage + ingestion identity, plus the optional AI agent + Aurora model plane |
 | `deploy/azure/azuredeploy.json` | Compiled ARM template behind the **Deploy to Azure** button |
-| `deploy/azure/createUiDefinition.json` | Portal form for the one-click deployment (component selection + App Service SKU + optional Entra IDs) |
+| `deploy/azure/createUiDefinition.json` | Portal form for the one-click deployment (component selection + app modules + App Service SKU + optional Entra IDs) |
 | `deploy/azure/teardown.sh` | Deletes the resource group and everything in it |
 
 ## Security

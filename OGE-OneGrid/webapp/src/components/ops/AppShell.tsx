@@ -58,6 +58,7 @@ import { useCapacityStatus } from "@/report/lib/api.js";
 import { useModelRes, setModelRes } from "@/lib/model-res";
 import { useIsDark, setDark as setThemeDark, useMode } from "@/lib/theme-mode";
 import { useSolution, switchSolution, solutionBrand } from "@/lib/solution";
+import { isModuleEnabled, isRouteEnabled, moduleForRoute, MODULE_LABELS } from "@/lib/modules";
 
 // Header bell: a quick slide-down of the current notifications with a link to the
 // full Alerts page — instead of navigating away on every click.
@@ -274,6 +275,32 @@ const RESOURCES: Group = {
 };
 
 const GROUPS = [...NAV.filter((e): e is Group => e.kind === "group"), RESOURCES, ADMIN];
+
+// Drop nav entries for modules this deployment didn't select. A group with no live
+// children disappears; Digital Twin without the twin module keeps Maintenance as a
+// top-level item.
+function withModules(entries: Entry[]): Entry[] {
+  const out: Entry[] = [];
+  for (const e of entries) {
+    if (e.kind === "item") {
+      if (isRouteEnabled(e.to)) out.push(e);
+      continue;
+    }
+    if (e.id === "twin" && !isModuleEnabled("twin")) {
+      const m = e.children.find((c) => c.to === "/maintenance");
+      if (m) out.push({ kind: "item", to: "/maintenance", label: m.label, icon: m.icon });
+      continue;
+    }
+    const g = filterGroup(e);
+    if (g) out.push(g);
+  }
+  return out;
+}
+
+function filterGroup(g: Group): Group | null {
+  const children = g.children.filter((c) => isRouteEnabled(c.to));
+  return children.some((c) => !c.soon) ? { ...g, children } : null;
+}
 const MOBILE_ROUTES = [
   { to: "/exec", label: "Executive brief" },
   { to: "/", label: "Overview" },
@@ -397,8 +424,10 @@ export function AppShell({
     if (solution !== "og") {
       // Corridor weather for transmission lines is an Energy-only view.
       const tw: Leaf = { to: "/transmission-weather", label: "Transmission Weather", icon: Zap };
-      return NAV.map((e) =>
-        e.kind === "group" && e.id === "weather" ? { ...e, children: [...e.children, tw] } : e,
+      return withModules(
+        NAV.map((e) =>
+          e.kind === "group" && e.id === "weather" ? { ...e, children: [...e.children, tw] } : e,
+        ),
       );
     }
     const dn: Leaf = {
@@ -407,16 +436,27 @@ export function AppShell({
       icon: Waypoints,
     };
     const ow: Leaf = { to: "/offshore-weather", label: "Offshore Weather", icon: Waves };
-    return NAV.map((e) =>
-      e.kind === "group" && e.id === "twin"
-        ? { ...e, children: [...e.children, dn] }
-        : e.kind === "group" && e.id === "weather"
-          ? { ...e, children: [...e.children, ow] }
-          : e,
+    return withModules(
+      NAV.map((e) =>
+        e.kind === "group" && e.id === "twin"
+          ? { ...e, children: [...e.children, dn] }
+          : e.kind === "group" && e.id === "weather"
+            ? { ...e, children: [...e.children, ow] }
+            : e,
+      ),
     );
   }, [solution]);
+  const resources = useMemo(() => filterGroup(RESOURCES), []);
+  const admin = useMemo(() => filterGroup(ADMIN), []);
+  const mobileRoutes = useMemo(() => MOBILE_ROUTES.filter((r) => isRouteEnabled(r.to)), []);
+  const execOn = isModuleEnabled("exec");
+  const copilotOn = isModuleEnabled("copilot");
+  const onerigOn = isModuleEnabled("onerig");
   const path = useRouterState({ select: (s) => s.location.pathname });
   const base = useOpsBase();
+  const relPath = path.startsWith(base) ? path.slice(base.length) || "/" : path;
+  const routeModule = moduleForRoute(relPath);
+  const disabledModule = routeModule && !isModuleEnabled(routeModule) ? routeModule : null;
   const cap = useCapacityStatus();
   const [profileOpen, setProfileOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -590,21 +630,25 @@ export function AppShell({
 
           <div className="my-2 border-t" />
 
-          <NavGroup
-            group={RESOURCES}
-            open={openId === RESOURCES.id}
-            onToggle={() => setOpenId((v) => (v === RESOURCES.id ? null : RESOURCES.id))}
-            isActive={isActive}
-            collapsed={collapsed}
-          />
+          {resources && (
+            <NavGroup
+              group={resources}
+              open={openId === resources.id}
+              onToggle={() => setOpenId((v) => (v === resources.id ? null : resources.id))}
+              isActive={isActive}
+              collapsed={collapsed}
+            />
+          )}
 
-          <NavGroup
-            group={ADMIN}
-            open={openId === ADMIN.id}
-            onToggle={() => setOpenId((v) => (v === ADMIN.id ? null : ADMIN.id))}
-            isActive={isActive}
-            collapsed={collapsed}
-          />
+          {admin && (
+            <NavGroup
+              group={admin}
+              open={openId === admin.id}
+              onToggle={() => setOpenId((v) => (v === admin.id ? null : admin.id))}
+              isActive={isActive}
+              collapsed={collapsed}
+            />
+          )}
         </nav>
 
         <div className="border-t p-3 text-[11px] text-muted-foreground">
@@ -674,7 +718,7 @@ export function AppShell({
               value={path}
               onChange={(e) => router.navigate({ to: e.target.value })}
             >
-              {MOBILE_ROUTES.map((n) => (
+              {mobileRoutes.map((n) => (
                 <option key={n.to} value={href(n.to)}>
                   {n.label}
                 </option>
@@ -683,7 +727,7 @@ export function AppShell({
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            <ViewSwitch exec={exec} />
+            {execOn && <ViewSwitch exec={exec} />}
             {!exec && <GlobalSearch />}
 
             {/* Alerts: quick dropdown of current notifications + link to the full page */}
@@ -726,33 +770,35 @@ export function AppShell({
                     <div className="px-2 pb-1 pt-1.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
                       My preferences
                     </div>
-                    <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
-                      <span>Solution</span>
-                      <span className="inline-flex overflow-hidden rounded-md border">
-                        <button
-                          onClick={() => switchSolution("energy")}
-                          className={cn(
-                            "px-2.5 py-1 text-[11px] font-semibold",
-                            solution === "energy"
-                              ? "og-primary-control bg-primary text-primary-foreground"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          Energy
-                        </button>
-                        <button
-                          onClick={() => switchSolution("og")}
-                          className={cn(
-                            "px-2.5 py-1 text-[11px] font-semibold",
-                            solution === "og"
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          Oil &amp; Gas
-                        </button>
-                      </span>
-                    </div>
+                    {onerigOn && (
+                      <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
+                        <span>Solution</span>
+                        <span className="inline-flex overflow-hidden rounded-md border">
+                          <button
+                            onClick={() => switchSolution("energy")}
+                            className={cn(
+                              "px-2.5 py-1 text-[11px] font-semibold",
+                              solution === "energy"
+                                ? "og-primary-control bg-primary text-primary-foreground"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Energy
+                          </button>
+                          <button
+                            onClick={() => switchSolution("og")}
+                            className={cn(
+                              "px-2.5 py-1 text-[11px] font-semibold",
+                              solution === "og"
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            Oil &amp; Gas
+                          </button>
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between px-2 py-1.5 text-[13px]">
                       <span>Theme</span>
                       <span className="inline-flex overflow-hidden rounded-md border">
@@ -822,10 +868,30 @@ export function AppShell({
         {cap.capacityPaused && <CapacityBanner message={cap.message} />}
 
         <main className={cn("min-w-0 flex-1", fullHeight && "xl:min-h-0 xl:overflow-hidden")}>
-          {children}
+          {disabledModule ? <ModuleOff label={MODULE_LABELS[disabledModule]} /> : children}
         </main>
       </div>
-      <CopilotDock open={copilotOpen} setOpen={setCopilotOpen} hideLauncher={exec} />
+      {copilotOn && <CopilotDock open={copilotOpen} setOpen={setCopilotOpen} hideLauncher={exec} />}
+    </div>
+  );
+}
+
+function ModuleOff({ label }: { label: string }) {
+  return (
+    <div className="grid min-h-[60vh] place-items-center px-6">
+      <div className="max-w-md rounded-lg border bg-card p-6 text-center">
+        <div className="text-sm font-semibold">{label} is not enabled</div>
+        <p className="mt-2 text-[13px] text-muted-foreground">
+          This module wasn&apos;t selected for this deployment. Re-run the OneGrid deployment and
+          select it under App modules to turn it on.
+        </p>
+        <OpsLink
+          to="/"
+          className="mt-4 inline-block rounded-md border px-3 py-1.5 text-[12px] font-medium hover:bg-accent"
+        >
+          Go to Overview
+        </OpsLink>
+      </div>
     </div>
   );
 }

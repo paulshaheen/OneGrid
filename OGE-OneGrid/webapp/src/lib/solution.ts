@@ -12,6 +12,7 @@
 // profile toggle navigates to ?solution=<next> and reloads — every query then
 // refetches under the new services with no stale cross-solution data.
 import { useSyncExternalStore } from "react";
+import { isModuleEnabled } from "@/lib/modules";
 
 export type Solution = "energy" | "og";
 
@@ -21,14 +22,18 @@ const listeners = new Set<() => void>();
 
 declare global {
   interface Window {
-    __APP_CONFIG__?: { defaultSolution?: string; solution?: string } & Record<string, unknown>;
+    __APP_CONFIG__?: {
+      defaultSolution?: string;
+      solution?: string;
+    } & Record<string, unknown>;
   }
 }
 
 function normalize(v: string | null | undefined): Solution | null {
   if (!v) return null;
   const s = v.toLowerCase();
-  if (s === "og" || s === "oil-and-gas" || s === "oilgas" || s === "oil" || s === "gom") return "og";
+  if (s === "og" || s === "oil-and-gas" || s === "oilgas" || s === "oil" || s === "gom")
+    return "og";
   if (s === "energy" || s === "electric" || s === "power" || s === "grid") return "energy";
   return null;
 }
@@ -58,6 +63,8 @@ function deployDefault(): Solution {
 }
 
 function resolve(): Solution {
+  // Oil & Gas is a selectable module; without it the app is Energy-only.
+  if (!isModuleEnabled("onerig")) return "energy";
   return fromParam() ?? fromStorage() ?? deployDefault();
 }
 
@@ -122,7 +129,12 @@ export function useSolution(): Solution {
 }
 
 /** Branding for the active solution: wordmark suffix + accent, product name, domain. */
-export function solutionBrand(s: Solution): { word: string; name: string; domain: string; accent: string } {
+export function solutionBrand(s: Solution): {
+  word: string;
+  name: string;
+  domain: string;
+  accent: string;
+} {
   return s === "og"
     ? { word: "RIG", name: "OneRig", domain: "Oil & Gas", accent: "#f59e0b" }
     : { word: "GRID", name: "OneGrid", domain: "Energy", accent: "#38bdf8" };
