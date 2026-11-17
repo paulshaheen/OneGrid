@@ -253,63 +253,56 @@ can also wire CI/CD (GitHub Actions or Azure DevOps) to deploy `webapp/` on push
 
 ## Deploy from the command line (optional)
 
-```bash
-az group create -n pcpro-poc-rg -l westeurope
+The easiest command-line path is to let GitHub Copilot run it for you: see
+[DEPLOY-WITH-COPILOT.md](../DEPLOY-WITH-COPILOT.md). To run it yourself:
 
-az deployment group create -g pcpro-poc-rg -f deploy/azure/main.bicep
+```bash
+az group create -n onegrid-rg -l eastus
+
+az deployment group create -g onegrid-rg -f deploy/azure/main.bicep \
+  -p deployFabricPlane=true deployOneGridApp=true createFabricCapacity=true \
+     fabricCapacityAdmin=<your-upn>
 ```
 
 To deploy only the GeoCatalog (no web app, no storage):
 
 ```bash
-az deployment group create -g pcpro-poc-rg -f deploy/azure/main.bicep \
-  -p deployWebApp=false deploySampleStorage=false
+az deployment group create -g onegrid-rg -f deploy/azure/main.bicep \
+  -p deploySampleStorage=false deployAiAgent=false
 ```
 
-To set the App Service SKU:
+To set the App Service SKU or choose app modules:
 
 ```bash
-az deployment group create -g pcpro-poc-rg -f deploy/azure/main.bicep \
-  -p appServiceSku=B1
+az deployment group create -g onegrid-rg -f deploy/azure/main.bicep \
+  -p deployFabricPlane=true deployOneGridApp=true chatAgentAppServiceSku=P0v3 \
+     oneGridModules='["exec","weather","infra"]'
 ```
 
 ### Sign-in (Microsoft Entra)
 
-By default the deployment **registers the Entra sign-in app for you**. It uses the Microsoft
-Graph Bicep extension, which runs as *you* (the person deploying), so no separate portal step
-is needed — the app registration is created, its SPA redirect URI (`https://<app>/auth/callback`)
-is set, and its client ID is wired into the web app's `ENTRA_CLIENT_ID` / `ENTRA_TENANT_ID`
-settings automatically. **You must have rights to register apps** in the tenant
-(**Application Administrator** or the **Application.ReadWrite.All** Graph permission).
+By default (`enableEntraSignIn=true`) the deployment's provisioning script **creates or reuses
+a SPA app registration** for sign-in, sets its redirect URI (`https://<app>/auth/callback`), and
+writes its client ID into the web app's `ENTRA_CLIENT_ID` / `ENTRA_TENANT_ID` settings. The
+script runs as the deployment's managed identity, which needs the Microsoft Graph
+**`Application.ReadWrite.OwnedBy`** permission to create the registration.
 
-> **If you don't have that role, the deployment fails at the app-registration step** with:
->
-> ```
-> {"error":{"code":"Forbidden","target":"/resources/entraApp",
->  "message":"Authorization_RequestDenied: Insufficient privileges to complete the operation..."}}
-> ```
->
-> Because the web app reads the registration's client ID, the failure cascades: the
-> **App Service Plan is created but the web app (`Microsoft.Web/sites`) is never deployed**.
-> This is a permissions issue, not a template bug. Fix it by redeploying with
-> `autoRegisterEntraApp=false` — the site then deploys with sign-in left unconfigured
-> (empty `ENTRA_CLIENT_ID`), and everything else (GeoCatalog, storage, managed identity,
-> Foundry) provisions normally. Wire sign-in later once you have an app registration (see below),
-> or ask an admin to grant you the role and rerun with auto-registration on.
+If it doesn't have that permission, the deployment still succeeds: the web app is created and
+works, with sign-in left unconfigured, and the provisioning log explains what to grant.
 
-If you can't (or would rather use an existing app registration), turn auto-registration off and
-supply the IDs yourself — add your `https://<app>.azurewebsites.net/auth/callback` URL as a SPA
-redirect URI on that app first:
+To use an existing app registration instead, add your `https://<app>.azurewebsites.net/auth/callback`
+URL as a SPA redirect URI on that app, then pass its client ID:
 
 ```bash
-az deployment group create -g pcpro-poc-rg -f deploy/azure/main.bicep \
-  -p autoRegisterEntraApp=false entraTenantId='<tenant-guid>' entraClientId='<spa-client-guid>'
+az deployment group create -g onegrid-rg -f deploy/azure/main.bicep \
+  -p deployFabricPlane=true deployOneGridApp=true entraSignInClientId='<spa-client-guid>'
 ```
 
-The deployment outputs `geoCatalogName`, `geoCatalogResourceId`, `geoCatalogUri`,
-`webAppName`, `webAppUrl`, `sampleStorageAccount`, `sampleContainer`, `sampleContainerUrl`,
-`ingestIdentityClientId`, `ingestIdentityObjectId`, `entraClientId`, `entraTenantId`,
-`entraAppAutoRegistered`, and `entraRedirectUri`.
+Set `enableEntraSignIn=false` to skip sign-in wiring entirely.
+
+Useful deployment outputs include `oneGridAppUrl`, `geoCatalogResourceId`, `geoCatalogUri`,
+`sampleStorageAccount`, `sampleContainerUrl`, `ingestIdentityClientId`, `aiAgentEndpoint`,
+`fabricPlaneEnabled`, and `oneGridPhases`.
 
 ## Grant yourself access to the GeoCatalog
 

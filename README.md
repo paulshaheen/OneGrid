@@ -14,6 +14,12 @@ identities, and a hand-edited `.env`. **This repo provisions those prerequisites
 landing zone — so you don't hand-build them for every POC, and it adds a first-class web app
 so you don't need the raw portal or a notebook VM to see your data.
 
+> **Deploy with GitHub Copilot:** open this repo in VS Code (Copilot Agent mode, or the
+> `/deploy-onegrid` prompt) or the GitHub Copilot CLI and ask *"Deploy OneGrid by following
+> DEPLOY-WITH-COPILOT.md"*. The agent checks prerequisites, asks the same questions as the
+> portal form (components, app modules, Fabric capacity), validates, deploys and verifies. See
+> [DEPLOY-WITH-COPILOT.md](DEPLOY-WITH-COPILOT.md).
+
 What the button deploys (pick the complete environment or only what you need):
 
 - a **GeoCatalog** (the Planetary Computer Pro resource that stores, indexes, and serves your
