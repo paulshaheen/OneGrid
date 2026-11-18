@@ -7,6 +7,10 @@
 
 targetScope = 'resourceGroup'
 
+// Microsoft Graph extension (configured in bicepconfig.json): used only for the optional
+// Graph permission grant to the deployment identity (grantProvisionerGraphPermission).
+extension microsoftGraphV1
+
 // ------------------------------------------------------------------------------------
 // Parameters
 // ------------------------------------------------------------------------------------
@@ -23,6 +27,15 @@ param location string = 'westeurope'
 
 @description('Deploy the Planetary Computer Pro GeoCatalog (geospatial imagery catalog used by the web app\'s map layers and asset uploads). Turn off to deploy OneGrid without it; the web app then reads live Fabric data without catalog imagery.')
 param deployGeoCatalog bool = true
+
+@description('Exempt this deployment\'s storage accounts from Azure Policy that disables shared-key or public network access on storage (for example the Microsoft MCAPS governance policies). When true, the storage accounts are tagged with the opt-out tag below, the deployment scripts run on a dedicated tagged storage account, and public network access is set explicitly. Leave false unless your subscription enforces such a policy and your organization allows the exemption.')
+param exemptStorageFromPolicy bool = false
+
+@description('Tag name your storage policy honors as an exemption. Used only when exemptStorageFromPolicy is true.')
+param storagePolicyExemptionTagName string = 'SecurityControl'
+
+@description('Tag value your storage policy honors as an exemption. Used only when exemptStorageFromPolicy is true.')
+param storagePolicyExemptionTagValue string = 'Ignore'
 
 @description('Name of the Planetary Computer Pro GeoCatalog resource. Lowercase letters and numbers, 3-24 characters. Leave blank to auto-generate a unique name.')
 @maxLength(24)
@@ -45,6 +58,9 @@ param enableEntraSignIn bool = true
 
 @description('Optional pre-created Entra ID (SPA) app registration client ID for sign-in. Supply this when the deployment identity cannot create app registrations. Its SPA redirect URI must include https://<app-host>/auth/callback.')
 param entraSignInClientId string = ''
+
+@description('Grant the deployment identity (pcpro-fabricplane-identity) the Microsoft Graph application permission Application.ReadWrite.OwnedBy, so the setup scripts can create the Entra sign-in app registration and the service principal that binds and refreshes the Import semantic model. The person deploying must be able to grant Graph application permissions (Privileged Role Administrator or Global Administrator). Without it, sign-in stays unconfigured and the Import model is not refreshed.')
+param grantProvisionerGraphPermission bool = false
 
 @description('Name of the Azure OpenAI (Foundry) model deployment.')
 param openAiDeploymentName string = 'gpt-5-mini'
@@ -175,6 +191,10 @@ var namePrefix = 'pcpro'
 // createUiDefinition.json, so name generation must live in the template.
 var effectiveGeoCatalogName = empty(geoCatalogName) ? toLower('pcpro${uniqueString(resourceGroup().id)}') : geoCatalogName
 var sampleStorageName = toLower('pcpro${uniqueString(resourceGroup().id)}')
+// Opt-out tag for storage policies (see exemptStorageFromPolicy) and the dedicated storage
+// account the deployment scripts use when that exemption is on.
+var storageExemptTags = exemptStorageFromPolicy ? { '${storagePolicyExemptionTagName}': storagePolicyExemptionTagValue } : {}
+var scriptStorageName = toLower('pcpro${uniqueString(resourceGroup().id)}scr')
 var ingestIdentityName = '${namePrefix}-ingest-identity'
 var sampleContainerName = 'sample-assets'
 var onegridAppPackageContainerName = 'onegrid-app-package'
@@ -340,6 +360,7 @@ resource ingestIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-0
 resource sampleStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = if (deploySampleStorage) {
   name: sampleStorageName
   location: location
+  tags: storageExemptTags
   sku: {
     name: 'Standard_LRS'
   }
@@ -348,8 +369,36 @@ resource sampleStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = if (depl
     allowBlobPublicAccess: false
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
+    // The web app mounts its package from this account over the public endpoint; set it
+    // explicitly when exempt so a redeploy restores it after a policy had turned it off.
+    publicNetworkAccess: exemptStorageFromPolicy ? 'Enabled' : null
   }
 }
+
+// Storage for the deployment scripts' container file share. Deployment scripts require
+// shared-key access; Azure normally creates this account itself, but a policy that disables
+// shared key breaks that, so when exempt we supply our own tagged account instead.
+var deployScriptStorage = exemptStorageFromPolicy && (deployFabricPlaneEffective || buildAuroraImage)
+resource scriptStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = if (deployScriptStorage) {
+  name: scriptStorageName
+  location: location
+  tags: storageExemptTags
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: true
+    publicNetworkAccess: 'Enabled'
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+  }
+}
+var scriptStorageSettings = deployScriptStorage ? {
+  storageAccountName: scriptStorage.name
+  storageAccountKey: scriptStorage.listKeys().keys[0].value
+} : null
 
 resource sampleBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = if (deploySampleStorage) {
   parent: sampleStorage
@@ -418,6 +467,18 @@ resource blobReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-0
 resource fabricPlaneIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (deployFabricPlaneEffective) {
   name: fabricPlaneIdentityName
   location: location
+}
+
+// Optional: Microsoft Graph Application.ReadWrite.OwnedBy for the deployment identity, so the
+// setup scripts can create the sign-in app registration and the Import-model refresh SP.
+var grantGraphToProvisioner = grantProvisionerGraphPermission && deployFabricPlaneEffective
+resource graphServicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' existing = if (grantGraphToProvisioner) {
+  appId: '00000003-0000-0000-c000-000000000000'
+}
+resource provisionerGraphRole 'Microsoft.Graph/appRoleAssignedTo@v1.0' = if (grantGraphToProvisioner) {
+  appRoleId: '18a4783c-866b-4cc7-a460-3d5e5662c884' // Application.ReadWrite.OwnedBy
+  principalId: fabricPlaneIdentity.properties.principalId
+  resourceId: graphServicePrincipal.id
 }
 
 // Optional: provision a Fabric capacity so the deployment doesn't require a pre-existing
@@ -624,6 +685,7 @@ var provisionCommonEnv = [
   { name: 'PCP_MODEL_CONTAINER', value: modelOutputsContainerName }
   { name: 'PCP_OPENAI_ENDPOINT', value: deployAiAgent ? openAi.properties.endpoint : '' }
   { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
+  { name: 'PCP_OPENAI_DEPLOYMENT', value: deployAiAgent ? openAiDeploymentName : '' }
   { name: 'PCP_GEOCATALOG_URI', value: deployGeoCatalog ? geoCatalog.properties.catalogUri : '' }
   { name: 'PCP_GEOCATALOG_ID', value: deployGeoCatalog ? geoCatalog.id : '' }
   { name: 'PCP_SAMPLE_CONTAINER', value: sampleContainerName }
@@ -640,6 +702,8 @@ var provisionCommonEnv = [
   { name: 'PCP_AURORA_JOB_NAME', value: deployAuroraJob ? auroraJobName : '' }
   { name: 'ENTRA_SIGNIN_ENABLED', value: enableEntraSignIn ? 'true' : 'false' }
   { name: 'ENTRA_SIGNIN_CLIENT_ID', value: entraSignInClientId }
+  // The person deploying becomes an Admin of the Fabric workspace, so they can open it.
+  { name: 'FABRIC_WORKSPACE_ADMIN_OBJECT_ID', value: deployer().objectId }
 ]
 
 // --- APP plane -----------------------------------------------------------------------
@@ -663,6 +727,7 @@ resource appProvisionScript 'Microsoft.Resources/deploymentScripts@2023-08-01' =
     retentionInterval: 'P1D'
     timeout: 'PT2H'
     cleanupPreference: 'OnSuccess'
+    storageAccountSettings: scriptStorageSettings
     // Without this, an otherwise-unchanged redeploy is a no-op for this script (Azure skips
     // re-running it), while chatAgentSite's inline appSettings still gets fully replaced by
     // ARM's PUT down to the 4 baseline values - silently wiping GEOCATALOG_URI/FOUNDRY_ENDPOINT/
@@ -680,6 +745,7 @@ resource appProvisionScript 'Microsoft.Resources/deploymentScripts@2023-08-01' =
     fabricPlaneStorageUaaRole
     modelOutputsContainer
     chatAgentSite
+    provisionerGraphRole
   ]
 }
 
@@ -706,6 +772,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
     retentionInterval: 'P1D'
     timeout: 'PT3H'
     cleanupPreference: 'OnSuccess'
+    storageAccountSettings: scriptStorageSettings
     // Same reasoning as appProvisionScript above: force a re-run every deployment so the
     // Fabric-derived app settings (KUSTO_*/PBI_*/DATA_AGENT_*) get re-applied after ARM resets
     // chatAgentSite's appSettings to baseline on every redeploy.
@@ -722,6 +789,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
     fabricPlaneStorageUaaRole
     modelOutputsContainer
     chatAgentSite
+    provisionerGraphRole
     ...(deployAppProvision ? [ appProvisionScript ] : [])
   ]
 }
@@ -949,6 +1017,7 @@ resource auroraImageBuild 'Microsoft.Resources/deploymentScripts@2023-08-01' = i
     retentionInterval: 'P1D'
     timeout: 'PT45M'
     cleanupPreference: 'OnSuccess'
+    storageAccountSettings: scriptStorageSettings
     environmentVariables: [
       { name: 'ONEGRID_REPO', value: oneGridRepoUrl }
       { name: 'ONEGRID_REF', value: oneGridRef }

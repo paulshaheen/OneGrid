@@ -277,6 +277,22 @@ function Phase-Workspace {
     try { FPost "workspaces/$($ws.id)/assignToCapacity" @{ capacityId = $capId } | Out-Null; Log "  assigned capacity" }
     catch { Log "  capacity assign: $($_.Exception.Message)" "Yellow" }
   }
+  # Make the people who deployed (config fabric.workspaceAdmins: Entra object ids) workspace
+  # Admins, so a headless deploy (run as a managed identity) doesn't leave them locked out of
+  # their own workspace. Re-runs are harmless: an existing assignment is reported and skipped.
+  foreach ($adminId in @($cfg.fabric.workspaceAdmins | Where-Object { $_ })) {
+    $done = $false
+    foreach ($ptype in 'User', 'ServicePrincipal') {
+      try {
+        FPost "workspaces/$($ws.id)/roleAssignments" @{ principal = @{ id = $adminId; type = $ptype }; role = 'Admin' } | Out-Null
+        Log "  workspace admin added: $adminId ($ptype)"; $done = $true; break
+      } catch {
+        $msg = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+        if ($msg -match 'PrincipalAlreadyHasWorkspaceRolePermissions|already') { Log "  workspace admin already present: $adminId" "DarkGray"; $done = $true; break }
+      }
+    }
+    if (-not $done) { Log "  could not add workspace admin $adminId - add yourself in the Fabric portal (Manage access)" "Yellow" }
+  }
   $state.WorkspaceId = $ws.id
   Log "  workspace = $($ws.id)" "Green"
 }
@@ -949,8 +965,9 @@ Guidance:
 - Be concise and operational: tell the user which asset, why, and the recommended action. If data is missing, say so rather than guessing.
 '@
 
-  # 1) get-or-create the data agent by displayName
-  $agent = AzTry { (FGet "workspaces/$ws/dataAgents").value | Where-Object { $_.displayName -eq $name } | Select-Object -First 1 }
+  # 1) get-or-create the data agent by displayName. (Not AzTry: it stringifies objects, which
+  #    left $agent.id empty on re-runs and sent every later call to .../dataAgents//...)
+  $agent = try { (FGet "workspaces/$ws/dataAgents").value | Where-Object { $_.displayName -eq $name } | Select-Object -First 1 } catch { $null }
   if (-not $agent) {
     Log "  creating data agent '$name'..."
     $agent = FWait (FPost "workspaces/$ws/dataAgents" @{ displayName=$name; description=$desc })
@@ -965,7 +982,7 @@ Guidance:
   try { FPatch "$base/staging/settings" @{ aiInstructions=$instr } | Out-Null; Log "  instructions set" } catch { Log "  set instructions: $($_.Exception.Message)" "Yellow" }
 
   # 3) attach the semantic model as a datasource (idempotent)
-  $already = AzTry { (Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/$base/staging/datasources" -Headers @{ Authorization="Bearer $(FTok)" }).value | Where-Object { $_.id -eq $smId } }
+  $already = try { (Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/$base/staging/datasources" -Headers @{ Authorization="Bearer $(FTok)" }).value | Where-Object { $_.id -eq $smId } } catch { $null }
   if (-not $already) {
     Log "  adding semantic model datasource..."
     try { FWait (FPost "$base/staging/datasources" @{ type='FabricItem'; itemReference=@{ itemId=$smId; workspaceId=$ws } }) | Out-Null }
@@ -1376,7 +1393,7 @@ function Phase-FabricPlane {
   $lhId = $state.LakehouseId
   if (-not $lhId) { $lhId = AzTry { ((FGet "workspaces/$ws/lakehouses").value | Where-Object { $_.displayName -eq $cfg.fabric.lakehouseName } | Select-Object -First 1).id } }
   if (-not $state.KustoUri) {
-    $eh = AzTry { (FGet "workspaces/$ws/eventhouses").value | Where-Object { $_.displayName -eq $cfg.fabric.eventhouseName } | Select-Object -First 1 }
+    $eh = try { (FGet "workspaces/$ws/eventhouses").value | Where-Object { $_.displayName -eq $cfg.fabric.eventhouseName } | Select-Object -First 1 } catch { $null }
     if ($eh) { $state.KustoUri = (FGet "workspaces/$ws/eventhouses/$($eh.id)").properties.queryServiceUri }
   }
 
@@ -1403,7 +1420,7 @@ function Phase-FabricPlane {
         Log "    provisionIdentity: $($_.Exception.Message) - checking for an existing identity" "DarkYellow"
       }
       if (-not $spId) {
-        $wsDetail = AzTry { FGet "workspaces/$ws" }
+        $wsDetail = try { FGet "workspaces/$ws" } catch { $null }
         if ($wsDetail -and $wsDetail.workspaceIdentity) { $spId = $wsDetail.workspaceIdentity.servicePrincipalId }
       }
 
@@ -1440,7 +1457,7 @@ function Phase-FabricPlane {
           if ($conn) { $connId = $conn.id; $useAdls = $true; Log "    created workspace-identity connection $connId" "Green" }
         } catch {
           # Reuse an existing connection with the same display name if we hit a duplicate.
-          $existingConn = AzTry { (FGet "connections").value | Where-Object { $_.displayName -eq $connName } | Select-Object -First 1 }
+          $existingConn = try { (FGet "connections").value | Where-Object { $_.displayName -eq $connName } | Select-Object -First 1 } catch { $null }
           if ($existingConn) { $connId = $existingConn.id; $useAdls = $true; Log "    reusing existing connection $connId" "Yellow" }
           else { Log "    connection create failed: $($_.Exception.Message)" "Yellow" }
         }

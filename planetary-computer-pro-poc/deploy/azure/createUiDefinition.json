@@ -123,6 +123,31 @@
                 }
               ]
             }
+          },
+          {
+            "name": "exemptStorageFromPolicy",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Exempt this deployment's storage from storage policies",
+            "toolTip": "Turn on if your subscription enforces Azure Policy that disables shared-key or public network access on storage accounts (for example Microsoft MCAPS subscriptions). The deployment scripts need shared-key storage and the web app reads its package over the storage public endpoint. When on, the template tags its storage accounts with the opt-out tag below.",
+            "defaultValue": false
+          },
+          {
+            "name": "storagePolicyExemptionTagName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Policy exemption tag name",
+            "defaultValue": "SecurityControl",
+            "visible": "[steps('components').exemptStorageFromPolicy]",
+            "toolTip": "The tag your storage policy honors as an exemption.",
+            "constraints": { "required": true }
+          },
+          {
+            "name": "storagePolicyExemptionTagValue",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Policy exemption tag value",
+            "defaultValue": "Ignore",
+            "visible": "[steps('components').exemptStorageFromPolicy]",
+            "toolTip": "The tag value your storage policy honors as an exemption.",
+            "constraints": { "required": true }
           }
         ]
       },
@@ -525,6 +550,14 @@
               "validationMessage": "Enter an app registration client ID GUID, e.g. 00000000-0000-0000-0000-000000000000."
             },
             "visible": "[and(contains(steps('components').selected, 'oneGridApp'), not(steps('fabricConfig').createSignInApp))]"
+          },
+          {
+            "name": "grantProvisionerGraphPermission",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Grant the deployment identity permission to create app registrations",
+            "toolTip": "Grants pcpro-fabricplane-identity the Microsoft Graph application permission Application.ReadWrite.OwnedBy (it can only manage app registrations it creates). Needed to auto-create the sign-in app and the service principal that refreshes the Import semantic model. You must be a Global Administrator or Privileged Role Administrator to grant it.",
+            "defaultValue": false,
+            "visible": "[contains(steps('components').selected, 'fabricPlane')]"
           }
         ]
       }
@@ -533,6 +566,10 @@
       "location": "[location()]",
       "geoCatalogName": "[basics('geoCatalogName')]",
       "deployGeoCatalog": "[contains(steps('components').selected, 'geoCatalog')]",
+      "grantProvisionerGraphPermission": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').grantProvisionerGraphPermission)]",
+      "exemptStorageFromPolicy": "[steps('components').exemptStorageFromPolicy]",
+      "storagePolicyExemptionTagName": "[if(steps('components').exemptStorageFromPolicy, steps('components').storagePolicyExemptionTagName, 'SecurityControl')]",
+      "storagePolicyExemptionTagValue": "[if(steps('components').exemptStorageFromPolicy, steps('components').storagePolicyExemptionTagValue, 'Ignore')]",
       "deploySampleStorage": "[contains(steps('components').selected, 'sampleStorage')]",
       "deployAiAgent": "[contains(steps('components').selected, 'aiAgent')]",
       "deployAuroraModel": "[contains(steps('components').selected, 'auroraModel')]",

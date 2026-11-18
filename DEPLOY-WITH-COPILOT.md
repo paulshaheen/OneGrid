@@ -61,6 +61,7 @@ Ask these questions, ideally in one structured question. Defaults match the port
 | 8 | Fabric workspace name | `fabricWorkspaceName` | `OneGrid` |
 | 9 | Web app plan | `chatAgentAppServiceSku` | `B1` (B1–B3, S1–S3, P0v3–P3v3) |
 | 10 | Microsoft Entra sign-in | `enableEntraSignIn`, `entraSignInClientId` | on, auto-created; or supply an existing SPA client id |
+| 11 | Exempt storage from storage policies | `exemptStorageFromPolicy`, `storagePolicyExemptionTagName`, `storagePolicyExemptionTagValue` | off; see Step 2.7. Tag defaults `SecurityControl` / `Ignore` |
 
 **Infrastructure components** (question 3) map to these boolean parameters:
 
@@ -135,6 +136,19 @@ Run these checks and report a pass/fail list. Stop on a failure the user must fi
 6. **Sign-in.** Auto-creating the sign-in app registration needs the deployment identity to hold
    Microsoft Graph `Application.ReadWrite.OwnedBy`. If it doesn't, the app still deploys, without
    sign-in. Mention this; supplying an existing SPA client id avoids it.
+7. **Storage policies.** Some subscriptions enforce Azure Policy that turns off shared-key or
+   public network access on every new storage account (Microsoft internal MCAPS subscriptions
+   do). The deployment scripts then fail with `KeyBasedAuthenticationNotPermitted`, and the web
+   app can't read its package. Policies assigned at management-group level often aren't visible
+   from the subscription, so look for these signs:
+   - the subscription or tenant name contains `MCAP` (`az account show --query "{sub:name, tenant:tenantDefaultDomain}"`);
+   - existing storage accounts in the subscription all have shared-key access off:
+     `az storage account list --query "[].{name:name, sharedKey:allowSharedKeyAccess, publicNetwork:publicNetworkAccess}" -o table`.
+
+   If either sign is present, or the user isn't sure, ask whether to set
+   `exemptStorageFromPolicy` to `true`. It tags the deployment's storage accounts with the
+   policy's opt-out tag. Confirm the tag the policy honors (MCAPS uses `SecurityControl` =
+   `Ignore`), and that the user's organization allows the exemption.
 
 ### Step 3 — Write the parameters file and confirm the plan
 
@@ -163,6 +177,7 @@ repo. Example for the default choices:
     "chatAgentAppServiceSku": { "value": "B1" },
     "enableEntraSignIn": { "value": true },
     "entraSignInClientId": { "value": "" },
+    "exemptStorageFromPolicy": { "value": false },
     "oneGridModules": { "value": ["exec", "weather", "twin", "infra", "sap", "esu", "onerig", "copilot"] }
   }
 }
@@ -204,10 +219,12 @@ Poll every 2–3 minutes and give a one-line progress update each time:
 - Overall state: `az deployment group show -g <rg> -n onegrid --query properties.provisioningState -o tsv`
 - Resources still running or failed:
   `az deployment operation group list -g <rg> -n onegrid --query "[?properties.provisioningState!='Succeeded'].{resource:properties.targetResource.resourceName, state:properties.provisioningState}" -o table`
-- Provisioning script logs (the Fabric plane, then the app):
-  `az deployment-scripts show-log -g <rg> -n pcpro-onegrid-provision-fabric`
-  `az deployment-scripts show-log -g <rg> -n pcpro-onegrid-provision-app`
-  Summarize the latest phase lines; don't paste whole logs.
+- Provisioning script logs (the app plane, then the Fabric plane). These commands need the
+  long `--name` option; `-n` isn't accepted:
+  `az deployment-scripts show-log -g <rg> --name pcpro-onegrid-provision-app`
+  `az deployment-scripts show-log -g <rg> --name pcpro-onegrid-provision-fabric`
+  Summarize the latest phase lines (they start with a `[hh:mm:ss]` timestamp); don't paste
+  whole logs. A script's log is only available once its container has started.
 
 Stop polling when the state is `Succeeded` or `Failed`. On failure, find the failed operation's
 `properties.statusMessage`, then use Troubleshooting.
@@ -220,7 +237,13 @@ Stop polling when the state is `Succeeded` or `Failed`. On failure, find the fai
    after deployment can take a minute while the app starts.
 3. Confirm the modules: the web app name starts with `pcpro-onegrid-app-`.
    `az webapp config appsettings list -g <rg> -n <app-name> --query "[?name=='ONEGRID_MODULES'].value" -o tsv`
-4. Grant the user access to browse the GeoCatalog:
+4. If Copilot chat was selected, ask it one question to prove the AI and Fabric wiring end to
+   end. POST `{"message":"How many assets are on the watchlist?","history":[]}` as JSON to
+   `<app-url>/api/chat`. The response is a server-sent event stream; read the final line that
+   starts with `data: {"type":"done"`. Its `reply` should be an answer, and `queries` should
+   list at least one query. An `API error (404) DeploymentNotFound` reply means the app's
+   `AI_DEFAULT_MODEL` setting doesn't match the Azure OpenAI deployment name.
+5. Grant the user access to browse the GeoCatalog (if deployed):
    `az role assignment create --assignee <user-object-id> --role "GeoCatalog Administrator" --scope <geoCatalogResourceId output>`
 
 ### Step 8 — Report
@@ -248,7 +271,8 @@ Delete the temporary parameters file.
 | Fabric script log shows 401/403 creating the workspace | Fabric tenant setting not enabled for service principals | Fabric admin enables the setting (Step 2.4); redeploy |
 | Fabric script fails assigning the capacity | `pcpro-fabricplane-identity` lacks rights on an existing capacity | Add it as capacity Contributor/Admin; redeploy |
 | `AuthorizationFailed` on role assignments | Deployer isn't Owner | Use an Owner account, or have an Owner run the deployment |
-| App returns 403/404 or a blank page after deployment | App package blob not readable, often an Azure Policy that turns off public network access or shared-key access on storage accounts | Check the storage account's networking; allow the web app to read the `onegrid-app-package` container, then restart the app |
+| A deployment script fails with `KeyBasedAuthenticationNotPermitted` | A storage policy turned off shared-key access on the script's storage account | Redeploy with `exemptStorageFromPolicy=true` (Step 2.7) |
+| App returns 403/404 or a blank page after deployment | App package blob not readable, often an Azure Policy that turns off public network access on storage accounts | Redeploy with `exemptStorageFromPolicy=true` if the policy allows an opt-out tag; otherwise allow the web app to reach the `onegrid-app-package` container, then restart the app |
 | Sign-in not configured | Deployment identity can't create app registrations | Supply `entraSignInClientId` for an existing SPA app (redirect URI `https://<app>/auth/callback`) and redeploy |
 | Aurora endpoint fails | No A100 GPU quota | Leave Aurora off, or request quota (`preflight-quota.ps1 -RequestGpuQuota`) |
 

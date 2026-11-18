@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "18324860282029737935"
+      "templateHash": "3388641428855399607"
     }
   },
   "parameters": {
@@ -28,6 +29,27 @@
       "defaultValue": true,
       "metadata": {
         "description": "Deploy the Planetary Computer Pro GeoCatalog (geospatial imagery catalog used by the web app's map layers and asset uploads). Turn off to deploy OneGrid without it; the web app then reads live Fabric data without catalog imagery."
+      }
+    },
+    "exemptStorageFromPolicy": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Exempt this deployment's storage accounts from Azure Policy that disables shared-key or public network access on storage (for example the Microsoft MCAPS governance policies). When true, the storage accounts are tagged with the opt-out tag below, the deployment scripts run on a dedicated tagged storage account, and public network access is set explicitly. Leave false unless your subscription enforces such a policy and your organization allows the exemption."
+      }
+    },
+    "storagePolicyExemptionTagName": {
+      "type": "string",
+      "defaultValue": "SecurityControl",
+      "metadata": {
+        "description": "Tag name your storage policy honors as an exemption. Used only when exemptStorageFromPolicy is true."
+      }
+    },
+    "storagePolicyExemptionTagValue": {
+      "type": "string",
+      "defaultValue": "Ignore",
+      "metadata": {
+        "description": "Tag value your storage policy honors as an exemption. Used only when exemptStorageFromPolicy is true."
       }
     },
     "geoCatalogName": {
@@ -74,6 +96,13 @@
       "defaultValue": "",
       "metadata": {
         "description": "Optional pre-created Entra ID (SPA) app registration client ID for sign-in. Supply this when the deployment identity cannot create app registrations. Its SPA redirect URI must include https://<app-host>/auth/callback."
+      }
+    },
+    "grantProvisionerGraphPermission": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Grant the deployment identity (pcpro-fabricplane-identity) the Microsoft Graph application permission Application.ReadWrite.OwnedBy, so the setup scripts can create the Entra sign-in app registration and the service principal that binds and refreshes the Import semantic model. The person deploying must be able to grant Graph application permissions (Privileged Role Administrator or Global Administrator). Without it, sign-in stays unconfigured and the Import model is not refreshed."
       }
     },
     "openAiDeploymentName": {
@@ -322,11 +351,13 @@
     }
   },
   "variables": {
-    "$fxv#0": "<#\r\n================================================================================\r\n OneGrid full-solution provisioner — runs INSIDE the ARM deployment\r\n (Microsoft.Resources/deploymentScripts, kind = AzurePowerShell).\r\n================================================================================\r\n The Fabric operational plane (workspace/lakehouse/eventhouse/KQL/eventstream/\r\n notebooks/pipeline/semantic model/report), the AI Foundry account, and the\r\n chat/web-app Container App are NOT ARM resource types. Instead of re-porting that\r\n logic, this script stands them up by running OneGrid's own battle-tested\r\n orchestrator (planetary-computer-pro-poc/infra/deploy.ps1) headless, under the\r\n deployment's user-assigned managed identity, wired to the PCP backend this template built.\r\n\r\n It:\r\n   1. installs the toolchain the orchestrator needs (git + az CLI) if missing;\r\n   2. logs the az CLI in as the deployment identity (az login --identity);\r\n   3. clones the OneGrid repo (shallow, LFS skipped — data is cloud-seeded);\r\n   4. writes config.json from the ARM params + PCP outputs passed as env vars;\r\n   5. runs ./deploy.ps1 -Only <phases mapped from the selected components>;\r\n   6. returns the resulting workspace / app ids as deployment outputs.\r\n\r\n All inputs arrive as environment variables set by the Bicep deploymentScripts\r\n resource. This script is intentionally idempotent: deploy.ps1 reuses existing\r\n items by name, so re-running is safe.\r\n\r\n HONESTY: this path cannot be validated end-to-end without a live Azure + Fabric\r\n tenant. The first real deployment is the validation pass. Documented prereqs\r\n (Fabric tenant \"service principals can create workspaces\" setting, capacity\r\n admin, Managed Identity Operator on the identity) still apply.\r\n================================================================================\r\n#>\r\n$ErrorActionPreference = 'Stop'\r\nfunction Log($m, $c = 'Cyan') { Write-Host \"[$(Get-Date -f HH:mm:ss)] $m\" -ForegroundColor $c }\r\n\r\n# Force UTF-8 so the Python-based az CLI can print its success glyphs without dying.\r\n$env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'\r\ntry { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\r\n\r\n# --- 1. Toolchain: git + az CLI --------------------------------------------------\r\n# The AzurePowerShell deployment-script image is Ubuntu 22.04 (per MS docs: an Az\r\n# PowerShell module version >= 9 runs on Ubuntu 22.04), executing as root, with\r\n# apt-get + curl available but NO az CLI, git, python or sudo preinstalled. deploy.ps1\r\n# shells out to the az CLI, so `az` is REQUIRED; `git` is optional - the clone step\r\n# below falls back to a source-zip download when git is unavailable.\r\nfunction Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }\r\n\r\nfunction Invoke-Bash([string]$cmd) {\r\n  # Run a bash command, streaming its combined output to the deployment-script log.\r\n  & bash -c $cmd 2>&1 | ForEach-Object { Log \"  $_\" 'DarkGray' }\r\n  return $LASTEXITCODE\r\n}\r\n\r\nif (-not (Have 'az')) {\r\n  Log 'az CLI missing - installing via the Microsoft apt installer (aka.ms/InstallAzureCLIDeb)...'\r\n  # Canonical Debian/Ubuntu install path: it adds the Microsoft apt repo and installs\r\n  # azure-cli plus its bundled python runtime. azure-cli is NOT in the default Ubuntu\r\n  # repos, so a plain `apt-get install azure-cli` fails - this installer is required.\r\n  # We run as root, so no sudo is needed (and sudo is absent from the image).\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; curl -sL https://aka.ms/InstallAzureCLIDeb | bash' | Out-Null\r\n  $env:PATH = \"$env:PATH:/usr/bin:/usr/local/bin\"\r\n}\r\nif (-not (Have 'az')) { throw 'az CLI is required but could not be installed in the deployment container (Ubuntu 22.04 / apt).' }\r\n\r\nif (-not (Have 'git')) {\r\n  Log 'git missing - installing via apt-get...'\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; apt-get update -y && apt-get install -y git' | Out-Null\r\n}\r\n# NOTE: git is intentionally NOT hard-required - the clone step falls back to a zip download.\r\n\r\n# --- 2. Log the az CLI in as the deployment identity ------------------------------\r\n# The script service already ran Connect-AzAccount -Identity for Az PowerShell, but\r\n# deploy.ps1 shells out to the az CLI, which needs its own login.\r\nLog 'az login --identity...'\r\nif ($env:IDENTITY_CLIENT_ID) {\r\n  # az CLI 2.71+ removed `--username` for managed-identity login; the current flag is\r\n  # `--client-id`. Try it first, then fall back to `--username` for older CLI images.\r\n  & az login --identity --client-id $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors 2>$null | Out-Null\r\n  if ($LASTEXITCODE -ne 0) {\r\n    Log 'az login --client-id failed; retrying with legacy --username flag...' 'Yellow'\r\n    & az login --identity --username $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors | Out-Null\r\n  }\r\n} else {\r\n  & az login --identity --allow-no-subscriptions --only-show-errors | Out-Null\r\n}\r\nif ($env:SUBSCRIPTION_ID) { & az account set --subscription $env:SUBSCRIPTION_ID --only-show-errors 2>$null | Out-Null }\r\n\r\n# Register the Fabric resource provider. A subscription with a zero Fabric regional\r\n# quota (BadRequest: RegionalQuota 0) is usually one where Microsoft.Fabric was never\r\n# registered — registering it grants the default capacity-unit quota. Idempotent + fast\r\n# when already registered. Best-effort: never fail the run just for this.\r\ntry {\r\n  $fabricState = (& az provider show --namespace Microsoft.Fabric --query registrationState -o tsv 2>$null)\r\n  if ($fabricState -ne 'Registered') {\r\n    Log \"registering Microsoft.Fabric resource provider (current: $fabricState)...\"\r\n    & az provider register --namespace Microsoft.Fabric --only-show-errors 2>$null | Out-Null\r\n  } else { Log 'Microsoft.Fabric resource provider already registered' }\r\n} catch { Log \"Microsoft.Fabric provider registration skipped: $($_.Exception.Message)\" 'Yellow' }\r\n\r\n\r\n# --- 3. Clone the OneGrid orchestrator + accelerator content ----------------------\r\n$repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OneGrid.git' }\r\n$ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }\r\n$work = Join-Path ([IO.Path]::GetTempPath()) 'onegrid'\r\nif (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n$env:GIT_LFS_SKIP_SMUDGE = '1'   # data is cloud-seeded from the release bundle, not LFS\r\n$cloned = $false\r\nif (Have 'git') {\r\n  Log \"cloning $repo ($ref) via git...\"\r\n  try { & git clone --depth 1 --branch $ref $repo $work 2>&1 | Out-Null } catch { Log \"git clone failed: $($_.Exception.Message)\" 'Yellow' }\r\n  $cloned = (Test-Path $work) -and (@(Get-ChildItem $work -Force -ErrorAction SilentlyContinue).Count -gt 0)\r\n}\r\nif (-not $cloned) {\r\n  # git-less fallback: download the branch tarball from GitHub codeload (no git, no LFS).\r\n  # Invoke-WebRequest + Expand-Archive are native to pwsh, so this needs no extra tooling.\r\n  $slug = ($repo -replace '^https?://github\\.com/', '' -replace '\\.git$', '')\r\n  $zipUrl = \"https://codeload.github.com/$slug/zip/refs/heads/$ref\"\r\n  Log \"git unavailable/failed - downloading source zip: $zipUrl\"\r\n  if (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n  $zip = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-src.zip'\r\n  Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing\r\n  $extract = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-extract'\r\n  if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }\r\n  Expand-Archive -Path $zip -DestinationPath $extract -Force\r\n  $inner = Get-ChildItem $extract -Directory | Select-Object -First 1  # GitHub nests under <repo>-<ref>/\r\n  if (-not $inner) { throw \"source zip $zipUrl did not expand to a directory\" }\r\n  Move-Item $inner.FullName $work\r\n}\r\n\r\n# Locate the orchestrator. The OneGrid monorepo keeps it at\r\n# planetary-computer-pro-poc/infra/deploy.ps1; a flat/standalone repo keeps it at root.\r\n$deployScript = @(\r\n  (Join-Path $work 'planetary-computer-pro-poc/infra/deploy.ps1'),\r\n  (Join-Path $work 'deploy.ps1')\r\n) | Where-Object { Test-Path $_ } | Select-Object -First 1\r\nif (-not $deployScript) { throw \"clone did not produce deploy.ps1 (looked for planetary-computer-pro-poc/infra/deploy.ps1 and ./deploy.ps1) under $work\" }\r\n$deployDir = Split-Path -Parent $deployScript\r\nLog \"orchestrator: $deployScript\"\r\n\r\n# --- 4. Compose config.json from ARM params + PCP outputs -------------------------\r\n$rg = $env:TARGET_RESOURCE_GROUP\r\n$reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure OpenAI, reuse it\r\n$cfg = [ordered]@{\r\n  subscriptionId = $env:SUBSCRIPTION_ID\r\n  location       = $env:LOCATION\r\n  deployUnifiedModel = ($env:DEPLOY_UNIFIED_MODEL -eq 'true')   # unify Weather + Digital Twin onto OneGridModel\r\n  fabric = [ordered]@{\r\n    capacityId      = $env:FABRIC_CAPACITY_ID\r\n    workspaceName   = $(if ($env:FABRIC_WORKSPACE) { $env:FABRIC_WORKSPACE } else { 'OneGrid' })\r\n    lakehouseName   = 'lh_poc'\r\n    eventhouseName  = 'pi-realtime-eventhouse'\r\n    kqlDatabaseName = 'pi-realtime-db'\r\n    factWindowDays  = 30\r\n    siteCount       = 8\r\n  }\r\n  data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip' }\r\n  telemetry  = [ordered]@{ enabled = $false }\r\n  reuseExistingFoundry = $reuseFoundry\r\n  pcp = [ordered]@{\r\n    storageAccountName    = $env:PCP_STORAGE_ACCOUNT_NAME\r\n    storageAccountId      = $env:PCP_STORAGE_ACCOUNT_ID\r\n    blobEndpoint          = $env:PCP_BLOB_ENDPOINT\r\n    dfsEndpoint           = $env:PCP_DFS_ENDPOINT\r\n    modelOutputsContainer = $(if ($env:PCP_MODEL_CONTAINER) { $env:PCP_MODEL_CONTAINER } else { 'model-outputs' })\r\n    sampleContainer       = $env:PCP_SAMPLE_CONTAINER\r\n    auroraEndpoint        = $env:PCP_AURORA_ENDPOINT\r\n    auroraDeployed        = $env:PCP_AURORA_DEPLOYED\r\n    auroraJobName         = $env:PCP_AURORA_JOB_NAME\r\n    shortcutName          = 'pcp_model_outputs'\r\n    connectionId          = $env:FABRIC_CONNECTION_ID\r\n    createConnection      = ($env:PCP_CREATE_CONNECTION -eq 'true')\r\n    openAiEndpoint        = $env:PCP_OPENAI_ENDPOINT\r\n    openAiAccountId       = $env:PCP_OPENAI_ACCOUNT_ID\r\n    geoCatalogUri         = $env:PCP_GEOCATALOG_URI\r\n    geoCatalogId          = $env:PCP_GEOCATALOG_ID\r\n  }\r\n  foundry = [ordered]@{\r\n    resourceGroup = $rg\r\n    accountName   = \"$($env:NAME_PREFIX)-foundry\"\r\n    defaultModel  = 'gpt-4o'\r\n    models        = @(\r\n      [ordered]@{ deployment = 'gpt-4o'; model = 'gpt-4o'; version = '2024-11-20'; format = 'OpenAI'; capacity = 100 }\r\n    )\r\n  }\r\n  chatAgent = [ordered]@{\r\n    resourceGroup   = $rg\r\n    appName         = if ($env:CHAT_AGENT_APP_NAME) { $env:CHAT_AGENT_APP_NAME } else { \"$($env:NAME_PREFIX)-onegrid-app\" }\r\n    environmentName = \"$($env:NAME_PREFIX)-onegrid-app-env\"\r\n    packageUrl      = if ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL } else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }\r\n    packageBlobUrl  = $env:ONEGRID_APP_PACKAGE_BLOB_URL\r\n    packageStorageAccount = $env:ONEGRID_APP_STORAGE_ACCOUNT\r\n    packageContainer = if ($env:ONEGRID_APP_PACKAGE_CONTAINER) { $env:ONEGRID_APP_PACKAGE_CONTAINER } else { 'onegrid-app-package' }\r\n  }\r\n  signin = [ordered]@{\r\n    # Entra ID sign-in wiring for the Explorer. enabled=false skips it entirely; clientId lets\r\n    # an org supply a pre-created (governed) SPA app registration instead of auto-creating one.\r\n    enabled  = ($env:ENTRA_SIGNIN_ENABLED -ne 'false')\r\n    clientId = $env:ENTRA_SIGNIN_CLIENT_ID\r\n  }\r\n  governance = [ordered]@{ enabled = $false }\r\n}\r\n$cfgPath = Join-Path $deployDir 'config.json'\r\n[IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))\r\nLog \"config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName))\"\r\n\r\n# --- 5. Run the orchestrator for the selected phases ------------------------------\r\n$phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })\r\n# When the unified model is requested and an explicit phase subset is given, make sure the\r\n# 'unified' phase is included (with no -Only, deploy.ps1 runs all phases and it self-gates).\r\nif (($env:DEPLOY_UNIFIED_MODEL -eq 'true') -and $phases.Count -gt 0 -and ($phases -notcontains 'unified')) { $phases += 'unified' }\r\nLog \"running deploy.ps1 -Only $($phases -join ',')\"\r\nPush-Location $deployDir\r\ntry {\r\n  if ($phases.Count -gt 0) {\r\n    # `pwsh -File` cannot pass a multi-element array (it keeps only the first token, so\r\n    # -Only foundry,chatagent silently became just 'foundry'). Use -Command so PowerShell\r\n    # PARSES the phase list as real syntax and binds it as a proper [string[]].\r\n    $only = ($phases -join ',')\r\n    & pwsh -NoProfile -Command \"& '$deployScript' -ConfigPath '$cfgPath' -Only $only\"\r\n  } else {\r\n    & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath\r\n  }\r\n  $deployExit = $LASTEXITCODE\r\n} finally { Pop-Location }\r\nLog \"deploy.ps1 exit=$deployExit\"\r\n\r\n# --- 6. Surface the resulting ids as deployment outputs ---------------------------\r\n$state = @{}\r\n$statePath = Join-Path $deployDir 'last-deploy-state.json'\r\nif (Test-Path $statePath) {\r\n  try { $state = Get-Content $statePath -Raw | ConvertFrom-Json } catch {}\r\n}\r\n$DeploymentScriptOutputs = @{\r\n  phases      = ($phases -join ',')\r\n  deployExit  = $deployExit\r\n  workspaceId = $state.WorkspaceId\r\n  lakehouseId = $state.LakehouseId\r\n  kqlDatabase = $state.KqlDbId\r\n  kustoUri    = $state.KustoUri\r\n  appUrl      = $state.AppUrl\r\n  foundryEndpoint = $state.FoundryEndpoint\r\n}\r\n\r\n# deploy.ps1 records non-fatal phase issues but exits non-zero if any occurred.\r\n# Surface that as a script failure so the deployment reflects it, but only after\r\n# outputs are set so the partial state is still visible.\r\nif ($deployExit -and $deployExit -ne 0) {\r\n  throw \"deploy.ps1 finished with issues (exit $deployExit). See container logs for the per-phase summary.\"\r\n}\r\n",
-    "$fxv#1": "<#\r\n================================================================================\r\n OneGrid full-solution provisioner — runs INSIDE the ARM deployment\r\n (Microsoft.Resources/deploymentScripts, kind = AzurePowerShell).\r\n================================================================================\r\n The Fabric operational plane (workspace/lakehouse/eventhouse/KQL/eventstream/\r\n notebooks/pipeline/semantic model/report), the AI Foundry account, and the\r\n chat/web-app Container App are NOT ARM resource types. Instead of re-porting that\r\n logic, this script stands them up by running OneGrid's own battle-tested\r\n orchestrator (planetary-computer-pro-poc/infra/deploy.ps1) headless, under the\r\n deployment's user-assigned managed identity, wired to the PCP backend this template built.\r\n\r\n It:\r\n   1. installs the toolchain the orchestrator needs (git + az CLI) if missing;\r\n   2. logs the az CLI in as the deployment identity (az login --identity);\r\n   3. clones the OneGrid repo (shallow, LFS skipped — data is cloud-seeded);\r\n   4. writes config.json from the ARM params + PCP outputs passed as env vars;\r\n   5. runs ./deploy.ps1 -Only <phases mapped from the selected components>;\r\n   6. returns the resulting workspace / app ids as deployment outputs.\r\n\r\n All inputs arrive as environment variables set by the Bicep deploymentScripts\r\n resource. This script is intentionally idempotent: deploy.ps1 reuses existing\r\n items by name, so re-running is safe.\r\n\r\n HONESTY: this path cannot be validated end-to-end without a live Azure + Fabric\r\n tenant. The first real deployment is the validation pass. Documented prereqs\r\n (Fabric tenant \"service principals can create workspaces\" setting, capacity\r\n admin, Managed Identity Operator on the identity) still apply.\r\n================================================================================\r\n#>\r\n$ErrorActionPreference = 'Stop'\r\nfunction Log($m, $c = 'Cyan') { Write-Host \"[$(Get-Date -f HH:mm:ss)] $m\" -ForegroundColor $c }\r\n\r\n# Force UTF-8 so the Python-based az CLI can print its success glyphs without dying.\r\n$env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'\r\ntry { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\r\n\r\n# --- 1. Toolchain: git + az CLI --------------------------------------------------\r\n# The AzurePowerShell deployment-script image is Ubuntu 22.04 (per MS docs: an Az\r\n# PowerShell module version >= 9 runs on Ubuntu 22.04), executing as root, with\r\n# apt-get + curl available but NO az CLI, git, python or sudo preinstalled. deploy.ps1\r\n# shells out to the az CLI, so `az` is REQUIRED; `git` is optional - the clone step\r\n# below falls back to a source-zip download when git is unavailable.\r\nfunction Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }\r\n\r\nfunction Invoke-Bash([string]$cmd) {\r\n  # Run a bash command, streaming its combined output to the deployment-script log.\r\n  & bash -c $cmd 2>&1 | ForEach-Object { Log \"  $_\" 'DarkGray' }\r\n  return $LASTEXITCODE\r\n}\r\n\r\nif (-not (Have 'az')) {\r\n  Log 'az CLI missing - installing via the Microsoft apt installer (aka.ms/InstallAzureCLIDeb)...'\r\n  # Canonical Debian/Ubuntu install path: it adds the Microsoft apt repo and installs\r\n  # azure-cli plus its bundled python runtime. azure-cli is NOT in the default Ubuntu\r\n  # repos, so a plain `apt-get install azure-cli` fails - this installer is required.\r\n  # We run as root, so no sudo is needed (and sudo is absent from the image).\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; curl -sL https://aka.ms/InstallAzureCLIDeb | bash' | Out-Null\r\n  $env:PATH = \"$env:PATH:/usr/bin:/usr/local/bin\"\r\n}\r\nif (-not (Have 'az')) { throw 'az CLI is required but could not be installed in the deployment container (Ubuntu 22.04 / apt).' }\r\n\r\nif (-not (Have 'git')) {\r\n  Log 'git missing - installing via apt-get...'\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; apt-get update -y && apt-get install -y git' | Out-Null\r\n}\r\n# NOTE: git is intentionally NOT hard-required - the clone step falls back to a zip download.\r\n\r\n# --- 2. Log the az CLI in as the deployment identity ------------------------------\r\n# The script service already ran Connect-AzAccount -Identity for Az PowerShell, but\r\n# deploy.ps1 shells out to the az CLI, which needs its own login.\r\nLog 'az login --identity...'\r\nif ($env:IDENTITY_CLIENT_ID) {\r\n  # az CLI 2.71+ removed `--username` for managed-identity login; the current flag is\r\n  # `--client-id`. Try it first, then fall back to `--username` for older CLI images.\r\n  & az login --identity --client-id $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors 2>$null | Out-Null\r\n  if ($LASTEXITCODE -ne 0) {\r\n    Log 'az login --client-id failed; retrying with legacy --username flag...' 'Yellow'\r\n    & az login --identity --username $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors | Out-Null\r\n  }\r\n} else {\r\n  & az login --identity --allow-no-subscriptions --only-show-errors | Out-Null\r\n}\r\nif ($env:SUBSCRIPTION_ID) { & az account set --subscription $env:SUBSCRIPTION_ID --only-show-errors 2>$null | Out-Null }\r\n\r\n# Register the Fabric resource provider. A subscription with a zero Fabric regional\r\n# quota (BadRequest: RegionalQuota 0) is usually one where Microsoft.Fabric was never\r\n# registered — registering it grants the default capacity-unit quota. Idempotent + fast\r\n# when already registered. Best-effort: never fail the run just for this.\r\ntry {\r\n  $fabricState = (& az provider show --namespace Microsoft.Fabric --query registrationState -o tsv 2>$null)\r\n  if ($fabricState -ne 'Registered') {\r\n    Log \"registering Microsoft.Fabric resource provider (current: $fabricState)...\"\r\n    & az provider register --namespace Microsoft.Fabric --only-show-errors 2>$null | Out-Null\r\n  } else { Log 'Microsoft.Fabric resource provider already registered' }\r\n} catch { Log \"Microsoft.Fabric provider registration skipped: $($_.Exception.Message)\" 'Yellow' }\r\n\r\n\r\n# --- 3. Clone the OneGrid orchestrator + accelerator content ----------------------\r\n$repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OneGrid.git' }\r\n$ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }\r\n$work = Join-Path ([IO.Path]::GetTempPath()) 'onegrid'\r\nif (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n$env:GIT_LFS_SKIP_SMUDGE = '1'   # data is cloud-seeded from the release bundle, not LFS\r\n$cloned = $false\r\nif (Have 'git') {\r\n  Log \"cloning $repo ($ref) via git...\"\r\n  try { & git clone --depth 1 --branch $ref $repo $work 2>&1 | Out-Null } catch { Log \"git clone failed: $($_.Exception.Message)\" 'Yellow' }\r\n  $cloned = (Test-Path $work) -and (@(Get-ChildItem $work -Force -ErrorAction SilentlyContinue).Count -gt 0)\r\n}\r\nif (-not $cloned) {\r\n  # git-less fallback: download the branch tarball from GitHub codeload (no git, no LFS).\r\n  # Invoke-WebRequest + Expand-Archive are native to pwsh, so this needs no extra tooling.\r\n  $slug = ($repo -replace '^https?://github\\.com/', '' -replace '\\.git$', '')\r\n  $zipUrl = \"https://codeload.github.com/$slug/zip/refs/heads/$ref\"\r\n  Log \"git unavailable/failed - downloading source zip: $zipUrl\"\r\n  if (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n  $zip = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-src.zip'\r\n  Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing\r\n  $extract = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-extract'\r\n  if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }\r\n  Expand-Archive -Path $zip -DestinationPath $extract -Force\r\n  $inner = Get-ChildItem $extract -Directory | Select-Object -First 1  # GitHub nests under <repo>-<ref>/\r\n  if (-not $inner) { throw \"source zip $zipUrl did not expand to a directory\" }\r\n  Move-Item $inner.FullName $work\r\n}\r\n\r\n# Locate the orchestrator. The OneGrid monorepo keeps it at\r\n# planetary-computer-pro-poc/infra/deploy.ps1; a flat/standalone repo keeps it at root.\r\n$deployScript = @(\r\n  (Join-Path $work 'planetary-computer-pro-poc/infra/deploy.ps1'),\r\n  (Join-Path $work 'deploy.ps1')\r\n) | Where-Object { Test-Path $_ } | Select-Object -First 1\r\nif (-not $deployScript) { throw \"clone did not produce deploy.ps1 (looked for planetary-computer-pro-poc/infra/deploy.ps1 and ./deploy.ps1) under $work\" }\r\n$deployDir = Split-Path -Parent $deployScript\r\nLog \"orchestrator: $deployScript\"\r\n\r\n# --- 4. Compose config.json from ARM params + PCP outputs -------------------------\r\n$rg = $env:TARGET_RESOURCE_GROUP\r\n$reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure OpenAI, reuse it\r\n$cfg = [ordered]@{\r\n  subscriptionId = $env:SUBSCRIPTION_ID\r\n  location       = $env:LOCATION\r\n  deployUnifiedModel = ($env:DEPLOY_UNIFIED_MODEL -eq 'true')   # unify Weather + Digital Twin onto OneGridModel\r\n  fabric = [ordered]@{\r\n    capacityId      = $env:FABRIC_CAPACITY_ID\r\n    workspaceName   = $(if ($env:FABRIC_WORKSPACE) { $env:FABRIC_WORKSPACE } else { 'OneGrid' })\r\n    lakehouseName   = 'lh_poc'\r\n    eventhouseName  = 'pi-realtime-eventhouse'\r\n    kqlDatabaseName = 'pi-realtime-db'\r\n    factWindowDays  = 30\r\n    siteCount       = 8\r\n  }\r\n  data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip' }\r\n  telemetry  = [ordered]@{ enabled = $false }\r\n  reuseExistingFoundry = $reuseFoundry\r\n  pcp = [ordered]@{\r\n    storageAccountName    = $env:PCP_STORAGE_ACCOUNT_NAME\r\n    storageAccountId      = $env:PCP_STORAGE_ACCOUNT_ID\r\n    blobEndpoint          = $env:PCP_BLOB_ENDPOINT\r\n    dfsEndpoint           = $env:PCP_DFS_ENDPOINT\r\n    modelOutputsContainer = $(if ($env:PCP_MODEL_CONTAINER) { $env:PCP_MODEL_CONTAINER } else { 'model-outputs' })\r\n    sampleContainer       = $env:PCP_SAMPLE_CONTAINER\r\n    auroraEndpoint        = $env:PCP_AURORA_ENDPOINT\r\n    auroraDeployed        = $env:PCP_AURORA_DEPLOYED\r\n    auroraJobName         = $env:PCP_AURORA_JOB_NAME\r\n    shortcutName          = 'pcp_model_outputs'\r\n    connectionId          = $env:FABRIC_CONNECTION_ID\r\n    createConnection      = ($env:PCP_CREATE_CONNECTION -eq 'true')\r\n    openAiEndpoint        = $env:PCP_OPENAI_ENDPOINT\r\n    openAiAccountId       = $env:PCP_OPENAI_ACCOUNT_ID\r\n    geoCatalogUri         = $env:PCP_GEOCATALOG_URI\r\n    geoCatalogId          = $env:PCP_GEOCATALOG_ID\r\n  }\r\n  foundry = [ordered]@{\r\n    resourceGroup = $rg\r\n    accountName   = \"$($env:NAME_PREFIX)-foundry\"\r\n    defaultModel  = 'gpt-4o'\r\n    models        = @(\r\n      [ordered]@{ deployment = 'gpt-4o'; model = 'gpt-4o'; version = '2024-11-20'; format = 'OpenAI'; capacity = 100 }\r\n    )\r\n  }\r\n  chatAgent = [ordered]@{\r\n    resourceGroup   = $rg\r\n    appName         = if ($env:CHAT_AGENT_APP_NAME) { $env:CHAT_AGENT_APP_NAME } else { \"$($env:NAME_PREFIX)-onegrid-app\" }\r\n    environmentName = \"$($env:NAME_PREFIX)-onegrid-app-env\"\r\n    packageUrl      = if ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL } else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }\r\n    packageBlobUrl  = $env:ONEGRID_APP_PACKAGE_BLOB_URL\r\n    packageStorageAccount = $env:ONEGRID_APP_STORAGE_ACCOUNT\r\n    packageContainer = if ($env:ONEGRID_APP_PACKAGE_CONTAINER) { $env:ONEGRID_APP_PACKAGE_CONTAINER } else { 'onegrid-app-package' }\r\n  }\r\n  signin = [ordered]@{\r\n    # Entra ID sign-in wiring for the Explorer. enabled=false skips it entirely; clientId lets\r\n    # an org supply a pre-created (governed) SPA app registration instead of auto-creating one.\r\n    enabled  = ($env:ENTRA_SIGNIN_ENABLED -ne 'false')\r\n    clientId = $env:ENTRA_SIGNIN_CLIENT_ID\r\n  }\r\n  governance = [ordered]@{ enabled = $false }\r\n}\r\n$cfgPath = Join-Path $deployDir 'config.json'\r\n[IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))\r\nLog \"config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName))\"\r\n\r\n# --- 5. Run the orchestrator for the selected phases ------------------------------\r\n$phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })\r\n# When the unified model is requested and an explicit phase subset is given, make sure the\r\n# 'unified' phase is included (with no -Only, deploy.ps1 runs all phases and it self-gates).\r\nif (($env:DEPLOY_UNIFIED_MODEL -eq 'true') -and $phases.Count -gt 0 -and ($phases -notcontains 'unified')) { $phases += 'unified' }\r\nLog \"running deploy.ps1 -Only $($phases -join ',')\"\r\nPush-Location $deployDir\r\ntry {\r\n  if ($phases.Count -gt 0) {\r\n    # `pwsh -File` cannot pass a multi-element array (it keeps only the first token, so\r\n    # -Only foundry,chatagent silently became just 'foundry'). Use -Command so PowerShell\r\n    # PARSES the phase list as real syntax and binds it as a proper [string[]].\r\n    $only = ($phases -join ',')\r\n    & pwsh -NoProfile -Command \"& '$deployScript' -ConfigPath '$cfgPath' -Only $only\"\r\n  } else {\r\n    & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath\r\n  }\r\n  $deployExit = $LASTEXITCODE\r\n} finally { Pop-Location }\r\nLog \"deploy.ps1 exit=$deployExit\"\r\n\r\n# --- 6. Surface the resulting ids as deployment outputs ---------------------------\r\n$state = @{}\r\n$statePath = Join-Path $deployDir 'last-deploy-state.json'\r\nif (Test-Path $statePath) {\r\n  try { $state = Get-Content $statePath -Raw | ConvertFrom-Json } catch {}\r\n}\r\n$DeploymentScriptOutputs = @{\r\n  phases      = ($phases -join ',')\r\n  deployExit  = $deployExit\r\n  workspaceId = $state.WorkspaceId\r\n  lakehouseId = $state.LakehouseId\r\n  kqlDatabase = $state.KqlDbId\r\n  kustoUri    = $state.KustoUri\r\n  appUrl      = $state.AppUrl\r\n  foundryEndpoint = $state.FoundryEndpoint\r\n}\r\n\r\n# deploy.ps1 records non-fatal phase issues but exits non-zero if any occurred.\r\n# Surface that as a script failure so the deployment reflects it, but only after\r\n# outputs are set so the partial state is still visible.\r\nif ($deployExit -and $deployExit -ne 0) {\r\n  throw \"deploy.ps1 finished with issues (exit $deployExit). See container logs for the per-phase summary.\"\r\n}\r\n",
+    "$fxv#0": "<#\r\n================================================================================\r\n OneGrid full-solution provisioner — runs INSIDE the ARM deployment\r\n (Microsoft.Resources/deploymentScripts, kind = AzurePowerShell).\r\n================================================================================\r\n The Fabric operational plane (workspace/lakehouse/eventhouse/KQL/eventstream/\r\n notebooks/pipeline/semantic model/report), the AI Foundry account, and the\r\n chat/web-app Container App are NOT ARM resource types. Instead of re-porting that\r\n logic, this script stands them up by running OneGrid's own battle-tested\r\n orchestrator (planetary-computer-pro-poc/infra/deploy.ps1) headless, under the\r\n deployment's user-assigned managed identity, wired to the PCP backend this template built.\r\n\r\n It:\r\n   1. installs the toolchain the orchestrator needs (git + az CLI) if missing;\r\n   2. logs the az CLI in as the deployment identity (az login --identity);\r\n   3. clones the OneGrid repo (shallow, LFS skipped — data is cloud-seeded);\r\n   4. writes config.json from the ARM params + PCP outputs passed as env vars;\r\n   5. runs ./deploy.ps1 -Only <phases mapped from the selected components>;\r\n   6. returns the resulting workspace / app ids as deployment outputs.\r\n\r\n All inputs arrive as environment variables set by the Bicep deploymentScripts\r\n resource. This script is intentionally idempotent: deploy.ps1 reuses existing\r\n items by name, so re-running is safe.\r\n\r\n HONESTY: this path cannot be validated end-to-end without a live Azure + Fabric\r\n tenant. The first real deployment is the validation pass. Documented prereqs\r\n (Fabric tenant \"service principals can create workspaces\" setting, capacity\r\n admin, Managed Identity Operator on the identity) still apply.\r\n================================================================================\r\n#>\r\n$ErrorActionPreference = 'Stop'\r\nfunction Log($m, $c = 'Cyan') { Write-Host \"[$(Get-Date -f HH:mm:ss)] $m\" -ForegroundColor $c }\r\n\r\n# Force UTF-8 so the Python-based az CLI can print its success glyphs without dying.\r\n$env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'\r\ntry { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\r\n\r\n# --- 1. Toolchain: git + az CLI --------------------------------------------------\r\n# The AzurePowerShell deployment-script image is Ubuntu 22.04 (per MS docs: an Az\r\n# PowerShell module version >= 9 runs on Ubuntu 22.04), executing as root, with\r\n# apt-get + curl available but NO az CLI, git, python or sudo preinstalled. deploy.ps1\r\n# shells out to the az CLI, so `az` is REQUIRED; `git` is optional - the clone step\r\n# below falls back to a source-zip download when git is unavailable.\r\nfunction Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }\r\n\r\nfunction Invoke-Bash([string]$cmd) {\r\n  # Run a bash command, streaming its combined output to the deployment-script log.\r\n  & bash -c $cmd 2>&1 | ForEach-Object { Log \"  $_\" 'DarkGray' }\r\n  return $LASTEXITCODE\r\n}\r\n\r\nif (-not (Have 'az')) {\r\n  Log 'az CLI missing - installing via the Microsoft apt installer (aka.ms/InstallAzureCLIDeb)...'\r\n  # Canonical Debian/Ubuntu install path: it adds the Microsoft apt repo and installs\r\n  # azure-cli plus its bundled python runtime. azure-cli is NOT in the default Ubuntu\r\n  # repos, so a plain `apt-get install azure-cli` fails - this installer is required.\r\n  # We run as root, so no sudo is needed (and sudo is absent from the image).\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; curl -sL https://aka.ms/InstallAzureCLIDeb | bash' | Out-Null\r\n  $env:PATH = \"$env:PATH:/usr/bin:/usr/local/bin\"\r\n}\r\nif (-not (Have 'az')) { throw 'az CLI is required but could not be installed in the deployment container (Ubuntu 22.04 / apt).' }\r\n\r\nif (-not (Have 'git')) {\r\n  Log 'git missing - installing via apt-get...'\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; apt-get update -y && apt-get install -y git' | Out-Null\r\n}\r\n# NOTE: git is intentionally NOT hard-required - the clone step falls back to a zip download.\r\n\r\n# --- 2. Log the az CLI in as the deployment identity ------------------------------\r\n# The script service already ran Connect-AzAccount -Identity for Az PowerShell, but\r\n# deploy.ps1 shells out to the az CLI, which needs its own login.\r\nLog 'az login --identity...'\r\nif ($env:IDENTITY_CLIENT_ID) {\r\n  # az CLI 2.71+ removed `--username` for managed-identity login; the current flag is\r\n  # `--client-id`. Try it first, then fall back to `--username` for older CLI images.\r\n  & az login --identity --client-id $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors 2>$null | Out-Null\r\n  if ($LASTEXITCODE -ne 0) {\r\n    Log 'az login --client-id failed; retrying with legacy --username flag...' 'Yellow'\r\n    & az login --identity --username $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors | Out-Null\r\n  }\r\n} else {\r\n  & az login --identity --allow-no-subscriptions --only-show-errors | Out-Null\r\n}\r\nif ($env:SUBSCRIPTION_ID) { & az account set --subscription $env:SUBSCRIPTION_ID --only-show-errors 2>$null | Out-Null }\r\n\r\n# Register the Fabric resource provider. A subscription with a zero Fabric regional\r\n# quota (BadRequest: RegionalQuota 0) is usually one where Microsoft.Fabric was never\r\n# registered — registering it grants the default capacity-unit quota. Idempotent + fast\r\n# when already registered. Best-effort: never fail the run just for this.\r\ntry {\r\n  $fabricState = (& az provider show --namespace Microsoft.Fabric --query registrationState -o tsv 2>$null)\r\n  if ($fabricState -ne 'Registered') {\r\n    Log \"registering Microsoft.Fabric resource provider (current: $fabricState)...\"\r\n    & az provider register --namespace Microsoft.Fabric --only-show-errors 2>$null | Out-Null\r\n  } else { Log 'Microsoft.Fabric resource provider already registered' }\r\n} catch { Log \"Microsoft.Fabric provider registration skipped: $($_.Exception.Message)\" 'Yellow' }\r\n\r\n\r\n# --- 3. Clone the OneGrid orchestrator + accelerator content ----------------------\r\n$repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OneGrid.git' }\r\n$ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }\r\n$work = Join-Path ([IO.Path]::GetTempPath()) 'onegrid'\r\nif (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n$env:GIT_LFS_SKIP_SMUDGE = '1'   # data is cloud-seeded from the release bundle, not LFS\r\n$cloned = $false\r\nif (Have 'git') {\r\n  Log \"cloning $repo ($ref) via git...\"\r\n  try { & git clone --depth 1 --branch $ref $repo $work 2>&1 | Out-Null } catch { Log \"git clone failed: $($_.Exception.Message)\" 'Yellow' }\r\n  $cloned = (Test-Path $work) -and (@(Get-ChildItem $work -Force -ErrorAction SilentlyContinue).Count -gt 0)\r\n}\r\nif (-not $cloned) {\r\n  # git-less fallback: download the branch tarball from GitHub codeload (no git, no LFS).\r\n  # Invoke-WebRequest + Expand-Archive are native to pwsh, so this needs no extra tooling.\r\n  $slug = ($repo -replace '^https?://github\\.com/', '' -replace '\\.git$', '')\r\n  $zipUrl = \"https://codeload.github.com/$slug/zip/refs/heads/$ref\"\r\n  Log \"git unavailable/failed - downloading source zip: $zipUrl\"\r\n  if (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n  $zip = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-src.zip'\r\n  Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing\r\n  $extract = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-extract'\r\n  if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }\r\n  Expand-Archive -Path $zip -DestinationPath $extract -Force\r\n  $inner = Get-ChildItem $extract -Directory | Select-Object -First 1  # GitHub nests under <repo>-<ref>/\r\n  if (-not $inner) { throw \"source zip $zipUrl did not expand to a directory\" }\r\n  Move-Item $inner.FullName $work\r\n}\r\n\r\n# Locate the orchestrator. The OneGrid monorepo keeps it at\r\n# planetary-computer-pro-poc/infra/deploy.ps1; a flat/standalone repo keeps it at root.\r\n$deployScript = @(\r\n  (Join-Path $work 'planetary-computer-pro-poc/infra/deploy.ps1'),\r\n  (Join-Path $work 'deploy.ps1')\r\n) | Where-Object { Test-Path $_ } | Select-Object -First 1\r\nif (-not $deployScript) { throw \"clone did not produce deploy.ps1 (looked for planetary-computer-pro-poc/infra/deploy.ps1 and ./deploy.ps1) under $work\" }\r\n$deployDir = Split-Path -Parent $deployScript\r\nLog \"orchestrator: $deployScript\"\r\n\r\n# --- 4. Compose config.json from ARM params + PCP outputs -------------------------\r\n$rg = $env:TARGET_RESOURCE_GROUP\r\n$reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure OpenAI, reuse it\r\n[object[]]$foundryModels = if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) {\r\n  @([ordered]@{ deployment = $env:PCP_OPENAI_DEPLOYMENT; model = $env:PCP_OPENAI_DEPLOYMENT; format = 'OpenAI' })\r\n} else {\r\n  @([ordered]@{ deployment = 'gpt-4o'; model = 'gpt-4o'; version = '2024-11-20'; format = 'OpenAI'; capacity = 100 })\r\n}\r\n$cfg = [ordered]@{\r\n  subscriptionId = $env:SUBSCRIPTION_ID\r\n  location       = $env:LOCATION\r\n  deployUnifiedModel = ($env:DEPLOY_UNIFIED_MODEL -eq 'true')   # unify Weather + Digital Twin onto OneGridModel\r\n  fabric = [ordered]@{\r\n    capacityId      = $env:FABRIC_CAPACITY_ID\r\n    workspaceName   = $(if ($env:FABRIC_WORKSPACE) { $env:FABRIC_WORKSPACE } else { 'OneGrid' })\r\n    lakehouseName   = 'lh_poc'\r\n    eventhouseName  = 'pi-realtime-eventhouse'\r\n    kqlDatabaseName = 'pi-realtime-db'\r\n    factWindowDays  = 30\r\n    siteCount       = 8\r\n    workspaceAdmins = @($env:FABRIC_WORKSPACE_ADMIN_OBJECT_ID | Where-Object { $_ })\r\n  }\r\n  data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip' }\r\n  telemetry  = [ordered]@{ enabled = $false }\r\n  reuseExistingFoundry = $reuseFoundry\r\n  pcp = [ordered]@{\r\n    storageAccountName    = $env:PCP_STORAGE_ACCOUNT_NAME\r\n    storageAccountId      = $env:PCP_STORAGE_ACCOUNT_ID\r\n    blobEndpoint          = $env:PCP_BLOB_ENDPOINT\r\n    dfsEndpoint           = $env:PCP_DFS_ENDPOINT\r\n    modelOutputsContainer = $(if ($env:PCP_MODEL_CONTAINER) { $env:PCP_MODEL_CONTAINER } else { 'model-outputs' })\r\n    sampleContainer       = $env:PCP_SAMPLE_CONTAINER\r\n    auroraEndpoint        = $env:PCP_AURORA_ENDPOINT\r\n    auroraDeployed        = $env:PCP_AURORA_DEPLOYED\r\n    auroraJobName         = $env:PCP_AURORA_JOB_NAME\r\n    shortcutName          = 'pcp_model_outputs'\r\n    connectionId          = $env:FABRIC_CONNECTION_ID\r\n    createConnection      = ($env:PCP_CREATE_CONNECTION -eq 'true')\r\n    openAiEndpoint        = $env:PCP_OPENAI_ENDPOINT\r\n    openAiAccountId       = $env:PCP_OPENAI_ACCOUNT_ID\r\n    geoCatalogUri         = $env:PCP_GEOCATALOG_URI\r\n    geoCatalogId          = $env:PCP_GEOCATALOG_ID\r\n  }\r\n  foundry = [ordered]@{\r\n    resourceGroup = $rg\r\n    # When reusing the template's Azure OpenAI account, wire the app to that account and its\r\n    # actual model deployment (otherwise the app asks for a gpt-4o deployment that doesn't exist).\r\n    accountName   = $(if ($reuseFoundry -and $env:PCP_OPENAI_ACCOUNT_ID) { ($env:PCP_OPENAI_ACCOUNT_ID -split '/')[-1] } else { \"$($env:NAME_PREFIX)-foundry\" })\r\n    defaultModel  = $(if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) { $env:PCP_OPENAI_DEPLOYMENT } else { 'gpt-4o' })\r\n    models        = $foundryModels\r\n  }\r\n  chatAgent = [ordered]@{\r\n    resourceGroup   = $rg\r\n    appName         = if ($env:CHAT_AGENT_APP_NAME) { $env:CHAT_AGENT_APP_NAME } else { \"$($env:NAME_PREFIX)-onegrid-app\" }\r\n    environmentName = \"$($env:NAME_PREFIX)-onegrid-app-env\"\r\n    packageUrl      = if ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL } else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }\r\n    packageBlobUrl  = $env:ONEGRID_APP_PACKAGE_BLOB_URL\r\n    packageStorageAccount = $env:ONEGRID_APP_STORAGE_ACCOUNT\r\n    packageContainer = if ($env:ONEGRID_APP_PACKAGE_CONTAINER) { $env:ONEGRID_APP_PACKAGE_CONTAINER } else { 'onegrid-app-package' }\r\n  }\r\n  signin = [ordered]@{\r\n    # Entra ID sign-in wiring for the Explorer. enabled=false skips it entirely; clientId lets\r\n    # an org supply a pre-created (governed) SPA app registration instead of auto-creating one.\r\n    enabled  = ($env:ENTRA_SIGNIN_ENABLED -ne 'false')\r\n    clientId = $env:ENTRA_SIGNIN_CLIENT_ID\r\n  }\r\n  governance = [ordered]@{ enabled = $false }\r\n}\r\n$cfgPath = Join-Path $deployDir 'config.json'\r\n[IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))\r\nLog \"config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName))\"\r\n\r\n# --- 5. Run the orchestrator for the selected phases ------------------------------\r\n$phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })\r\n# When the unified model is requested and an explicit phase subset is given, make sure the\r\n# 'unified' phase is included (with no -Only, deploy.ps1 runs all phases and it self-gates).\r\nif (($env:DEPLOY_UNIFIED_MODEL -eq 'true') -and $phases.Count -gt 0 -and ($phases -notcontains 'unified')) { $phases += 'unified' }\r\nLog \"running deploy.ps1 -Only $($phases -join ',')\"\r\nPush-Location $deployDir\r\ntry {\r\n  if ($phases.Count -gt 0) {\r\n    # `pwsh -File` cannot pass a multi-element array (it keeps only the first token, so\r\n    # -Only foundry,chatagent silently became just 'foundry'). Use -Command so PowerShell\r\n    # PARSES the phase list as real syntax and binds it as a proper [string[]].\r\n    $only = ($phases -join ',')\r\n    & pwsh -NoProfile -Command \"& '$deployScript' -ConfigPath '$cfgPath' -Only $only\"\r\n  } else {\r\n    & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath\r\n  }\r\n  $deployExit = $LASTEXITCODE\r\n} finally { Pop-Location }\r\nLog \"deploy.ps1 exit=$deployExit\"\r\n\r\n# --- 6. Surface the resulting ids as deployment outputs ---------------------------\r\n$state = @{}\r\n$statePath = Join-Path $deployDir 'last-deploy-state.json'\r\nif (Test-Path $statePath) {\r\n  try { $state = Get-Content $statePath -Raw | ConvertFrom-Json } catch {}\r\n}\r\n$DeploymentScriptOutputs = @{\r\n  phases      = ($phases -join ',')\r\n  deployExit  = $deployExit\r\n  workspaceId = $state.WorkspaceId\r\n  lakehouseId = $state.LakehouseId\r\n  kqlDatabase = $state.KqlDbId\r\n  kustoUri    = $state.KustoUri\r\n  appUrl      = $state.AppUrl\r\n  foundryEndpoint = $state.FoundryEndpoint\r\n}\r\n\r\n# deploy.ps1 records non-fatal phase issues but exits non-zero if any occurred.\r\n# Surface that as a script failure so the deployment reflects it, but only after\r\n# outputs are set so the partial state is still visible.\r\nif ($deployExit -and $deployExit -ne 0) {\r\n  throw \"deploy.ps1 finished with issues (exit $deployExit). See container logs for the per-phase summary.\"\r\n}\r\n",
+    "$fxv#1": "<#\r\n================================================================================\r\n OneGrid full-solution provisioner — runs INSIDE the ARM deployment\r\n (Microsoft.Resources/deploymentScripts, kind = AzurePowerShell).\r\n================================================================================\r\n The Fabric operational plane (workspace/lakehouse/eventhouse/KQL/eventstream/\r\n notebooks/pipeline/semantic model/report), the AI Foundry account, and the\r\n chat/web-app Container App are NOT ARM resource types. Instead of re-porting that\r\n logic, this script stands them up by running OneGrid's own battle-tested\r\n orchestrator (planetary-computer-pro-poc/infra/deploy.ps1) headless, under the\r\n deployment's user-assigned managed identity, wired to the PCP backend this template built.\r\n\r\n It:\r\n   1. installs the toolchain the orchestrator needs (git + az CLI) if missing;\r\n   2. logs the az CLI in as the deployment identity (az login --identity);\r\n   3. clones the OneGrid repo (shallow, LFS skipped — data is cloud-seeded);\r\n   4. writes config.json from the ARM params + PCP outputs passed as env vars;\r\n   5. runs ./deploy.ps1 -Only <phases mapped from the selected components>;\r\n   6. returns the resulting workspace / app ids as deployment outputs.\r\n\r\n All inputs arrive as environment variables set by the Bicep deploymentScripts\r\n resource. This script is intentionally idempotent: deploy.ps1 reuses existing\r\n items by name, so re-running is safe.\r\n\r\n HONESTY: this path cannot be validated end-to-end without a live Azure + Fabric\r\n tenant. The first real deployment is the validation pass. Documented prereqs\r\n (Fabric tenant \"service principals can create workspaces\" setting, capacity\r\n admin, Managed Identity Operator on the identity) still apply.\r\n================================================================================\r\n#>\r\n$ErrorActionPreference = 'Stop'\r\nfunction Log($m, $c = 'Cyan') { Write-Host \"[$(Get-Date -f HH:mm:ss)] $m\" -ForegroundColor $c }\r\n\r\n# Force UTF-8 so the Python-based az CLI can print its success glyphs without dying.\r\n$env:PYTHONUTF8 = '1'; $env:PYTHONIOENCODING = 'utf-8'\r\ntry { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}\r\n\r\n# --- 1. Toolchain: git + az CLI --------------------------------------------------\r\n# The AzurePowerShell deployment-script image is Ubuntu 22.04 (per MS docs: an Az\r\n# PowerShell module version >= 9 runs on Ubuntu 22.04), executing as root, with\r\n# apt-get + curl available but NO az CLI, git, python or sudo preinstalled. deploy.ps1\r\n# shells out to the az CLI, so `az` is REQUIRED; `git` is optional - the clone step\r\n# below falls back to a source-zip download when git is unavailable.\r\nfunction Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }\r\n\r\nfunction Invoke-Bash([string]$cmd) {\r\n  # Run a bash command, streaming its combined output to the deployment-script log.\r\n  & bash -c $cmd 2>&1 | ForEach-Object { Log \"  $_\" 'DarkGray' }\r\n  return $LASTEXITCODE\r\n}\r\n\r\nif (-not (Have 'az')) {\r\n  Log 'az CLI missing - installing via the Microsoft apt installer (aka.ms/InstallAzureCLIDeb)...'\r\n  # Canonical Debian/Ubuntu install path: it adds the Microsoft apt repo and installs\r\n  # azure-cli plus its bundled python runtime. azure-cli is NOT in the default Ubuntu\r\n  # repos, so a plain `apt-get install azure-cli` fails - this installer is required.\r\n  # We run as root, so no sudo is needed (and sudo is absent from the image).\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; curl -sL https://aka.ms/InstallAzureCLIDeb | bash' | Out-Null\r\n  $env:PATH = \"$env:PATH:/usr/bin:/usr/local/bin\"\r\n}\r\nif (-not (Have 'az')) { throw 'az CLI is required but could not be installed in the deployment container (Ubuntu 22.04 / apt).' }\r\n\r\nif (-not (Have 'git')) {\r\n  Log 'git missing - installing via apt-get...'\r\n  Invoke-Bash 'export DEBIAN_FRONTEND=noninteractive; apt-get update -y && apt-get install -y git' | Out-Null\r\n}\r\n# NOTE: git is intentionally NOT hard-required - the clone step falls back to a zip download.\r\n\r\n# --- 2. Log the az CLI in as the deployment identity ------------------------------\r\n# The script service already ran Connect-AzAccount -Identity for Az PowerShell, but\r\n# deploy.ps1 shells out to the az CLI, which needs its own login.\r\nLog 'az login --identity...'\r\nif ($env:IDENTITY_CLIENT_ID) {\r\n  # az CLI 2.71+ removed `--username` for managed-identity login; the current flag is\r\n  # `--client-id`. Try it first, then fall back to `--username` for older CLI images.\r\n  & az login --identity --client-id $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors 2>$null | Out-Null\r\n  if ($LASTEXITCODE -ne 0) {\r\n    Log 'az login --client-id failed; retrying with legacy --username flag...' 'Yellow'\r\n    & az login --identity --username $env:IDENTITY_CLIENT_ID --allow-no-subscriptions --only-show-errors | Out-Null\r\n  }\r\n} else {\r\n  & az login --identity --allow-no-subscriptions --only-show-errors | Out-Null\r\n}\r\nif ($env:SUBSCRIPTION_ID) { & az account set --subscription $env:SUBSCRIPTION_ID --only-show-errors 2>$null | Out-Null }\r\n\r\n# Register the Fabric resource provider. A subscription with a zero Fabric regional\r\n# quota (BadRequest: RegionalQuota 0) is usually one where Microsoft.Fabric was never\r\n# registered — registering it grants the default capacity-unit quota. Idempotent + fast\r\n# when already registered. Best-effort: never fail the run just for this.\r\ntry {\r\n  $fabricState = (& az provider show --namespace Microsoft.Fabric --query registrationState -o tsv 2>$null)\r\n  if ($fabricState -ne 'Registered') {\r\n    Log \"registering Microsoft.Fabric resource provider (current: $fabricState)...\"\r\n    & az provider register --namespace Microsoft.Fabric --only-show-errors 2>$null | Out-Null\r\n  } else { Log 'Microsoft.Fabric resource provider already registered' }\r\n} catch { Log \"Microsoft.Fabric provider registration skipped: $($_.Exception.Message)\" 'Yellow' }\r\n\r\n\r\n# --- 3. Clone the OneGrid orchestrator + accelerator content ----------------------\r\n$repo = if ($env:ONEGRID_REPO) { $env:ONEGRID_REPO } else { 'https://github.com/paulshaheen/OneGrid.git' }\r\n$ref  = if ($env:ONEGRID_REF)  { $env:ONEGRID_REF }  else { 'main' }\r\n$work = Join-Path ([IO.Path]::GetTempPath()) 'onegrid'\r\nif (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n$env:GIT_LFS_SKIP_SMUDGE = '1'   # data is cloud-seeded from the release bundle, not LFS\r\n$cloned = $false\r\nif (Have 'git') {\r\n  Log \"cloning $repo ($ref) via git...\"\r\n  try { & git clone --depth 1 --branch $ref $repo $work 2>&1 | Out-Null } catch { Log \"git clone failed: $($_.Exception.Message)\" 'Yellow' }\r\n  $cloned = (Test-Path $work) -and (@(Get-ChildItem $work -Force -ErrorAction SilentlyContinue).Count -gt 0)\r\n}\r\nif (-not $cloned) {\r\n  # git-less fallback: download the branch tarball from GitHub codeload (no git, no LFS).\r\n  # Invoke-WebRequest + Expand-Archive are native to pwsh, so this needs no extra tooling.\r\n  $slug = ($repo -replace '^https?://github\\.com/', '' -replace '\\.git$', '')\r\n  $zipUrl = \"https://codeload.github.com/$slug/zip/refs/heads/$ref\"\r\n  Log \"git unavailable/failed - downloading source zip: $zipUrl\"\r\n  if (Test-Path $work) { Remove-Item $work -Recurse -Force }\r\n  $zip = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-src.zip'\r\n  Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing\r\n  $extract = Join-Path ([IO.Path]::GetTempPath()) 'onegrid-extract'\r\n  if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }\r\n  Expand-Archive -Path $zip -DestinationPath $extract -Force\r\n  $inner = Get-ChildItem $extract -Directory | Select-Object -First 1  # GitHub nests under <repo>-<ref>/\r\n  if (-not $inner) { throw \"source zip $zipUrl did not expand to a directory\" }\r\n  Move-Item $inner.FullName $work\r\n}\r\n\r\n# Locate the orchestrator. The OneGrid monorepo keeps it at\r\n# planetary-computer-pro-poc/infra/deploy.ps1; a flat/standalone repo keeps it at root.\r\n$deployScript = @(\r\n  (Join-Path $work 'planetary-computer-pro-poc/infra/deploy.ps1'),\r\n  (Join-Path $work 'deploy.ps1')\r\n) | Where-Object { Test-Path $_ } | Select-Object -First 1\r\nif (-not $deployScript) { throw \"clone did not produce deploy.ps1 (looked for planetary-computer-pro-poc/infra/deploy.ps1 and ./deploy.ps1) under $work\" }\r\n$deployDir = Split-Path -Parent $deployScript\r\nLog \"orchestrator: $deployScript\"\r\n\r\n# --- 4. Compose config.json from ARM params + PCP outputs -------------------------\r\n$rg = $env:TARGET_RESOURCE_GROUP\r\n$reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure OpenAI, reuse it\r\n[object[]]$foundryModels = if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) {\r\n  @([ordered]@{ deployment = $env:PCP_OPENAI_DEPLOYMENT; model = $env:PCP_OPENAI_DEPLOYMENT; format = 'OpenAI' })\r\n} else {\r\n  @([ordered]@{ deployment = 'gpt-4o'; model = 'gpt-4o'; version = '2024-11-20'; format = 'OpenAI'; capacity = 100 })\r\n}\r\n$cfg = [ordered]@{\r\n  subscriptionId = $env:SUBSCRIPTION_ID\r\n  location       = $env:LOCATION\r\n  deployUnifiedModel = ($env:DEPLOY_UNIFIED_MODEL -eq 'true')   # unify Weather + Digital Twin onto OneGridModel\r\n  fabric = [ordered]@{\r\n    capacityId      = $env:FABRIC_CAPACITY_ID\r\n    workspaceName   = $(if ($env:FABRIC_WORKSPACE) { $env:FABRIC_WORKSPACE } else { 'OneGrid' })\r\n    lakehouseName   = 'lh_poc'\r\n    eventhouseName  = 'pi-realtime-eventhouse'\r\n    kqlDatabaseName = 'pi-realtime-db'\r\n    factWindowDays  = 30\r\n    siteCount       = 8\r\n    workspaceAdmins = @($env:FABRIC_WORKSPACE_ADMIN_OBJECT_ID | Where-Object { $_ })\r\n  }\r\n  data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip' }\r\n  telemetry  = [ordered]@{ enabled = $false }\r\n  reuseExistingFoundry = $reuseFoundry\r\n  pcp = [ordered]@{\r\n    storageAccountName    = $env:PCP_STORAGE_ACCOUNT_NAME\r\n    storageAccountId      = $env:PCP_STORAGE_ACCOUNT_ID\r\n    blobEndpoint          = $env:PCP_BLOB_ENDPOINT\r\n    dfsEndpoint           = $env:PCP_DFS_ENDPOINT\r\n    modelOutputsContainer = $(if ($env:PCP_MODEL_CONTAINER) { $env:PCP_MODEL_CONTAINER } else { 'model-outputs' })\r\n    sampleContainer       = $env:PCP_SAMPLE_CONTAINER\r\n    auroraEndpoint        = $env:PCP_AURORA_ENDPOINT\r\n    auroraDeployed        = $env:PCP_AURORA_DEPLOYED\r\n    auroraJobName         = $env:PCP_AURORA_JOB_NAME\r\n    shortcutName          = 'pcp_model_outputs'\r\n    connectionId          = $env:FABRIC_CONNECTION_ID\r\n    createConnection      = ($env:PCP_CREATE_CONNECTION -eq 'true')\r\n    openAiEndpoint        = $env:PCP_OPENAI_ENDPOINT\r\n    openAiAccountId       = $env:PCP_OPENAI_ACCOUNT_ID\r\n    geoCatalogUri         = $env:PCP_GEOCATALOG_URI\r\n    geoCatalogId          = $env:PCP_GEOCATALOG_ID\r\n  }\r\n  foundry = [ordered]@{\r\n    resourceGroup = $rg\r\n    # When reusing the template's Azure OpenAI account, wire the app to that account and its\r\n    # actual model deployment (otherwise the app asks for a gpt-4o deployment that doesn't exist).\r\n    accountName   = $(if ($reuseFoundry -and $env:PCP_OPENAI_ACCOUNT_ID) { ($env:PCP_OPENAI_ACCOUNT_ID -split '/')[-1] } else { \"$($env:NAME_PREFIX)-foundry\" })\r\n    defaultModel  = $(if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) { $env:PCP_OPENAI_DEPLOYMENT } else { 'gpt-4o' })\r\n    models        = $foundryModels\r\n  }\r\n  chatAgent = [ordered]@{\r\n    resourceGroup   = $rg\r\n    appName         = if ($env:CHAT_AGENT_APP_NAME) { $env:CHAT_AGENT_APP_NAME } else { \"$($env:NAME_PREFIX)-onegrid-app\" }\r\n    environmentName = \"$($env:NAME_PREFIX)-onegrid-app-env\"\r\n    packageUrl      = if ($env:ONEGRID_APP_PACKAGE_URL) { $env:ONEGRID_APP_PACKAGE_URL } else { 'https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip' }\r\n    packageBlobUrl  = $env:ONEGRID_APP_PACKAGE_BLOB_URL\r\n    packageStorageAccount = $env:ONEGRID_APP_STORAGE_ACCOUNT\r\n    packageContainer = if ($env:ONEGRID_APP_PACKAGE_CONTAINER) { $env:ONEGRID_APP_PACKAGE_CONTAINER } else { 'onegrid-app-package' }\r\n  }\r\n  signin = [ordered]@{\r\n    # Entra ID sign-in wiring for the Explorer. enabled=false skips it entirely; clientId lets\r\n    # an org supply a pre-created (governed) SPA app registration instead of auto-creating one.\r\n    enabled  = ($env:ENTRA_SIGNIN_ENABLED -ne 'false')\r\n    clientId = $env:ENTRA_SIGNIN_CLIENT_ID\r\n  }\r\n  governance = [ordered]@{ enabled = $false }\r\n}\r\n$cfgPath = Join-Path $deployDir 'config.json'\r\n[IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))\r\nLog \"config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName))\"\r\n\r\n# --- 5. Run the orchestrator for the selected phases ------------------------------\r\n$phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })\r\n# When the unified model is requested and an explicit phase subset is given, make sure the\r\n# 'unified' phase is included (with no -Only, deploy.ps1 runs all phases and it self-gates).\r\nif (($env:DEPLOY_UNIFIED_MODEL -eq 'true') -and $phases.Count -gt 0 -and ($phases -notcontains 'unified')) { $phases += 'unified' }\r\nLog \"running deploy.ps1 -Only $($phases -join ',')\"\r\nPush-Location $deployDir\r\ntry {\r\n  if ($phases.Count -gt 0) {\r\n    # `pwsh -File` cannot pass a multi-element array (it keeps only the first token, so\r\n    # -Only foundry,chatagent silently became just 'foundry'). Use -Command so PowerShell\r\n    # PARSES the phase list as real syntax and binds it as a proper [string[]].\r\n    $only = ($phases -join ',')\r\n    & pwsh -NoProfile -Command \"& '$deployScript' -ConfigPath '$cfgPath' -Only $only\"\r\n  } else {\r\n    & pwsh -NoProfile -File $deployScript -ConfigPath $cfgPath\r\n  }\r\n  $deployExit = $LASTEXITCODE\r\n} finally { Pop-Location }\r\nLog \"deploy.ps1 exit=$deployExit\"\r\n\r\n# --- 6. Surface the resulting ids as deployment outputs ---------------------------\r\n$state = @{}\r\n$statePath = Join-Path $deployDir 'last-deploy-state.json'\r\nif (Test-Path $statePath) {\r\n  try { $state = Get-Content $statePath -Raw | ConvertFrom-Json } catch {}\r\n}\r\n$DeploymentScriptOutputs = @{\r\n  phases      = ($phases -join ',')\r\n  deployExit  = $deployExit\r\n  workspaceId = $state.WorkspaceId\r\n  lakehouseId = $state.LakehouseId\r\n  kqlDatabase = $state.KqlDbId\r\n  kustoUri    = $state.KustoUri\r\n  appUrl      = $state.AppUrl\r\n  foundryEndpoint = $state.FoundryEndpoint\r\n}\r\n\r\n# deploy.ps1 records non-fatal phase issues but exits non-zero if any occurred.\r\n# Surface that as a script failure so the deployment reflects it, but only after\r\n# outputs are set so the partial state is still visible.\r\nif ($deployExit -and $deployExit -ne 0) {\r\n  throw \"deploy.ps1 finished with issues (exit $deployExit). See container logs for the per-phase summary.\"\r\n}\r\n",
     "namePrefix": "pcpro",
     "effectiveGeoCatalogName": "[if(empty(parameters('geoCatalogName')), toLower(format('pcpro{0}', uniqueString(resourceGroup().id))), parameters('geoCatalogName'))]",
     "sampleStorageName": "[toLower(format('pcpro{0}', uniqueString(resourceGroup().id)))]",
+    "storageExemptTags": "[if(parameters('exemptStorageFromPolicy'), createObject(format('{0}', parameters('storagePolicyExemptionTagName')), parameters('storagePolicyExemptionTagValue')), createObject())]",
+    "scriptStorageName": "[toLower(format('pcpro{0}scr', uniqueString(resourceGroup().id)))]",
     "ingestIdentityName": "[format('{0}-ingest-identity', variables('namePrefix'))]",
     "sampleContainerName": "sample-assets",
     "onegridAppPackageContainerName": "onegrid-app-package",
@@ -377,10 +408,18 @@
     "ogAppPhasesCsv": "[join(variables('ogAppPhases'), ',')]",
     "ogFabricPhasesCsv": "[join(variables('ogFabricPhases'), ',')]",
     "ogPhasesCsv": "[join(concat(variables('ogFabricPhases'), variables('ogAppPhases')), ',')]",
-    "deployAppProvision": "[and(variables('deployFabricPlaneEffective'), parameters('deployOneGridApp'))]"
+    "deployAppProvision": "[and(variables('deployFabricPlaneEffective'), parameters('deployOneGridApp'))]",
+    "deployScriptStorage": "[and(parameters('exemptStorageFromPolicy'), or(variables('deployFabricPlaneEffective'), variables('buildAuroraImage')))]",
+    "grantGraphToProvisioner": "[and(parameters('grantProvisionerGraphPermission'), variables('deployFabricPlaneEffective'))]"
   },
-  "resources": [
-    {
+  "imports": {
+    "microsoftGraphV1": {
+      "provider": "MicrosoftGraph",
+      "version": "0.2.0-preview"
+    }
+  },
+  "resources": {
+    "geoCatalog": {
       "condition": "[parameters('deployGeoCatalog')]",
       "type": "Microsoft.Orbital/geoCatalogs",
       "apiVersion": "2026-04-15",
@@ -391,22 +430,23 @@
         "tier": "[parameters('geoCatalogTier')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('ingestIdentityName'))]"
+        "ingestIdentity"
       ]
     },
-    {
+    "ingestIdentity": {
       "condition": "[parameters('deploySampleStorage')]",
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[variables('ingestIdentityName')]",
       "location": "[parameters('location')]"
     },
-    {
+    "sampleStorage": {
       "condition": "[parameters('deploySampleStorage')]",
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2023-05-01",
       "name": "[variables('sampleStorageName')]",
       "location": "[parameters('location')]",
+      "tags": "[variables('storageExemptTags')]",
       "sku": {
         "name": "Standard_LRS"
       },
@@ -414,19 +454,39 @@
       "properties": {
         "allowBlobPublicAccess": false,
         "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true,
+        "publicNetworkAccess": "[if(parameters('exemptStorageFromPolicy'), 'Enabled', null())]"
+      }
+    },
+    "scriptStorage": {
+      "condition": "[variables('deployScriptStorage')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('scriptStorageName')]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('storageExemptTags')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "allowBlobPublicAccess": false,
+        "allowSharedKeyAccess": true,
+        "publicNetworkAccess": "Enabled",
+        "minimumTlsVersion": "TLS1_2",
         "supportsHttpsTrafficOnly": true
       }
     },
-    {
+    "sampleBlobService": {
       "condition": "[parameters('deploySampleStorage')]",
       "type": "Microsoft.Storage/storageAccounts/blobServices",
       "apiVersion": "2023-05-01",
       "name": "[format('{0}/{1}', variables('sampleStorageName'), 'default')]",
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "sampleStorage"
       ]
     },
-    {
+    "sampleContainer": {
       "condition": "[parameters('deploySampleStorage')]",
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2023-05-01",
@@ -435,10 +495,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('sampleStorageName'), 'default')]"
+        "sampleBlobService"
       ]
     },
-    {
+    "onegridAppPackageContainer": {
       "condition": "[variables('deployOneGridAppEffective')]",
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2023-05-01",
@@ -447,10 +507,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('sampleStorageName'), 'default')]"
+        "sampleBlobService"
       ]
     },
-    {
+    "modelOutputsContainer": {
       "condition": "[parameters('deploySampleStorage')]",
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2023-05-01",
@@ -459,10 +519,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('sampleStorageName'), 'default')]"
+        "sampleBlobService"
       ]
     },
-    {
+    "auroraChannelContainer": {
       "condition": "[variables('deployAuroraJob')]",
       "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
       "apiVersion": "2023-05-01",
@@ -471,10 +531,10 @@
         "publicAccess": "None"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('sampleStorageName'), 'default')]"
+        "sampleBlobService"
       ]
     },
-    {
+    "blobReaderAssignment": {
       "condition": "[parameters('deploySampleStorage')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -482,22 +542,45 @@
       "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('ingestIdentityName'), variables('storageBlobDataReaderRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataReaderRoleId'))]",
-        "principalId": "[if(parameters('deploySampleStorage'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('ingestIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(parameters('deploySampleStorage'), reference('ingestIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('ingestIdentityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "ingestIdentity",
+        "sampleStorage"
       ]
     },
-    {
+    "fabricPlaneIdentity": {
       "condition": "[variables('deployFabricPlaneEffective')]",
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[variables('fabricPlaneIdentityName')]",
       "location": "[parameters('location')]"
     },
-    {
+    "graphServicePrincipal": {
+      "condition": "[variables('grantGraphToProvisioner')]",
+      "existing": true,
+      "import": "microsoftGraphV1",
+      "type": "Microsoft.Graph/servicePrincipals@v1.0",
+      "properties": {
+        "appId": "00000003-0000-0000-c000-000000000000"
+      }
+    },
+    "provisionerGraphRole": {
+      "condition": "[variables('grantGraphToProvisioner')]",
+      "import": "microsoftGraphV1",
+      "type": "Microsoft.Graph/appRoleAssignedTo@v1.0",
+      "properties": {
+        "appRoleId": "18a4783c-866b-4cc7-a460-3d5e5662c884",
+        "principalId": "[reference('fabricPlaneIdentity').principalId]",
+        "resourceId": "[reference('graphServicePrincipal').id]"
+      },
+      "dependsOn": [
+        "fabricPlaneIdentity",
+        "graphServicePrincipal"
+      ]
+    },
+    "fabricCapacity": {
       "condition": "[variables('createFabricCapacityEffective')]",
       "type": "Microsoft.Fabric/capacities",
       "apiVersion": "2023-11-01",
@@ -509,14 +592,14 @@
       },
       "properties": {
         "administration": {
-          "members": "[concat(createArray(reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId), if(empty(parameters('fabricCapacityAdmin')), createArray(), createArray(parameters('fabricCapacityAdmin'))))]"
+          "members": "[concat(createArray(reference('fabricPlaneIdentity').principalId), if(empty(parameters('fabricCapacityAdmin')), createArray(), createArray(parameters('fabricCapacityAdmin'))))]"
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]"
+        "fabricPlaneIdentity"
       ]
     },
-    {
+    "fabricPlaneBlobReaderRole": {
       "condition": "[variables('deployFabricPlaneEffective')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -524,15 +607,15 @@
       "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('storageBlobDataReaderRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataReaderRoleId'))]",
-        "principalId": "[if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('deployFabricPlaneEffective'), reference('fabricPlaneIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "fabricPlaneIdentity",
+        "sampleStorage"
       ]
     },
-    {
+    "fabricPlaneStorageUaaRole": {
       "condition": "[variables('createFabricConnectionEffective')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -540,15 +623,15 @@
       "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('userAccessAdministratorRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('userAccessAdministratorRoleId'))]",
-        "principalId": "[if(variables('createFabricConnectionEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('createFabricConnectionEffective'), reference('fabricPlaneIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "fabricPlaneIdentity",
+        "sampleStorage"
       ]
     },
-    {
+    "fabricPlaneBlobContributorRole": {
       "condition": "[variables('deployOneGridAppEffective')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -556,29 +639,29 @@
       "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('storageBlobDataContributorRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
-        "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference('fabricPlaneIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "fabricPlaneIdentity",
+        "sampleStorage"
       ]
     },
-    {
+    "fabricPlaneRgOwner": {
       "condition": "[variables('deployOneGridAppEffective')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "name": "[guid(resourceGroup().id, variables('fabricPlaneIdentityName'), variables('ownerRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('ownerRoleId'))]",
-        "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference('fabricPlaneIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]"
+        "fabricPlaneIdentity"
       ]
     },
-    {
+    "chatAgentPlan": {
       "condition": "[variables('deployOneGridAppEffective')]",
       "type": "Microsoft.Web/serverfarms",
       "apiVersion": "2023-12-01",
@@ -592,7 +675,7 @@
         "reserved": true
       }
     },
-    {
+    "chatAgentSite": {
       "condition": "[variables('deployOneGridAppEffective')]",
       "type": "Microsoft.Web/sites",
       "apiVersion": "2023-12-01",
@@ -637,10 +720,10 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', variables('chatAgentPlanName'))]"
+        "chatAgentPlan"
       ]
     },
-    {
+    "chatAgentStorageContributor": {
       "condition": "[variables('deployOneGridAppEffective')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -648,15 +731,15 @@
       "name": "[guid(if(variables('deployOneGridAppEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), resourceGroup().id), variables('chatAgentAppName'), variables('storageBlobDataContributorRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
-        "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01', 'full').identity.principalId, '')]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference('chatAgentSite', '2023-12-01', 'full').identity.principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "chatAgentSite",
+        "sampleStorage"
       ]
     },
-    {
+    "chatAgentGeoCatalogAdmin": {
       "condition": "[and(variables('deployOneGridAppEffective'), parameters('deployGeoCatalog'))]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -664,15 +747,15 @@
       "name": "[guid(if(parameters('deployGeoCatalog'), resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), resourceGroup().id), variables('chatAgentAppName'), variables('geoCatalogAdminRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('geoCatalogAdminRoleId'))]",
-        "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01', 'full').identity.principalId, '')]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference('chatAgentSite', '2023-12-01', 'full').identity.principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
-        "[resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName'))]"
+        "chatAgentSite",
+        "geoCatalog"
       ]
     },
-    {
+    "chatAgentAuroraJobOperator": {
       "condition": "[and(variables('deployAuroraJob'), variables('deployOneGridAppEffective'))]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -680,15 +763,15 @@
       "name": "[guid(resourceId('Microsoft.App/jobs', variables('auroraJobName')), variables('chatAgentAppName'), variables('containerAppsJobsOperatorRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('containerAppsJobsOperatorRoleId'))]",
-        "principalId": "[if(variables('deployOneGridAppEffective'), reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01', 'full').identity.principalId, '')]",
+        "principalId": "[if(variables('deployOneGridAppEffective'), reference('chatAgentSite', '2023-12-01', 'full').identity.principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.App/jobs', variables('auroraJobName'))]",
-        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]"
+        "auroraJob",
+        "chatAgentSite"
       ]
     },
-    {
+    "appProvisionScript": {
       "condition": "[variables('deployAppProvision')]",
       "type": "Microsoft.Resources/deploymentScripts",
       "apiVersion": "2023-08-01",
@@ -706,23 +789,26 @@
         "retentionInterval": "P1D",
         "timeout": "PT2H",
         "cleanupPreference": "OnSuccess",
+        "storageAccountSettings": "[if(variables('deployScriptStorage'), createObject('storageAccountName', variables('scriptStorageName'), 'storageAccountKey', listKeys('scriptStorage', '2023-05-01').keys[0].value), null())]",
         "forceUpdateTag": "[parameters('deploymentToken')]",
-        "environmentVariables": "[concat(createArray(createObject('name', 'SUBSCRIPTION_ID', 'value', subscription().subscriptionId), createObject('name', 'LOCATION', 'value', parameters('location')), createObject('name', 'DEPLOY_UNIFIED_MODEL', 'value', string(parameters('deployUnifiedModel'))), createObject('name', 'TARGET_RESOURCE_GROUP', 'value', resourceGroup().name), createObject('name', 'NAME_PREFIX', 'value', variables('namePrefix')), createObject('name', 'CHAT_AGENT_APP_NAME', 'value', variables('chatAgentAppName')), createObject('name', 'ONEGRID_APP_PACKAGE_URL', 'value', parameters('oneGridAppPackageUrl')), createObject('name', 'ONEGRID_APP_PACKAGE_BLOB_URL', 'value', variables('oneGridAppPackageBlobUrl')), createObject('name', 'ONEGRID_APP_STORAGE_ACCOUNT', 'value', variables('sampleStorageName')), createObject('name', 'ONEGRID_APP_PACKAGE_CONTAINER', 'value', variables('onegridAppPackageContainerName')), createObject('name', 'IDENTITY_CLIENT_ID', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').clientId, '')), createObject('name', 'ONEGRID_REPO', 'value', parameters('oneGridRepoUrl')), createObject('name', 'ONEGRID_REF', 'value', parameters('oneGridRef')), createObject('name', 'FABRIC_WORKSPACE', 'value', parameters('fabricWorkspaceName')), createObject('name', 'FABRIC_CONNECTION_ID', 'value', parameters('fabricConnectionId')), createObject('name', 'PCP_CREATE_CONNECTION', 'value', string(variables('createFabricConnectionEffective'))), createObject('name', 'PCP_STORAGE_ACCOUNT_NAME', 'value', variables('sampleStorageName')), createObject('name', 'PCP_STORAGE_ACCOUNT_ID', 'value', if(variables('deployFabricPlaneEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '')), createObject('name', 'PCP_BLOB_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, '')), createObject('name', 'PCP_DFS_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.dfs, '')), createObject('name', 'PCP_MODEL_CONTAINER', 'value', variables('modelOutputsContainerName')), createObject('name', 'PCP_OPENAI_ENDPOINT', 'value', if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, '')), createObject('name', 'PCP_OPENAI_ACCOUNT_ID', 'value', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '')), createObject('name', 'PCP_GEOCATALOG_URI', 'value', if(parameters('deployGeoCatalog'), reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri, '')), createObject('name', 'PCP_GEOCATALOG_ID', 'value', if(parameters('deployGeoCatalog'), resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '')), createObject('name', 'PCP_SAMPLE_CONTAINER', 'value', variables('sampleContainerName')), createObject('name', 'PCP_AURORA_ENDPOINT', 'value', if(parameters('deployAuroraModel'), format('https://{0}.{1}.inference.ml.azure.com/score', variables('auroraEndpointName'), parameters('location')), '')), createObject('name', 'PCP_AURORA_DEPLOYED', 'value', string(variables('deployAuroraDeployment'))), createObject('name', 'PCP_AURORA_JOB_NAME', 'value', if(variables('deployAuroraJob'), variables('auroraJobName'), '')), createObject('name', 'ENTRA_SIGNIN_ENABLED', 'value', if(parameters('enableEntraSignIn'), 'true', 'false')), createObject('name', 'ENTRA_SIGNIN_CLIENT_ID', 'value', parameters('entraSignInClientId'))), createArray(createObject('name', 'ONEGRID_PHASES', 'value', variables('ogAppPhasesCsv')), createObject('name', 'FABRIC_CAPACITY_ID', 'value', '')))]",
+        "environmentVariables": "[concat(createArray(createObject('name', 'SUBSCRIPTION_ID', 'value', subscription().subscriptionId), createObject('name', 'LOCATION', 'value', parameters('location')), createObject('name', 'DEPLOY_UNIFIED_MODEL', 'value', string(parameters('deployUnifiedModel'))), createObject('name', 'TARGET_RESOURCE_GROUP', 'value', resourceGroup().name), createObject('name', 'NAME_PREFIX', 'value', variables('namePrefix')), createObject('name', 'CHAT_AGENT_APP_NAME', 'value', variables('chatAgentAppName')), createObject('name', 'ONEGRID_APP_PACKAGE_URL', 'value', parameters('oneGridAppPackageUrl')), createObject('name', 'ONEGRID_APP_PACKAGE_BLOB_URL', 'value', variables('oneGridAppPackageBlobUrl')), createObject('name', 'ONEGRID_APP_STORAGE_ACCOUNT', 'value', variables('sampleStorageName')), createObject('name', 'ONEGRID_APP_PACKAGE_CONTAINER', 'value', variables('onegridAppPackageContainerName')), createObject('name', 'IDENTITY_CLIENT_ID', 'value', if(variables('deployFabricPlaneEffective'), reference('fabricPlaneIdentity').clientId, '')), createObject('name', 'ONEGRID_REPO', 'value', parameters('oneGridRepoUrl')), createObject('name', 'ONEGRID_REF', 'value', parameters('oneGridRef')), createObject('name', 'FABRIC_WORKSPACE', 'value', parameters('fabricWorkspaceName')), createObject('name', 'FABRIC_CONNECTION_ID', 'value', parameters('fabricConnectionId')), createObject('name', 'PCP_CREATE_CONNECTION', 'value', string(variables('createFabricConnectionEffective'))), createObject('name', 'PCP_STORAGE_ACCOUNT_NAME', 'value', variables('sampleStorageName')), createObject('name', 'PCP_STORAGE_ACCOUNT_ID', 'value', if(variables('deployFabricPlaneEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '')), createObject('name', 'PCP_BLOB_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference('sampleStorage').primaryEndpoints.blob, '')), createObject('name', 'PCP_DFS_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference('sampleStorage').primaryEndpoints.dfs, '')), createObject('name', 'PCP_MODEL_CONTAINER', 'value', variables('modelOutputsContainerName')), createObject('name', 'PCP_OPENAI_ENDPOINT', 'value', if(parameters('deployAiAgent'), reference('openAi').endpoint, '')), createObject('name', 'PCP_OPENAI_ACCOUNT_ID', 'value', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '')), createObject('name', 'PCP_OPENAI_DEPLOYMENT', 'value', if(parameters('deployAiAgent'), parameters('openAiDeploymentName'), '')), createObject('name', 'PCP_GEOCATALOG_URI', 'value', if(parameters('deployGeoCatalog'), reference('geoCatalog').catalogUri, '')), createObject('name', 'PCP_GEOCATALOG_ID', 'value', if(parameters('deployGeoCatalog'), resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '')), createObject('name', 'PCP_SAMPLE_CONTAINER', 'value', variables('sampleContainerName')), createObject('name', 'PCP_AURORA_ENDPOINT', 'value', if(parameters('deployAuroraModel'), format('https://{0}.{1}.inference.ml.azure.com/score', variables('auroraEndpointName'), parameters('location')), '')), createObject('name', 'PCP_AURORA_DEPLOYED', 'value', string(variables('deployAuroraDeployment'))), createObject('name', 'PCP_AURORA_JOB_NAME', 'value', if(variables('deployAuroraJob'), variables('auroraJobName'), '')), createObject('name', 'ENTRA_SIGNIN_ENABLED', 'value', if(parameters('enableEntraSignIn'), 'true', 'false')), createObject('name', 'ENTRA_SIGNIN_CLIENT_ID', 'value', parameters('entraSignInClientId')), createObject('name', 'FABRIC_WORKSPACE_ADMIN_OBJECT_ID', 'value', deployer().objectId)), createArray(createObject('name', 'ONEGRID_PHASES', 'value', variables('ogAppPhasesCsv')), createObject('name', 'FABRIC_CAPACITY_ID', 'value', '')))]",
         "scriptContent": "[variables('$fxv#0')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
-        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('storageBlobDataReaderRoleId')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]",
-        "[resourceId('Microsoft.Authorization/roleAssignments', guid(resourceGroup().id, variables('fabricPlaneIdentityName'), variables('ownerRoleId')))]",
-        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('userAccessAdministratorRoleId')))]",
-        "[resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('sampleStorageName'), 'default', variables('modelOutputsContainerName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "chatAgentSite",
+        "fabricPlaneBlobReaderRole",
+        "fabricPlaneIdentity",
+        "fabricPlaneRgOwner",
+        "fabricPlaneStorageUaaRole",
+        "geoCatalog",
+        "modelOutputsContainer",
+        "openAi",
+        "provisionerGraphRole",
+        "sampleStorage",
+        "scriptStorage"
       ]
     },
-    {
+    "fabricPlaneScript": {
       "condition": "[variables('deployFabricPlaneEffective')]",
       "type": "Microsoft.Resources/deploymentScripts",
       "apiVersion": "2023-08-01",
@@ -740,25 +826,28 @@
         "retentionInterval": "P1D",
         "timeout": "PT3H",
         "cleanupPreference": "OnSuccess",
+        "storageAccountSettings": "[if(variables('deployScriptStorage'), createObject('storageAccountName', variables('scriptStorageName'), 'storageAccountKey', listKeys('scriptStorage', '2023-05-01').keys[0].value), null())]",
         "forceUpdateTag": "[parameters('deploymentToken')]",
-        "environmentVariables": "[concat(createArray(createObject('name', 'SUBSCRIPTION_ID', 'value', subscription().subscriptionId), createObject('name', 'LOCATION', 'value', parameters('location')), createObject('name', 'DEPLOY_UNIFIED_MODEL', 'value', string(parameters('deployUnifiedModel'))), createObject('name', 'TARGET_RESOURCE_GROUP', 'value', resourceGroup().name), createObject('name', 'NAME_PREFIX', 'value', variables('namePrefix')), createObject('name', 'CHAT_AGENT_APP_NAME', 'value', variables('chatAgentAppName')), createObject('name', 'ONEGRID_APP_PACKAGE_URL', 'value', parameters('oneGridAppPackageUrl')), createObject('name', 'ONEGRID_APP_PACKAGE_BLOB_URL', 'value', variables('oneGridAppPackageBlobUrl')), createObject('name', 'ONEGRID_APP_STORAGE_ACCOUNT', 'value', variables('sampleStorageName')), createObject('name', 'ONEGRID_APP_PACKAGE_CONTAINER', 'value', variables('onegridAppPackageContainerName')), createObject('name', 'IDENTITY_CLIENT_ID', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').clientId, '')), createObject('name', 'ONEGRID_REPO', 'value', parameters('oneGridRepoUrl')), createObject('name', 'ONEGRID_REF', 'value', parameters('oneGridRef')), createObject('name', 'FABRIC_WORKSPACE', 'value', parameters('fabricWorkspaceName')), createObject('name', 'FABRIC_CONNECTION_ID', 'value', parameters('fabricConnectionId')), createObject('name', 'PCP_CREATE_CONNECTION', 'value', string(variables('createFabricConnectionEffective'))), createObject('name', 'PCP_STORAGE_ACCOUNT_NAME', 'value', variables('sampleStorageName')), createObject('name', 'PCP_STORAGE_ACCOUNT_ID', 'value', if(variables('deployFabricPlaneEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '')), createObject('name', 'PCP_BLOB_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, '')), createObject('name', 'PCP_DFS_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.dfs, '')), createObject('name', 'PCP_MODEL_CONTAINER', 'value', variables('modelOutputsContainerName')), createObject('name', 'PCP_OPENAI_ENDPOINT', 'value', if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, '')), createObject('name', 'PCP_OPENAI_ACCOUNT_ID', 'value', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '')), createObject('name', 'PCP_GEOCATALOG_URI', 'value', if(parameters('deployGeoCatalog'), reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri, '')), createObject('name', 'PCP_GEOCATALOG_ID', 'value', if(parameters('deployGeoCatalog'), resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '')), createObject('name', 'PCP_SAMPLE_CONTAINER', 'value', variables('sampleContainerName')), createObject('name', 'PCP_AURORA_ENDPOINT', 'value', if(parameters('deployAuroraModel'), format('https://{0}.{1}.inference.ml.azure.com/score', variables('auroraEndpointName'), parameters('location')), '')), createObject('name', 'PCP_AURORA_DEPLOYED', 'value', string(variables('deployAuroraDeployment'))), createObject('name', 'PCP_AURORA_JOB_NAME', 'value', if(variables('deployAuroraJob'), variables('auroraJobName'), '')), createObject('name', 'ENTRA_SIGNIN_ENABLED', 'value', if(parameters('enableEntraSignIn'), 'true', 'false')), createObject('name', 'ENTRA_SIGNIN_CLIENT_ID', 'value', parameters('entraSignInClientId'))), createArray(createObject('name', 'ONEGRID_PHASES', 'value', variables('ogFabricPhasesCsv')), createObject('name', 'FABRIC_CAPACITY_ID', 'value', if(variables('createFabricCapacityEffective'), resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName')), parameters('fabricCapacityId')))))]",
+        "environmentVariables": "[concat(createArray(createObject('name', 'SUBSCRIPTION_ID', 'value', subscription().subscriptionId), createObject('name', 'LOCATION', 'value', parameters('location')), createObject('name', 'DEPLOY_UNIFIED_MODEL', 'value', string(parameters('deployUnifiedModel'))), createObject('name', 'TARGET_RESOURCE_GROUP', 'value', resourceGroup().name), createObject('name', 'NAME_PREFIX', 'value', variables('namePrefix')), createObject('name', 'CHAT_AGENT_APP_NAME', 'value', variables('chatAgentAppName')), createObject('name', 'ONEGRID_APP_PACKAGE_URL', 'value', parameters('oneGridAppPackageUrl')), createObject('name', 'ONEGRID_APP_PACKAGE_BLOB_URL', 'value', variables('oneGridAppPackageBlobUrl')), createObject('name', 'ONEGRID_APP_STORAGE_ACCOUNT', 'value', variables('sampleStorageName')), createObject('name', 'ONEGRID_APP_PACKAGE_CONTAINER', 'value', variables('onegridAppPackageContainerName')), createObject('name', 'IDENTITY_CLIENT_ID', 'value', if(variables('deployFabricPlaneEffective'), reference('fabricPlaneIdentity').clientId, '')), createObject('name', 'ONEGRID_REPO', 'value', parameters('oneGridRepoUrl')), createObject('name', 'ONEGRID_REF', 'value', parameters('oneGridRef')), createObject('name', 'FABRIC_WORKSPACE', 'value', parameters('fabricWorkspaceName')), createObject('name', 'FABRIC_CONNECTION_ID', 'value', parameters('fabricConnectionId')), createObject('name', 'PCP_CREATE_CONNECTION', 'value', string(variables('createFabricConnectionEffective'))), createObject('name', 'PCP_STORAGE_ACCOUNT_NAME', 'value', variables('sampleStorageName')), createObject('name', 'PCP_STORAGE_ACCOUNT_ID', 'value', if(variables('deployFabricPlaneEffective'), resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '')), createObject('name', 'PCP_BLOB_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference('sampleStorage').primaryEndpoints.blob, '')), createObject('name', 'PCP_DFS_ENDPOINT', 'value', if(variables('deployFabricPlaneEffective'), reference('sampleStorage').primaryEndpoints.dfs, '')), createObject('name', 'PCP_MODEL_CONTAINER', 'value', variables('modelOutputsContainerName')), createObject('name', 'PCP_OPENAI_ENDPOINT', 'value', if(parameters('deployAiAgent'), reference('openAi').endpoint, '')), createObject('name', 'PCP_OPENAI_ACCOUNT_ID', 'value', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '')), createObject('name', 'PCP_OPENAI_DEPLOYMENT', 'value', if(parameters('deployAiAgent'), parameters('openAiDeploymentName'), '')), createObject('name', 'PCP_GEOCATALOG_URI', 'value', if(parameters('deployGeoCatalog'), reference('geoCatalog').catalogUri, '')), createObject('name', 'PCP_GEOCATALOG_ID', 'value', if(parameters('deployGeoCatalog'), resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '')), createObject('name', 'PCP_SAMPLE_CONTAINER', 'value', variables('sampleContainerName')), createObject('name', 'PCP_AURORA_ENDPOINT', 'value', if(parameters('deployAuroraModel'), format('https://{0}.{1}.inference.ml.azure.com/score', variables('auroraEndpointName'), parameters('location')), '')), createObject('name', 'PCP_AURORA_DEPLOYED', 'value', string(variables('deployAuroraDeployment'))), createObject('name', 'PCP_AURORA_JOB_NAME', 'value', if(variables('deployAuroraJob'), variables('auroraJobName'), '')), createObject('name', 'ENTRA_SIGNIN_ENABLED', 'value', if(parameters('enableEntraSignIn'), 'true', 'false')), createObject('name', 'ENTRA_SIGNIN_CLIENT_ID', 'value', parameters('entraSignInClientId')), createObject('name', 'FABRIC_WORKSPACE_ADMIN_OBJECT_ID', 'value', deployer().objectId)), createArray(createObject('name', 'ONEGRID_PHASES', 'value', variables('ogFabricPhasesCsv')), createObject('name', 'FABRIC_CAPACITY_ID', 'value', if(variables('createFabricCapacityEffective'), resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName')), parameters('fabricCapacityId')))))]",
         "scriptContent": "[variables('$fxv#1')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deploymentScripts', format('{0}-onegrid-provision-app', variables('namePrefix')))]",
-        "[resourceId('Microsoft.Web/sites', variables('chatAgentAppName'))]",
-        "[resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName'))]",
-        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('storageBlobDataReaderRoleId')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName'))]",
-        "[resourceId('Microsoft.Authorization/roleAssignments', guid(resourceGroup().id, variables('fabricPlaneIdentityName'), variables('ownerRoleId')))]",
-        "[extensionResourceId(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('fabricPlaneIdentityName'), variables('userAccessAdministratorRoleId')))]",
-        "[resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('sampleStorageName'), 'default', variables('modelOutputsContainerName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "appProvisionScript",
+        "chatAgentSite",
+        "fabricCapacity",
+        "fabricPlaneBlobReaderRole",
+        "fabricPlaneIdentity",
+        "fabricPlaneRgOwner",
+        "fabricPlaneStorageUaaRole",
+        "geoCatalog",
+        "modelOutputsContainer",
+        "openAi",
+        "provisionerGraphRole",
+        "sampleStorage",
+        "scriptStorage"
       ]
     },
-    {
+    "openAi": {
       "condition": "[parameters('deployAiAgent')]",
       "type": "Microsoft.CognitiveServices/accounts",
       "apiVersion": "2024-10-01",
@@ -773,7 +862,7 @@
         "publicNetworkAccess": "Enabled"
       }
     },
-    {
+    "openAiDeployment": {
       "condition": "[parameters('deployAiAgent')]",
       "type": "Microsoft.CognitiveServices/accounts/deployments",
       "apiVersion": "2024-10-01",
@@ -791,10 +880,10 @@
         "versionUpgradeOption": "NoAutoUpgrade"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName'))]"
+        "openAi"
       ]
     },
-    {
+    "openAiDeployerRole": {
       "condition": "[parameters('deployAiAgent')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -805,10 +894,10 @@
         "principalId": "[deployer().objectId]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName'))]"
+        "openAi"
       ]
     },
-    {
+    "amlStorage": {
       "condition": "[parameters('deployAuroraModel')]",
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2023-05-01",
@@ -824,7 +913,7 @@
         "supportsHttpsTrafficOnly": true
       }
     },
-    {
+    "amlKeyVault": {
       "condition": "[parameters('deployAuroraModel')]",
       "type": "Microsoft.KeyVault/vaults",
       "apiVersion": "2023-07-01",
@@ -841,7 +930,7 @@
         "accessPolicies": []
       }
     },
-    {
+    "amlApplicationInsights": {
       "condition": "[parameters('deployAuroraModel')]",
       "type": "Microsoft.Insights/components",
       "apiVersion": "2020-02-02",
@@ -852,7 +941,7 @@
         "Application_Type": "web"
       }
     },
-    {
+    "amlWorkspace": {
       "condition": "[parameters('deployAuroraModel')]",
       "type": "Microsoft.MachineLearningServices/workspaces",
       "apiVersion": "2023-10-01",
@@ -868,12 +957,12 @@
         "keyVault": "[resourceId('Microsoft.KeyVault/vaults', variables('amlKeyVaultName'))]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Insights/components', variables('amlApplicationInsightsName'))]",
-        "[resourceId('Microsoft.KeyVault/vaults', variables('amlKeyVaultName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('amlStorageName'))]"
+        "amlApplicationInsights",
+        "amlKeyVault",
+        "amlStorage"
       ]
     },
-    {
+    "auroraEndpoint": {
       "condition": "[parameters('deployAuroraModel')]",
       "type": "Microsoft.MachineLearningServices/workspaces/onlineEndpoints",
       "apiVersion": "2023-10-01",
@@ -886,10 +975,10 @@
         "authMode": "AADToken"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.MachineLearningServices/workspaces', variables('amlWorkspaceName'))]"
+        "amlWorkspace"
       ]
     },
-    {
+    "auroraDeployment": {
       "condition": "[variables('deployAuroraDeployment')]",
       "type": "Microsoft.MachineLearningServices/workspaces/onlineEndpoints/deployments",
       "apiVersion": "2023-10-01",
@@ -905,10 +994,10 @@
         "instanceType": "[parameters('auroraInstanceType')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.MachineLearningServices/workspaces/onlineEndpoints', variables('amlWorkspaceName'), variables('auroraEndpointName'))]"
+        "auroraEndpoint"
       ]
     },
-    {
+    "logAnalytics": {
       "condition": "[variables('deployAuroraJob')]",
       "type": "Microsoft.OperationalInsights/workspaces",
       "apiVersion": "2023-09-01",
@@ -921,7 +1010,7 @@
         "retentionInDays": 30
       }
     },
-    {
+    "containerAppsEnv": {
       "condition": "[variables('deployAuroraJob')]",
       "type": "Microsoft.App/managedEnvironments",
       "apiVersion": "2024-03-01",
@@ -931,23 +1020,23 @@
         "appLogsConfiguration": {
           "destination": "log-analytics",
           "logAnalyticsConfiguration": {
-            "customerId": "[if(variables('deployAuroraJob'), reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName')), '2023-09-01').customerId, '')]",
-            "sharedKey": "[if(variables('deployAuroraJob'), listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName')), '2023-09-01').primarySharedKey, '')]"
+            "customerId": "[if(variables('deployAuroraJob'), reference('logAnalytics').customerId, '')]",
+            "sharedKey": "[if(variables('deployAuroraJob'), listKeys('logAnalytics', '2023-09-01').primarySharedKey, '')]"
           }
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+        "logAnalytics"
       ]
     },
-    {
+    "auroraJobIdentity": {
       "condition": "[variables('deployAuroraJob')]",
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[variables('auroraJobIdentityName')]",
       "location": "[parameters('location')]"
     },
-    {
+    "auroraAcr": {
       "condition": "[and(variables('deployAuroraJob'), empty(parameters('auroraJobImage')))]",
       "type": "Microsoft.ContainerRegistry/registries",
       "apiVersion": "2023-11-01-preview",
@@ -960,7 +1049,7 @@
         "adminUserEnabled": false
       }
     },
-    {
+    "auroraJobAcrPull": {
       "condition": "[and(variables('deployAuroraJob'), empty(parameters('auroraJobImage')))]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -968,15 +1057,15 @@
       "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('auroraAcrName')), variables('auroraJobIdentityName'), variables('acrPullRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
-        "principalId": "[if(variables('deployAuroraJob'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('deployAuroraJob'), reference('auroraJobIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ContainerRegistry/registries', variables('auroraAcrName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName'))]"
+        "auroraAcr",
+        "auroraJobIdentity"
       ]
     },
-    {
+    "auroraJobAcrContributor": {
       "condition": "[variables('buildAuroraImage')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -984,15 +1073,15 @@
       "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', variables('auroraAcrName')), variables('auroraJobIdentityName'), variables('acrContributorRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrContributorRoleId'))]",
-        "principalId": "[if(variables('deployAuroraJob'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('deployAuroraJob'), reference('auroraJobIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ContainerRegistry/registries', variables('auroraAcrName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName'))]"
+        "auroraAcr",
+        "auroraJobIdentity"
       ]
     },
-    {
+    "auroraImageBuild": {
       "condition": "[variables('buildAuroraImage')]",
       "type": "Microsoft.Resources/deploymentScripts",
       "apiVersion": "2023-08-01",
@@ -1010,6 +1099,7 @@
         "retentionInterval": "P1D",
         "timeout": "PT45M",
         "cleanupPreference": "OnSuccess",
+        "storageAccountSettings": "[if(variables('deployScriptStorage'), createObject('storageAccountName', variables('scriptStorageName'), 'storageAccountKey', listKeys('scriptStorage', '2023-05-01').keys[0].value), null())]",
         "environmentVariables": [
           {
             "name": "ONEGRID_REPO",
@@ -1029,7 +1119,7 @@
           },
           {
             "name": "IDENTITY_CLIENT_ID",
-            "value": "[if(variables('buildAuroraImage'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName')), '2023-01-31').clientId, '')]"
+            "value": "[if(variables('buildAuroraImage'), reference('auroraJobIdentity').clientId, '')]"
           },
           {
             "name": "SUBSCRIPTION_ID",
@@ -1039,11 +1129,12 @@
         "scriptContent": "set -euo pipefail\necho \"az login --identity ($IDENTITY_CLIENT_ID)\"\naz login --identity --username \"$IDENTITY_CLIENT_ID\" --allow-no-subscriptions -o none\naz account set --subscription \"$SUBSCRIPTION_ID\" -o none 2>/dev/null || true\nif ! command -v git >/dev/null 2>&1; then (apk add --no-cache git 2>/dev/null) || (apt-get update -y && apt-get install -y git); fi\nrm -rf /tmp/src\necho \"cloning $ONEGRID_REPO ($ONEGRID_REF)\"\ngit clone --depth 1 --branch \"$ONEGRID_REF\" \"$ONEGRID_REPO\" /tmp/src\ncd /tmp/src/planetary-computer-pro-poc\necho \"building aurora-pipeline:$IMAGE_TAG into $ACR_NAME (ACR Task)\"\naz acr build -r \"$ACR_NAME\" -t \"aurora-pipeline:$IMAGE_TAG\" aurora\necho \"done\"\n"
       },
       "dependsOn": [
-        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', variables('auroraAcrName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', variables('auroraAcrName')), variables('auroraJobIdentityName'), variables('acrContributorRoleId')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName'))]"
+        "auroraJobAcrContributor",
+        "auroraJobIdentity",
+        "scriptStorage"
       ]
     },
-    {
+    "auroraJobBlobRole": {
       "condition": "[variables('deployAuroraJob')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -1051,15 +1142,15 @@
       "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), variables('auroraJobIdentityName'), variables('storageBlobDataContributorRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
-        "principalId": "[if(variables('deployAuroraJob'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('deployAuroraJob'), reference('auroraJobIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "auroraJobIdentity",
+        "sampleStorage"
       ]
     },
-    {
+    "auroraJobMlRole": {
       "condition": "[variables('deployAuroraJob')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
@@ -1067,15 +1158,15 @@
       "name": "[guid(resourceId('Microsoft.MachineLearningServices/workspaces', variables('amlWorkspaceName')), variables('auroraJobIdentityName'), variables('azureMLDataScientistRoleId'))]",
       "properties": {
         "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureMLDataScientistRoleId'))]",
-        "principalId": "[if(variables('deployAuroraJob'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName')), '2023-01-31').principalId, '')]",
+        "principalId": "[if(variables('deployAuroraJob'), reference('auroraJobIdentity').principalId, '')]",
         "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.MachineLearningServices/workspaces', variables('amlWorkspaceName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName'))]"
+        "amlWorkspace",
+        "auroraJobIdentity"
       ]
     },
-    {
+    "auroraJob": {
       "condition": "[variables('deployAuroraJob')]",
       "type": "Microsoft.App/jobs",
       "apiVersion": "2024-03-01",
@@ -1112,11 +1203,11 @@
               "env": [
                 {
                   "name": "AZURE_CLIENT_ID",
-                  "value": "[if(variables('deployAuroraJob'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName')), '2023-01-31').clientId, '')]"
+                  "value": "[if(variables('deployAuroraJob'), reference('auroraJobIdentity').clientId, '')]"
                 },
                 {
                   "name": "AURORA_ENDPOINT",
-                  "value": "[if(parameters('deployAuroraModel'), reference(resourceId('Microsoft.MachineLearningServices/workspaces/onlineEndpoints', variables('amlWorkspaceName'), variables('auroraEndpointName')), '2023-10-01').scoringUri, '')]"
+                  "value": "[if(parameters('deployAuroraModel'), reference('auroraEndpoint').scoringUri, '')]"
                 },
                 {
                   "name": "INITIAL_CONDITION_SOURCE",
@@ -1132,7 +1223,7 @@
                 },
                 {
                   "name": "AURORA_BLOB_ACCOUNT_URL",
-                  "value": "[if(parameters('deploySampleStorage'), reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, '')]"
+                  "value": "[if(parameters('deploySampleStorage'), reference('sampleStorage').primaryEndpoints.blob, '')]"
                 },
                 {
                   "name": "AURORA_BLOB_CONTAINER",
@@ -1140,7 +1231,7 @@
                 },
                 {
                   "name": "OUTPUT_CONTAINER_URL",
-                  "value": "[if(parameters('deploySampleStorage'), format('{0}{1}', reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, variables('modelOutputsContainerName')), '')]"
+                  "value": "[if(parameters('deploySampleStorage'), format('{0}{1}', reference('sampleStorage').primaryEndpoints.blob, variables('modelOutputsContainerName')), '')]"
                 },
                 {
                   "name": "OUTPUT_BLOB_NAME",
@@ -1152,14 +1243,14 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.MachineLearningServices/workspaces/onlineEndpoints', variables('amlWorkspaceName'), variables('auroraEndpointName'))]",
-        "[resourceId('Microsoft.Resources/deploymentScripts', format('{0}-aurora-image-build', variables('namePrefix')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName'))]",
-        "[resourceId('Microsoft.App/managedEnvironments', variables('containerAppsEnvName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName'))]"
+        "auroraEndpoint",
+        "auroraImageBuild",
+        "auroraJobIdentity",
+        "containerAppsEnv",
+        "sampleStorage"
       ]
     }
-  ],
+  },
   "outputs": {
     "geoCatalogResourceId": {
       "type": "string",
@@ -1170,7 +1261,7 @@
       "metadata": {
         "description": "The GeoCatalog URI (catalogUri), including the platform-assigned domain hash. Use as GEOCATALOG_URL for the ingest script and Explorer."
       },
-      "value": "[if(parameters('deployGeoCatalog'), reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri, 'not-deployed')]"
+      "value": "[if(parameters('deployGeoCatalog'), reference('geoCatalog').catalogUri, 'not-deployed')]"
     },
     "geoCatalogPortalHint": {
       "type": "string",
@@ -1189,11 +1280,11 @@
     },
     "sampleContainerUrl": {
       "type": "string",
-      "value": "[if(parameters('deploySampleStorage'), format('{0}{1}', reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, variables('sampleContainerName')), 'not-deployed')]"
+      "value": "[if(parameters('deploySampleStorage'), format('{0}{1}', reference('sampleStorage').primaryEndpoints.blob, variables('sampleContainerName')), 'not-deployed')]"
     },
     "aiAgentEndpoint": {
       "type": "string",
-      "value": "[if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, 'not-deployed')]"
+      "value": "[if(parameters('deployAiAgent'), reference('openAi').endpoint, 'not-deployed')]"
     },
     "aiAgentDeployment": {
       "type": "string",
@@ -1234,7 +1325,7 @@
       "metadata": {
         "description": "Principal (object) ID of the Aurora job managed identity. AcrPull on the auto-provisioned registry is granted for you; grant it on any external registry you point auroraJobImage at."
       },
-      "value": "[if(variables('deployAuroraJob'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('auroraJobIdentityName')), '2023-01-31').principalId, 'not-deployed')]"
+      "value": "[if(variables('deployAuroraJob'), reference('auroraJobIdentity').principalId, 'not-deployed')]"
     },
     "auroraAcrName": {
       "type": "string",
@@ -1252,11 +1343,11 @@
     },
     "ingestIdentityClientId": {
       "type": "string",
-      "value": "[if(parameters('deploySampleStorage'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('ingestIdentityName')), '2023-01-31').clientId, 'not-deployed')]"
+      "value": "[if(parameters('deploySampleStorage'), reference('ingestIdentity').clientId, 'not-deployed')]"
     },
     "ingestIdentityObjectId": {
       "type": "string",
-      "value": "[if(parameters('deploySampleStorage'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('ingestIdentityName')), '2023-01-31').principalId, 'not-deployed')]"
+      "value": "[if(parameters('deploySampleStorage'), reference('ingestIdentity').principalId, 'not-deployed')]"
     },
     "fabricPlaneEnabled": {
       "type": "bool",
@@ -1270,7 +1361,7 @@
       "metadata": {
         "description": "Principal (object) ID of the OneGrid Fabric-plane managed identity (has Storage Blob Data Reader on the sample storage account)."
       },
-      "value": "[if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('fabricPlaneIdentityName')), '2023-01-31').principalId, 'not-deployed')]"
+      "value": "[if(variables('deployFabricPlaneEffective'), reference('fabricPlaneIdentity').principalId, 'not-deployed')]"
     },
     "fabricPlaneCapacityId": {
       "type": "string",
@@ -1284,21 +1375,21 @@
       "metadata": {
         "description": "Result of the in-template Fabric provisioning: workspace/lakehouse/eventhouse ids, KQL apply status, and OneLake shortcut status."
       },
-      "value": "[if(variables('deployFabricPlaneEffective'), reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-onegrid-provision-fabric', variables('namePrefix'))), '2023-08-01').outputs, createObject())]"
+      "value": "[if(variables('deployFabricPlaneEffective'), reference('fabricPlaneScript').outputs, createObject())]"
     },
     "appPlaneProvisionResult": {
       "type": "object",
       "metadata": {
         "description": "Result of the in-template app-plane provisioning (Foundry + chat/report web app wiring for GeoCatalog/OpenAI/storage/Aurora). Runs independently of the Fabric capacity."
       },
-      "value": "[if(variables('deployAppProvision'), reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-onegrid-provision-app', variables('namePrefix'))), '2023-08-01').outputs, createObject())]"
+      "value": "[if(variables('deployAppProvision'), reference('appProvisionScript').outputs, createObject())]"
     },
     "fabricPlaneConfig": {
       "type": "object",
       "metadata": {
         "description": "Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut."
       },
-      "value": "[if(variables('deployFabricPlaneEffective'), createObject('reuseExistingFoundry', parameters('deployAiAgent'), 'fabric', createObject('capacityId', if(variables('createFabricCapacityEffective'), resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName')), parameters('fabricCapacityId')), 'workspaceName', parameters('fabricWorkspaceName')), 'pcp', createObject('storageAccountName', variables('sampleStorageName'), 'storageAccountId', resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'blobEndpoint', reference(resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), '2023-05-01').primaryEndpoints.blob, 'modelOutputsContainer', variables('modelOutputsContainerName'), 'shortcutName', 'pcp_model_outputs', 'connectionId', '', 'openAiEndpoint', if(parameters('deployAiAgent'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), '2024-10-01').endpoint, ''), 'openAiAccountId', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), ''), 'geoCatalogUri', if(parameters('deployGeoCatalog'), reference(resourceId('Microsoft.Orbital/geoCatalogs', variables('effectiveGeoCatalogName')), '2026-04-15').catalogUri, ''))), createObject())]"
+      "value": "[if(variables('deployFabricPlaneEffective'), createObject('reuseExistingFoundry', parameters('deployAiAgent'), 'fabric', createObject('capacityId', if(variables('createFabricCapacityEffective'), resourceId('Microsoft.Fabric/capacities', variables('fabricCapacityName')), parameters('fabricCapacityId')), 'workspaceName', parameters('fabricWorkspaceName')), 'pcp', createObject('storageAccountName', variables('sampleStorageName'), 'storageAccountId', resourceId('Microsoft.Storage/storageAccounts', variables('sampleStorageName')), 'blobEndpoint', reference('sampleStorage').primaryEndpoints.blob, 'modelOutputsContainer', variables('modelOutputsContainerName'), 'shortcutName', 'pcp_model_outputs', 'connectionId', '', 'openAiEndpoint', if(parameters('deployAiAgent'), reference('openAi').endpoint, ''), 'openAiAccountId', if(parameters('deployAiAgent'), resourceId('Microsoft.CognitiveServices/accounts', variables('openAiName')), ''), 'geoCatalogUri', if(parameters('deployGeoCatalog'), reference('geoCatalog').catalogUri, ''))), createObject())]"
     },
     "fabricPlaneCommand": {
       "type": "string",
@@ -1326,7 +1417,7 @@
       "metadata": {
         "description": "Public URL of the OneGrid chat/report web app (the ARM-declared App Service). Serves once the provisioner finishes the first Oryx build + code deploy."
       },
-      "value": "[if(variables('deployOneGridAppEffective'), format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('chatAgentAppName')), '2023-12-01').defaultHostName), 'not-deployed')]"
+      "value": "[if(variables('deployOneGridAppEffective'), format('https://{0}', reference('chatAgentSite').defaultHostName), 'not-deployed')]"
     }
   }
 }

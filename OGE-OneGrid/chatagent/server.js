@@ -262,10 +262,12 @@ async function getToken(resource) {
     return getTokenCli(resource);
 }
 
-// The live Eventhouse `PiEvents` table uses `Timestamp` (not `Ts`) and has no
-// `Questionable` column, but the prompt/tooling were authored against an older
-// schema. Normalise both so model- and server-generated KQL runs unchanged.
-function normalizeKql(kql) {
+// Fleet PiEvents comes in two layouts: the unified OneGridEH layout (Timestamp, Tag, AssetId,
+// Value real, Tier; no Questionable) and the original PI layout a fresh template deployment
+// creates (Ts, Tag, Plant, Value dynamic, Questionable). The prompt/tooling mix both, so rewrite
+// model- and server-generated KQL to whichever layout this Eventhouse actually has.
+function normalizeKql(kql, schema) {
+    if (schema && schema.time === 'Ts') return String(kql).replace(/\bTimestamp\b/g, 'Ts');
     return String(kql)
         .replace(/\bnot\s*\(\s*Questionable\s*\)/gi, 'true')
         .replace(/\bTs\b/g, 'Timestamp');
@@ -298,7 +300,8 @@ async function queryKql(kql, source = '') {
     if (isLiveKql(kql, source)) {
         return runKql(CONFIG.liveKustoCluster, CONFIG.liveKustoDb, String(kql).replace(/\bTimestamp\b/g, 'Ts'));
     }
-    return runKql(CONFIG.kustoCluster, CONFIG.kustoDb, normalizeKql(kql));
+    const schema = await getFleetSchema().catch(() => null);
+    return runKql(CONFIG.kustoCluster, CONFIG.kustoDb, normalizeKql(kql, schema));
 }
 
 // Stale-while-revalidate cache: once a value exists, callers get it immediately and
@@ -346,6 +349,15 @@ const getPiRange = swrCache(600000, async () => {
     const rows = await queryKql('PiEvents | summarize minT=min(Timestamp), maxT=max(Timestamp)');
     const r = rows && rows[0];
     return r && r.maxT ? { min: String(r.minT), max: String(r.maxT) } : null;
+});
+
+// Which PiEvents layout the fleet Eventhouse uses (see normalizeKql). Read once per hour.
+const getFleetSchema = swrCache(3600000, async () => {
+    if (!CONFIG.kustoCluster) return null;
+    const rows = await runKql(CONFIG.kustoCluster, CONFIG.kustoDb, 'PiEvents | getschema | project ColumnName');
+    const cols = rows.map((r) => r.ColumnName);
+    if (!cols.length) return null;
+    return { time: cols.includes('Timestamp') ? 'Timestamp' : 'Ts', columns: cols };
 });
 
 // ── DAX query ────────────────────────────────────────────────────────────
@@ -940,9 +952,12 @@ async function chatWithCopilot(userMessage, history = [], sendStatus = () => {},
     // plus the actual watchlist schema (no scoring_date) and the live sensor data window
     // so DAX/KQL match this dataset instead of an older schema.
     const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local plant time
-    const [piRange, liveRange] = await Promise.all([getPiRange().catch(() => null), getLiveRange().catch(() => null)]);
+    const [piRange, liveRange, fleetSchema] = await Promise.all([getPiRange().catch(() => null), getLiveRange().catch(() => null), getFleetSchema().catch(() => null)]);
+    const fleetCols = fleetSchema && fleetSchema.time === 'Ts'
+        ? `The fleet PiEvents time column is Ts; it has columns ${fleetSchema.columns.join(', ')} (Value is dynamic — wrap in todouble()).`
+        : 'The fleet PiEvents time column is Timestamp (not Ts); it has columns Timestamp, Tag, AssetId, Value, Tier (no "Questionable" column).';
     const sensorNote = piRange
-        ? `\n- SENSOR DATA WINDOW (fleet): the fleet PiEvents currently holds data from ${piRange.min} to ${piRange.max}. For fleet sensor trends or "latest reading" queries, query WITHIN this window (e.g. Timestamp between datetime(${piRange.min.slice(0, 10)}) and datetime(${piRange.max.slice(0, 10)}) + 1d) — do NOT use ago(3h)/ago(Nd) relative to today, there is no fleet data after ${piRange.max}. The fleet PiEvents time column is Timestamp (not Ts); it has columns Timestamp, Tag, AssetId, Value, Tier (no "Questionable" column).`
+        ? `\n- SENSOR DATA WINDOW (fleet): the fleet PiEvents currently holds data from ${piRange.min} to ${piRange.max}. For fleet sensor trends or "latest reading" queries, query WITHIN this window (e.g. Timestamp between datetime(${piRange.min.slice(0, 10)}) and datetime(${piRange.max.slice(0, 10)}) + 1d) — do NOT use ago(3h)/ago(Nd) relative to today, there is no fleet data after ${piRange.max}. ${fleetCols}`
         : '';
     const liveNote = liveRange
         ? `\n- LIVE PI STREAM (Riverton ${liveRange.units.join('/') || 'RV1/RV2/RV3'}, ${liveRange.tags} tags): a separate Eventhouse feed, seeded in daily bursts. Stream status: ${liveStreamState(liveRange)}. Latest reading ${liveRange.max}. You DO have live query access to it: for live / latest / current readings or recent trends on Riverton units (tags like RV3:GEJU3GE03.AG, RV2:GEJU2GE00.AG), call query_kql with source "live". Its PiEvents columns are Ts, Tag, Plant ("RV1"/"RV2"/"RV3"), Value (dynamic — wrap in todouble()), Questionable, IngestedAt. The feed streams in bursts, so the newest data can be hours old: anchor time filters to the latest reading, NOT ago(). For latest/current readings, run ONE query with no time filter, e.g. PiEvents | where Tag in ("RV2:GEJU2GE00.AG","RV3:GEJU3GE03.AG") | summarize arg_max(Ts, Value) by Tag (or Tag startswith "RV3:" for a whole unit). For recent trends use Ts > datetime(${liveRange.max}) - 6h. Never retry with progressively wider windows. Charts and correlations over RV tags read this live feed automatically. The fleet data-window rule above does not apply to Riverton.`

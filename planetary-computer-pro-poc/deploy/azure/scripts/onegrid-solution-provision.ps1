@@ -138,6 +138,11 @@ Log "orchestrator: $deployScript"
 # --- 4. Compose config.json from ARM params + PCP outputs -------------------------
 $rg = $env:TARGET_RESOURCE_GROUP
 $reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure OpenAI, reuse it
+[object[]]$foundryModels = if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) {
+  @([ordered]@{ deployment = $env:PCP_OPENAI_DEPLOYMENT; model = $env:PCP_OPENAI_DEPLOYMENT; format = 'OpenAI' })
+} else {
+  @([ordered]@{ deployment = 'gpt-4o'; model = 'gpt-4o'; version = '2024-11-20'; format = 'OpenAI'; capacity = 100 })
+}
 $cfg = [ordered]@{
   subscriptionId = $env:SUBSCRIPTION_ID
   location       = $env:LOCATION
@@ -150,6 +155,7 @@ $cfg = [ordered]@{
     kqlDatabaseName = 'pi-realtime-db'
     factWindowDays  = 30
     siteCount       = 8
+    workspaceAdmins = @($env:FABRIC_WORKSPACE_ADMIN_OBJECT_ID | Where-Object { $_ })
   }
   data       = [ordered]@{ bundleUrl = 'https://github.com/paulshaheen/OneGrid/releases/latest/download/onegrid-data.zip' }
   telemetry  = [ordered]@{ enabled = $false }
@@ -174,11 +180,11 @@ $cfg = [ordered]@{
   }
   foundry = [ordered]@{
     resourceGroup = $rg
-    accountName   = "$($env:NAME_PREFIX)-foundry"
-    defaultModel  = 'gpt-4o'
-    models        = @(
-      [ordered]@{ deployment = 'gpt-4o'; model = 'gpt-4o'; version = '2024-11-20'; format = 'OpenAI'; capacity = 100 }
-    )
+    # When reusing the template's Azure OpenAI account, wire the app to that account and its
+    # actual model deployment (otherwise the app asks for a gpt-4o deployment that doesn't exist).
+    accountName   = $(if ($reuseFoundry -and $env:PCP_OPENAI_ACCOUNT_ID) { ($env:PCP_OPENAI_ACCOUNT_ID -split '/')[-1] } else { "$($env:NAME_PREFIX)-foundry" })
+    defaultModel  = $(if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) { $env:PCP_OPENAI_DEPLOYMENT } else { 'gpt-4o' })
+    models        = $foundryModels
   }
   chatAgent = [ordered]@{
     resourceGroup   = $rg
