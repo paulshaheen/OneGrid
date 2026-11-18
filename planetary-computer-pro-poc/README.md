@@ -205,9 +205,10 @@ in the wizard's **Fabric plane** step.
 
 ## Deploy to Azure
 
-Click the button, sign in to the Azure portal, choose your components (GeoCatalog is always
-deployed; add the web app and/or sample storage), choose which **app modules** the web app
-shows, pick the App Service plan SKU, and select **Review + create**.
+Click the button, sign in to the Azure portal, choose your components (the GeoCatalog, web
+app, sample storage and the rest are all optional; without the GeoCatalog the web app still
+reads live Fabric data but has no catalog imagery layers), choose which **app modules** the web
+app shows, pick the App Service plan SKU, and select **Review + create**.
 
 The **App modules** step controls which OneGrid capabilities appear in the web app. Core pages
 (Overview, Asset Explorer, Maintenance, Alerts, Ontology, Thresholds, Governance, Cyber

@@ -66,6 +66,7 @@ Ask these questions, ideally in one structured question. Defaults match the port
 
 | Component | Parameter | Default | Notes |
 | --- | --- | --- | --- |
+| Planetary Computer Pro GeoCatalog | `deployGeoCatalog` | on | Optional. Without it the web app still reads live Fabric data, but has no catalog imagery layers or asset uploads |
 | Sample storage + ingestion identity | `deploySampleStorage` | on | Required by the Fabric plane and the web app |
 | AI agent (Azure OpenAI / Foundry) | `deployAiAgent` | on | Required for Copilot chat |
 | OneGrid Fabric plane | `deployFabricPlane` | on | Required by the web app |
@@ -114,7 +115,12 @@ Run these checks and report a pass/fail list. Stop on a failure the user must fi
    is selected). Registration can take a few minutes; poll until done.
 3. **Quota.** If PowerShell (`pwsh`) is available, run
    `pwsh ./planetary-computer-pro-poc/deploy/azure/scripts/preflight-quota.ps1 -SubscriptionId <sub-id> -Location <region>`
-   and report its PASS/FAIL lines. It checks Fabric capacity-unit quota and A100 GPU quota.
+   and report its PASS/FAIL lines. It checks Fabric capacity-unit quota and A100 GPU quota
+   (ignore the GPU line when Aurora is off). Without `pwsh`, check Fabric quota directly:
+   `az rest --method get --url "https://management.azure.com/subscriptions/<sub-id>/providers/Microsoft.Fabric/locations/<region>/usages?api-version=2023-11-01" --query "value[0].{limit:limit,used:currentValue}"`.
+   Quota differs by region, and everything deploys to one region. If the chosen region has no
+   Fabric quota for the SKU, check the other allowed regions and offer the user one that has it.
+   App Service quota is checked in Step 4 (validation reports `InternalSubscriptionIsOverQuotaForSku`).
 4. **Fabric tenant setting (manual).** Ask the user to confirm that a Fabric administrator has
    enabled **"Service principals can create workspaces, connections, and deployment
    pipelines"** (Fabric Admin portal → Tenant settings) for the identity
@@ -141,6 +147,7 @@ repo. Example for the default choices:
   "contentVersion": "1.0.0.0",
   "parameters": {
     "location": { "value": "eastus" },
+    "deployGeoCatalog": { "value": true },
     "deploySampleStorage": { "value": true },
     "deployAiAgent": { "value": true },
     "deployFabricPlane": { "value": true },
@@ -177,7 +184,9 @@ GeoCatalog, Azure OpenAI and storage bill by use). Ask for a "yes" to continue.
    `--template-file planetary-computer-pro-poc/deploy/azure/azuredeploy.json`.
 3. Optionally preview with `az deployment group what-if` (same arguments).
 
-Fix any validation error before continuing.
+Fix any validation error before continuing. A quota error names the resource type and
+region; see Troubleshooting. When a different region is needed, delete the empty resource
+group and recreate it in the new region so the resource group and its resources match.
 
 ### Step 5 — Deploy
 
@@ -233,6 +242,7 @@ Delete the temporary parameters file.
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
 | `location ... is not part of the allowed value(s)` | Region outside the GeoCatalog preview regions | Use one of the five allowed regions |
+| Validation: `InternalSubscriptionIsOverQuotaForSku` on `Microsoft.Web/serverFarms` | No App Service quota for that plan size in the region (often zero for every size) | Validate the other allowed regions and pick one that passes, or request App Service quota on the portal **Quotas** blade |
 | `MissingSubscriptionRegistration` / `Microsoft.Orbital` not registered | Provider not registered | Register it (Step 2) and retry |
 | Fabric capacity create fails on quota | No Fabric capacity-unit quota in the region | Request quota on the portal **Quotas** blade (Microsoft Fabric), or use an existing capacity |
 | Fabric script log shows 401/403 creating the workspace | Fabric tenant setting not enabled for service principals | Fabric admin enables the setting (Step 2.4); redeploy |

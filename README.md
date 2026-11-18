@@ -220,8 +220,8 @@ in the wizard's **Fabric plane** step.
 
 ## Deploy to Azure
 
-Click the button, sign in to the Azure portal, choose your components (GeoCatalog is always
-deployed; add the web app and/or sample storage), pick the App Service plan SKU, and select
+Click the button, sign in to the Azure portal, choose your components (the GeoCatalog, web
+app, sample storage and the rest are all optional), pick the App Service plan SKU, and select
 **Review + create**.
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2FcreateUiDefinition.json)

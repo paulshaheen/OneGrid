@@ -57,19 +57,22 @@ export function getServiceConfig(): ServiceConfig {
 
 /** True when the report-app /api data plane is wired (window flag in the browser, REPORT_API_ENABLED=1 server-side). */
 function readReportApiEnabled(): boolean {
-  const runtime = typeof window !== "undefined" ? window.__APP_CONFIG__?.reportApiEnabled : undefined;
+  const runtime =
+    typeof window !== "undefined" ? window.__APP_CONFIG__?.reportApiEnabled : undefined;
   if (typeof runtime === "boolean") return runtime;
   if (typeof process !== "undefined") return process.env?.["REPORT_API_ENABLED"] === "1";
   return false;
 }
 
 /**
- * True when this is a real tenant deployment (a GeoCatalog is wired up). The
+ * True when this is a real tenant deployment: a GeoCatalog is wired up, or the
+ * OneGrid report-app is serving live Fabric data (REPORT_API_ENABLED=1, set by every
+ * template deployment, including ones that skip the optional GeoCatalog). The
  * registry uses this to decide Azure-backed vs synthetic providers, so a
  * deployed app never silently serves the sample Hurricane Gabrielle estate.
  */
 export function isAzureConfigured(): boolean {
-  return getServiceConfig().geoCatalogUrl !== "";
+  return getServiceConfig().geoCatalogUrl !== "" || readReportApiEnabled();
 }
 
 /**

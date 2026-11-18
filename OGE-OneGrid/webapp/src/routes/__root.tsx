@@ -176,7 +176,10 @@ function RuntimeConfigScript() {
     // param or saved choice. A wired tenant (GeoCatalog + report API) defaults to
     // Energy; a sample-only / marketing build defaults to Oil & Gas.
     defaultSolution:
-      process.env["USE_SAMPLE_DATA"] === "true" || !process.env["GEOCATALOG_URI"] ? "og" : "energy",
+      process.env["USE_SAMPLE_DATA"] === "true" ||
+      (!process.env["GEOCATALOG_URI"] && process.env["REPORT_API_ENABLED"] !== "1")
+        ? "og"
+        : "energy",
     // App modules chosen in the Deploy to Azure form (null = all modules on).
     modules: parseModules(process.env["ONEGRID_MODULES"]),
   };

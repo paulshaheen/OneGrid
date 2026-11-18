@@ -6,7 +6,7 @@
     "config": {
       "isWizard": false,
       "basics": {
-        "description": "Deploy a Microsoft Planetary Computer Pro **GeoCatalog** plus optional components: sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, the Microsoft Aurora weather model on a GPU Foundry endpoint, and the **OneGrid web app** (Fabric plane + chat/report Container App). The GeoCatalog is always deployed; choose the rest. [Learn more](https://github.com/paulshaheen/OneGrid).",
+        "description": "Deploy OneGrid on Azure: choose any of a Microsoft Planetary Computer Pro **GeoCatalog**, sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, the Microsoft Aurora weather model on a GPU Foundry endpoint, and the **OneGrid web app** (Fabric plane + chat/report web app). [Learn more](https://github.com/paulshaheen/OneGrid).",
         "location": {
           "label": "Region",
           "toolTip": "GeoCatalog is available in these regions during Preview.",
@@ -29,7 +29,7 @@
         "type": "Microsoft.Common.TextBox",
         "label": "GeoCatalog name",
         "defaultValue": "",
-        "toolTip": "Lowercase letters and numbers, 3-24 characters. Leave blank to auto-generate a unique name.",
+        "toolTip": "Used only when the GeoCatalog component is selected. Lowercase letters and numbers, 3-24 characters. Leave blank to auto-generate a unique name.",
         "constraints": {
           "required": false,
           "regex": "^[a-z0-9]{3,24}$",
@@ -48,17 +48,20 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "The GeoCatalog is always deployed. Select any additional components below, then configure them on the following tabs."
+              "text": "Select the components to deploy, then configure them on the following tabs. The GeoCatalog is optional: without it the web app still reads live Fabric data, but has no catalog imagery layers or asset uploads."
             }
           },
           {
             "name": "selected",
             "type": "Microsoft.Common.DropDown",
-            "label": "Optional components to deploy",
+            "label": "Components to deploy",
             "toolTip": "Select one or more components. Use Select all for the complete environment.",
             "multiselect": true,
             "selectAll": true,
             "defaultValue": [
+              {
+                "value": "geoCatalog"
+              },
               {
                 "value": "sampleStorage"
               },
@@ -78,6 +81,11 @@
             "constraints": {
               "required": false,
               "allowedValues": [
+                {
+                  "label": "Planetary Computer Pro GeoCatalog",
+                  "value": "geoCatalog",
+                  "description": "Geospatial imagery catalog (STAC) behind the web app's map imagery layers and asset uploads. Optional: OneGrid's Fabric data, dashboards and chat work without it."
+                },
                 {
                   "label": "Sample storage + ingestion identity",
                   "value": "sampleStorage",
@@ -524,6 +532,7 @@
     "outputs": {
       "location": "[location()]",
       "geoCatalogName": "[basics('geoCatalogName')]",
+      "deployGeoCatalog": "[contains(steps('components').selected, 'geoCatalog')]",
       "deploySampleStorage": "[contains(steps('components').selected, 'sampleStorage')]",
       "deployAiAgent": "[contains(steps('components').selected, 'aiAgent')]",
       "deployAuroraModel": "[contains(steps('components').selected, 'auroraModel')]",

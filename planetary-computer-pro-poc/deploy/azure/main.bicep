@@ -21,6 +21,9 @@ targetScope = 'resourceGroup'
 ])
 param location string = 'westeurope'
 
+@description('Deploy the Planetary Computer Pro GeoCatalog (geospatial imagery catalog used by the web app\'s map layers and asset uploads). Turn off to deploy OneGrid without it; the web app then reads live Fabric data without catalog imagery.')
+param deployGeoCatalog bool = true
+
 @description('Name of the Planetary Computer Pro GeoCatalog resource. Lowercase letters and numbers, 3-24 characters. Leave blank to auto-generate a unique name.')
 @maxLength(24)
 param geoCatalogName string = ''
@@ -306,10 +309,10 @@ var ogPhasesCsv = join(concat(ogFabricPhases, ogAppPhases), ',')
 var deployAppProvision = deployFabricPlaneEffective && deployOneGridApp
 
 // ------------------------------------------------------------------------------------
-// Core resource: the Planetary Computer Pro GeoCatalog
+// Core resource (optional): the Planetary Computer Pro GeoCatalog
 // ------------------------------------------------------------------------------------
 
-resource geoCatalog 'Microsoft.Orbital/geoCatalogs@2026-04-15' = {
+resource geoCatalog 'Microsoft.Orbital/geoCatalogs@2026-04-15' = if (deployGeoCatalog) {
   name: effectiveGeoCatalogName
   location: location
   // Associate the ingestion managed identity so the managed-identity ingestion path
@@ -563,8 +566,8 @@ resource chatAgentStorageContributor 'Microsoft.Authorization/roleAssignments@20
   }
 }
 
-resource chatAgentGeoCatalogAdmin 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
-  name: guid(geoCatalog.id, chatAgentAppName, geoCatalogAdminRoleId)
+resource chatAgentGeoCatalogAdmin 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective && deployGeoCatalog) {
+  name: guid(deployGeoCatalog ? geoCatalog.id : resourceGroup().id, chatAgentAppName, geoCatalogAdminRoleId)
   scope: geoCatalog
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', geoCatalogAdminRoleId)
@@ -621,8 +624,8 @@ var provisionCommonEnv = [
   { name: 'PCP_MODEL_CONTAINER', value: modelOutputsContainerName }
   { name: 'PCP_OPENAI_ENDPOINT', value: deployAiAgent ? openAi.properties.endpoint : '' }
   { name: 'PCP_OPENAI_ACCOUNT_ID', value: deployAiAgent ? openAi.id : '' }
-  { name: 'PCP_GEOCATALOG_URI', value: geoCatalog.properties.catalogUri }
-  { name: 'PCP_GEOCATALOG_ID', value: geoCatalog.id }
+  { name: 'PCP_GEOCATALOG_URI', value: deployGeoCatalog ? geoCatalog.properties.catalogUri : '' }
+  { name: 'PCP_GEOCATALOG_ID', value: deployGeoCatalog ? geoCatalog.id : '' }
   { name: 'PCP_SAMPLE_CONTAINER', value: sampleContainerName }
   // Deterministic AML managed-online-endpoint scoring URL (https://<endpoint>.<region>.inference.ml.azure.com/score) -
   // NOT a symbolic reference to the auroraEndpoint/amlWorkspace/amlKeyVault resource chain. That chain can fail
@@ -1080,11 +1083,11 @@ resource auroraJob 'Microsoft.App/jobs@2024-03-01' = if (deployAuroraJob) {
 // ------------------------------------------------------------------------------------
 // Outputs
 // ------------------------------------------------------------------------------------
-output geoCatalogResourceId string = geoCatalog.id
+output geoCatalogResourceId string = deployGeoCatalog ? geoCatalog.id : 'not-deployed'
 @description('The GeoCatalog URI (catalogUri), including the platform-assigned domain hash. Use as GEOCATALOG_URL for the ingest script and Explorer.')
-output geoCatalogUri string = geoCatalog.properties.catalogUri
+output geoCatalogUri string = deployGeoCatalog ? geoCatalog.properties.catalogUri : 'not-deployed'
 @description('Open the GeoCatalog in the portal and copy the GeoCatalog URI from the Overview blade; use it as GEOCATALOG_URL for the ingest script and Explorer.')
-output geoCatalogPortalHint string = 'Portal → ${effectiveGeoCatalogName} → Overview → GeoCatalog URI'
+output geoCatalogPortalHint string = deployGeoCatalog ? 'Portal → ${effectiveGeoCatalogName} → Overview → GeoCatalog URI' : 'not-deployed'
 output sampleStorageAccount string = deploySampleStorage ? sampleStorageName : 'not-deployed'
 output sampleContainer string = deploySampleStorage ? sampleContainerName : 'not-deployed'
 output sampleContainerUrl string = deploySampleStorage ? '${sampleStorage.properties.primaryEndpoints.blob}${sampleContainerName}' : 'not-deployed'
@@ -1139,7 +1142,7 @@ output fabricPlaneConfig object = deployFabricPlaneEffective ? {
     connectionId: ''
     openAiEndpoint: deployAiAgent ? openAi.properties.endpoint : ''
     openAiAccountId: deployAiAgent ? openAi.id : ''
-    geoCatalogUri: geoCatalog.properties.catalogUri
+    geoCatalogUri: deployGeoCatalog ? geoCatalog.properties.catalogUri : ''
   }
 } : {}
 @description('The Fabric plane is provisioned in-template. If no fabricConnectionId was supplied, create a Fabric cloud connection to the sample storage account and re-deploy with fabricConnectionId set to add the OneLake shortcut to model-outputs.')
