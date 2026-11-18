@@ -204,8 +204,17 @@ $cfg = [ordered]@{
   governance = [ordered]@{ enabled = $false }
 }
 $cfgPath = Join-Path $deployDir 'config.json'
+# Optional pre-created Import-model refresh SP (template refreshServicePrincipal* params).
+if ($env:REFRESH_SP_CLIENT_ID -and $env:REFRESH_SP_SECRET) {
+  $cfg.fixedIdentity = [ordered]@{
+    tenantId     = $env:REFRESH_SP_TENANT_ID
+    clientId     = $env:REFRESH_SP_CLIENT_ID
+    clientSecret = $env:REFRESH_SP_SECRET
+    objectId     = $env:REFRESH_SP_OBJECT_ID
+  }
+}
 [IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
-Log "config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName))"
+Log "config.json written (reuseExistingFoundry=$reuseFoundry, workspace=$($cfg.fabric.workspaceName), refreshSP=$([bool]$cfg.fixedIdentity))"
 
 # --- 5. Run the orchestrator for the selected phases ------------------------------
 $phases = ($env:ONEGRID_PHASES -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })

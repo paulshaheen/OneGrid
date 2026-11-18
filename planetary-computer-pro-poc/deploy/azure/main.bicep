@@ -62,6 +62,16 @@ param entraSignInClientId string = ''
 @description('Grant the deployment identity (pcpro-fabricplane-identity) the Microsoft Graph application permission Application.ReadWrite.OwnedBy, so the setup scripts can create the Entra sign-in app registration and the service principal that binds and refreshes the Import semantic model. The person deploying must be able to grant Graph application permissions (Privileged Role Administrator or Global Administrator). Without it, sign-in stays unconfigured and the Import model is not refreshed.')
 param grantProvisionerGraphPermission bool = false
 
+@description('Optional existing service principal (app registration) the setup scripts use to bind and refresh the Import semantic model, when the deployment identity cannot create one (grantProvisionerGraphPermission off). Client (application) ID.')
+param refreshServicePrincipalClientId string = ''
+
+@description('Object ID of the service principal (enterprise application) for refreshServicePrincipalClientId.')
+param refreshServicePrincipalObjectId string = ''
+
+@description('Client secret for refreshServicePrincipalClientId.')
+@secure()
+param refreshServicePrincipalSecret string = ''
+
 @description('Name of the Azure OpenAI (Foundry) model deployment.')
 param openAiDeploymentName string = 'gpt-5-mini'
 
@@ -704,6 +714,11 @@ var provisionCommonEnv = [
   { name: 'ENTRA_SIGNIN_CLIENT_ID', value: entraSignInClientId }
   // The person deploying becomes an Admin of the Fabric workspace, so they can open it.
   { name: 'FABRIC_WORKSPACE_ADMIN_OBJECT_ID', value: deployer().objectId }
+  // Optional pre-created Import-model refresh service principal (see refreshServicePrincipal*).
+  { name: 'REFRESH_SP_TENANT_ID', value: tenant().tenantId }
+  { name: 'REFRESH_SP_CLIENT_ID', value: refreshServicePrincipalClientId }
+  { name: 'REFRESH_SP_OBJECT_ID', value: refreshServicePrincipalObjectId }
+  { name: 'REFRESH_SP_SECRET', secureValue: refreshServicePrincipalSecret }
 ]
 
 // --- APP plane -----------------------------------------------------------------------

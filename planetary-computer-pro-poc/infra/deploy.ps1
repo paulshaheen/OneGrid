@@ -625,7 +625,7 @@ function Ensure-DeploySP {
   $fi = $cfg.fixedIdentity
   if ($fi -and $fi.clientId -and $fi.clientSecret -and $fi.tenantId) {
     Log "  using service principal from config.fixedIdentity ($($fi.clientId))"
-    $oid = AzTry { az ad sp show --id $fi.clientId --query id -o tsv }
+    $oid = if ($fi.objectId) { $fi.objectId } else { AzTry { az ad sp show --id $fi.clientId --query id -o tsv } }
     return @{ tenantId=$fi.tenantId; clientId=$fi.clientId; clientSecret=$fi.clientSecret; objectId=$oid }
   }
   $tenantId = AzTry { az account show --query tenantId -o tsv }

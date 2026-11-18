@@ -558,6 +558,48 @@
             "toolTip": "Grants pcpro-fabricplane-identity the Microsoft Graph application permission Application.ReadWrite.OwnedBy (it can only manage app registrations it creates). Needed to auto-create the sign-in app and the service principal that refreshes the Import semantic model. You must be a Global Administrator or Privileged Role Administrator to grant it.",
             "defaultValue": false,
             "visible": "[contains(steps('components').selected, 'fabricPlane')]"
+          },
+          {
+            "name": "refreshSpInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission))]",
+            "options": {
+              "icon": "Info",
+              "text": "Optional: if you can't grant the permission above, supply an existing app registration (service principal) to bind and refresh the Import semantic model. Without one, the model is deployed but not refreshed."
+            }
+          },
+          {
+            "name": "refreshServicePrincipalClientId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Refresh service principal client ID (optional)",
+            "defaultValue": "",
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission))]",
+            "constraints": {
+              "required": false,
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter a client ID GUID."
+            }
+          },
+          {
+            "name": "refreshServicePrincipalObjectId",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Refresh service principal object ID",
+            "defaultValue": "",
+            "toolTip": "Object ID of the service principal (Enterprise applications blade), not the app registration.",
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission), not(empty(steps('fabricConfig').refreshServicePrincipalClientId)))]",
+            "constraints": {
+              "required": "[not(empty(steps('fabricConfig').refreshServicePrincipalClientId))]",
+              "regex": "^$|^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "validationMessage": "Enter an object ID GUID."
+            }
+          },
+          {
+            "name": "refreshServicePrincipalSecret",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": { "password": "Refresh service principal client secret", "confirmPassword": "Confirm client secret" },
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission), not(empty(steps('fabricConfig').refreshServicePrincipalClientId)))]",
+            "constraints": { "required": "[not(empty(steps('fabricConfig').refreshServicePrincipalClientId))]" },
+            "options": { "hideConfirmation": true }
           }
         ]
       }
@@ -567,6 +609,9 @@
       "geoCatalogName": "[basics('geoCatalogName')]",
       "deployGeoCatalog": "[contains(steps('components').selected, 'geoCatalog')]",
       "grantProvisionerGraphPermission": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').grantProvisionerGraphPermission)]",
+      "refreshServicePrincipalClientId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission)), steps('fabricConfig').refreshServicePrincipalClientId, '')]",
+      "refreshServicePrincipalObjectId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission), not(empty(steps('fabricConfig').refreshServicePrincipalClientId))), steps('fabricConfig').refreshServicePrincipalObjectId, '')]",
+      "refreshServicePrincipalSecret": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission), not(empty(steps('fabricConfig').refreshServicePrincipalClientId))), steps('fabricConfig').refreshServicePrincipalSecret, '')]",
       "exemptStorageFromPolicy": "[steps('components').exemptStorageFromPolicy]",
       "storagePolicyExemptionTagName": "[if(steps('components').exemptStorageFromPolicy, steps('components').storagePolicyExemptionTagName, 'SecurityControl')]",
       "storagePolicyExemptionTagValue": "[if(steps('components').exemptStorageFromPolicy, steps('components').storagePolicyExemptionTagValue, 'Ignore')]",
