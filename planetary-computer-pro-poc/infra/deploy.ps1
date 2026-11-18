@@ -1136,7 +1136,7 @@ function Phase-ChatAgent {
   if ($pkgStorage -and $pkgBlobUrl) {
     $tmpZip = Join-Path ([IO.Path]::GetTempPath()) ("onegrid-app-" + [guid]::NewGuid().ToString('N').Substring(0,8) + ".zip")
     try {
-      Log "  staging package: downloading $pkgSrcUrl"
+      Log "  staging package: downloading $(($pkgSrcUrl -split '\?')[0])"
       Invoke-WebRequest -Uri $pkgSrcUrl -OutFile $tmpZip -UseBasicParsing -TimeoutSec 300
       Log "  re-hosting package in private storage: $pkgStorage/$pkgContainer/onegrid-app.zip"
       az storage blob upload --account-name $pkgStorage -c $pkgContainer -n 'onegrid-app.zip' -f $tmpZip --auth-mode login --overwrite true -o none 2>$null

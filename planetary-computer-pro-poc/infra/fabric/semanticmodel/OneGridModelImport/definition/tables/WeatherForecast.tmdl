@@ -57,7 +57,7 @@ table WeatherForecast
 		source =
 				let
 				    Source = Sql.Database(Server, Database),
-				    Data = Source{[Schema="og",Item="weatherforecast"]}[Data]
+				    Data = Source{[Schema="og",Item="WeatherForecast"]}[Data]
 				in
 				    Data
 
