@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "18268765614522777581"
+      "templateHash": "9343248129951133558"
     }
   },
   "parameters": {
@@ -344,9 +344,9 @@
     },
     "deployUnifiedModel": {
       "type": "bool",
-      "defaultValue": false,
+      "defaultValue": true,
       "metadata": {
-        "description": "Unify Weather + Digital Twin onto one asset spine: the provisioner's 'unified' phase generates the conformed og.* tables (dims + reliability + weather facts) in this deployment's lakehouse and deploys the Direct Lake OneGridModel over them, then targets the app (PBI_DATASET) at it. Requires the OneGrid Fabric plane + app. Off by default (keeps the twin Import model as the target)."
+        "description": "Unify Weather + Digital Twin onto one asset spine: the provisioner's 'unified' phase generates the conformed og.* tables (dims + reliability + weather facts) in this deployment's lakehouse and deploys the OneGridModelImport Import model over them, then targets the app (PBI_DATASET) at it. Requires the OneGrid Fabric plane + app, and a refresh identity (grantProvisionerGraphPermission or refreshServicePrincipal*) so the model can be refreshed. On by default."
       }
     },
     "oneGridRepoUrl": {

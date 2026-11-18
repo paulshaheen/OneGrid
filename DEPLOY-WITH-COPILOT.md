@@ -60,8 +60,10 @@ Ask these questions, ideally in one structured question. Defaults match the port
 | 7 | Existing capacity id (only if not creating) | `fabricCapacityId` | resource id or GUID |
 | 8 | Fabric workspace name | `fabricWorkspaceName` | `OneGrid` |
 | 9 | Web app plan | `chatAgentAppServiceSku` | `B1` (B1–B3, S1–S3, P0v3–P3v3) |
-| 10 | Microsoft Entra sign-in | `enableEntraSignIn`, `entraSignInClientId` | on, auto-created; or supply an existing SPA client id |
+| 10 | Microsoft Entra sign-in | `enableEntraSignIn`, `entraSignInClientId` | on; see Step 2.6 for how the sign-in app gets created |
 | 11 | Exempt storage from storage policies | `exemptStorageFromPolicy`, `storagePolicyExemptionTagName`, `storagePolicyExemptionTagValue` | off; see Step 2.7. Tag defaults `SecurityControl` / `Ignore` |
+| 12 | Graph permission or refresh service principal | `grantProvisionerGraphPermission`, or `refreshServicePrincipalClientId` / `ObjectId` / `Secret` | decided in Step 2.6 |
+| 13 | Unified asset model | `deployUnifiedModel` | on (recommended); needs the refresh identity from Step 2.6 |
 
 **Infrastructure components** (question 3) map to these boolean parameters:
 
@@ -133,9 +135,28 @@ Run these checks and report a pass/fail list. Stop on a failure the user must fi
    capacity assignment, the user adds the identity as a capacity admin in the Fabric Admin
    portal, and the agent redeploys (Step 5 is safe to repeat). A new capacity created by the
    template is handled automatically.
-6. **Sign-in.** Auto-creating the sign-in app registration needs the deployment identity to hold
-   Microsoft Graph `Application.ReadWrite.OwnedBy`. If it doesn't, the app still deploys, without
-   sign-in. Mention this; supplying an existing SPA client id avoids it.
+6. **Entra permissions (sign-in and semantic-model refresh).** Two things need app registrations:
+   the sign-in app, and a service principal that binds and refreshes the Import semantic model.
+   Check the user's directory roles:
+   `az rest --method get --url "https://graph.microsoft.com/v1.0/me/memberOf/microsoft.graph.directoryRole?$select=displayName" --query "value[].displayName" -o tsv`
+   - **Global Administrator or Privileged Role Administrator:** set
+     `grantProvisionerGraphPermission` to `true`. The template grants the deployment identity
+     Microsoft Graph `Application.ReadWrite.OwnedBy`, and the setup scripts create both apps.
+   - **Otherwise**, if the user can register apps (most tenants allow it), create them as the
+     user and pass them in. Tell the user what you'll create and get a yes first.
+     1. Refresh service principal:
+        `az ad app create --display-name onegrid-<rg>-refresh-sp --sign-in-audience AzureADMyOrg --query appId -o tsv`,
+        then `az ad sp create --id <appId> --query id -o tsv` (the object id), then
+        `az ad app credential reset --id <appId> --display-name onegrid --query password -o tsv`
+        (the secret; keep it in memory and the temp parameters file only). Pass them as
+        `refreshServicePrincipalClientId`, `refreshServicePrincipalObjectId` and
+        `refreshServicePrincipalSecret`.
+     2. Sign-in app: `az ad app create --display-name onegrid-<rg>-signin --sign-in-audience AzureADMyOrg --query "{appId:appId,id:id}"`
+        and pass the `appId` as `entraSignInClientId`. After the deployment (Step 7), add the
+        web app's SPA redirect URI:
+        `az rest --method patch --url https://graph.microsoft.com/v1.0/applications/<id> --headers Content-Type=application/json --body "{\"spa\":{\"redirectUris\":[\"<app-url>/auth/callback\"]}}"`
+   - **Neither:** deploy anyway. The app works without sign-in, but the Import semantic model
+     isn't refreshed, so dashboards and chat have no model data. Tell the user.
 7. **Storage policies.** Some subscriptions enforce Azure Policy that turns off shared-key or
    public network access on every new storage account (Microsoft internal MCAPS subscriptions
    do). The deployment scripts then fail with `KeyBasedAuthenticationNotPermitted`, and the web
@@ -178,6 +199,7 @@ repo. Example for the default choices:
     "enableEntraSignIn": { "value": true },
     "entraSignInClientId": { "value": "" },
     "exemptStorageFromPolicy": { "value": false },
+    "deployUnifiedModel": { "value": true },
     "oneGridModules": { "value": ["exec", "weather", "twin", "infra", "sap", "esu", "onerig", "copilot"] }
   }
 }
@@ -273,7 +295,9 @@ Delete the temporary parameters file.
 | `AuthorizationFailed` on role assignments | Deployer isn't Owner | Use an Owner account, or have an Owner run the deployment |
 | A deployment script fails with `KeyBasedAuthenticationNotPermitted` | A storage policy turned off shared-key access on the script's storage account | Redeploy with `exemptStorageFromPolicy=true` (Step 2.7) |
 | App returns 403/404 or a blank page after deployment | App package blob not readable, often an Azure Policy that turns off public network access on storage accounts | Redeploy with `exemptStorageFromPolicy=true` if the policy allows an opt-out tag; otherwise allow the web app to reach the `onegrid-app-package` container, then restart the app |
-| Sign-in not configured | Deployment identity can't create app registrations | Supply `entraSignInClientId` for an existing SPA app (redirect URI `https://<app>/auth/callback`) and redeploy |
+| Sign-in not configured | Deployment identity can't create app registrations | Follow Step 2.6: grant the Graph permission, or supply `entraSignInClientId` for a SPA app (redirect URI `https://<app>/auth/callback`) and redeploy |
+| Deployment fails on `provisionerGraphRole` with `Authorization_RequestDenied` | The deployer isn't allowed to grant Graph application permissions | Set `grantProvisionerGraphPermission=false` and use the app-registration path in Step 2.6 |
+| Semantic model refresh failed, or chat says the watchlist is empty | No refresh service principal, or the refresh hit a data error | Check the model's refresh history in the Fabric workspace; supply a refresh service principal (Step 2.6) and redeploy |
 | Aurora endpoint fails | No A100 GPU quota | Leave Aurora off, or request quota (`preflight-quota.ps1 -RequestGpuQuota`) |
 
 Redeploying the same template into the same resource group is safe; the provisioning scripts

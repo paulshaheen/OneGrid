@@ -478,6 +478,14 @@
             "visible": "[contains(steps('components').selected, 'fabricPlane')]"
           },
           {
+            "name": "deployUnifiedModel",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Build the unified asset model (recommended)",
+            "defaultValue": true,
+            "toolTip": "Generates the conformed og.* tables and the OneGridModelImport semantic model the web app's dashboards and chat use. Needs a refresh identity: the Graph permission below or a refresh service principal.",
+            "visible": "[and(contains(steps('components').selected, 'fabricPlane'), contains(steps('components').selected, 'oneGridApp'))]"
+          },
+          {
             "name": "createFabricConnection",
             "type": "Microsoft.Common.CheckBox",
             "label": "Create the storage connection for me (workspace identity)",
@@ -609,6 +617,7 @@
       "geoCatalogName": "[basics('geoCatalogName')]",
       "deployGeoCatalog": "[contains(steps('components').selected, 'geoCatalog')]",
       "grantProvisionerGraphPermission": "[and(contains(steps('components').selected, 'fabricPlane'), steps('fabricConfig').grantProvisionerGraphPermission)]",
+      "deployUnifiedModel": "[and(contains(steps('components').selected, 'fabricPlane'), contains(steps('components').selected, 'oneGridApp'), steps('fabricConfig').deployUnifiedModel)]",
       "refreshServicePrincipalClientId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission)), steps('fabricConfig').refreshServicePrincipalClientId, '')]",
       "refreshServicePrincipalObjectId": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission), not(empty(steps('fabricConfig').refreshServicePrincipalClientId))), steps('fabricConfig').refreshServicePrincipalObjectId, '')]",
       "refreshServicePrincipalSecret": "[if(and(contains(steps('components').selected, 'fabricPlane'), not(steps('fabricConfig').grantProvisionerGraphPermission), not(empty(steps('fabricConfig').refreshServicePrincipalClientId))), steps('fabricConfig').refreshServicePrincipalSecret, '')]",
