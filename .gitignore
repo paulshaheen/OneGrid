@@ -9,6 +9,8 @@ OGE-OneGrid/data/*
 !OGE-OneGrid/data/notebooks/**
 !OGE-OneGrid/data/reference/
 !OGE-OneGrid/data/reference/**
+!OGE-OneGrid/data/ami/
+!OGE-OneGrid/data/ami/**
 
 # Local-dev Fabric target override (per-developer backend IDs) — never commit/ship.
 # Production resolves the target per tenant via app settings / last-deploy-state.json.
