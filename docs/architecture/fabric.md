@@ -1,137 +1,165 @@
-# Security and governance for OneGrid in Microsoft Fabric
+---
+title: Data and analytics architecture for OneGrid in Microsoft Fabric
+description: Configure OneGrid ingestion, real-time analytics, asset models, predictive workflows, semantic queries, and data governance in Microsoft Fabric.
+ms.date: 11/23/2026
+ms.topic: conceptual
+---
 
-[Documentation home](../../README.md) | [Baseline](baseline.md) | [Enterprise integration](enterprise-landing-zone.md)
+# OneGrid data and analytics in Microsoft Fabric
 
-OneGrid uses Fabric as a SaaS data plane: workspace, Lakehouse, Eventhouse/KQL, Import
-semantic model, and optional Data Agent. Azure resource-group permissions do not establish
-Fabric tenant, workspace, item, or data authorization.
+[Solution overview](../../README.md) | [Baseline architecture](baseline.md)
 
-Article structure: [Security in Microsoft Fabric](https://learn.microsoft.com/fabric/security/security-overview).
-The sections apply that service guidance to OneGrid. Enterprise controls below require
-configuration and validation; the evaluation template does not establish all of them.
+Fabric supplies OneGrid's real-time and historical data plane. Eventstream and Eventhouse
+serve current operations; OneLake, notebooks, and semantic models serve curated history,
+reliability analytics, and business measures. A conformed asset hierarchy connects these
+paths to weather exposure and the digital twin.
 
-## In this article
+## Architecture
 
-- [Authenticate](#authenticate)
-- [Understand network security](#understand-network-security)
-- [Secure Data](#secure-data)
-- [Access data](#access-data)
-- [Protect data](#protect-data)
-- [Recover data](#recover-data)
-- [Administer Fabric](#administer-fabric)
-- [Audit Logs](#audit-logs)
-- [Capabilities](#capabilities)
-- [Related content](#related-content)
+```mermaid
+flowchart LR
+    PI[PI / operational connectors] --> ES[Eventstream / PIForwarderEndpoint]
+    ES --> Raw[PiEventsRaw]
+    Raw --> Curated[PiEvents / update policy]
+    Curated --> KQL[KQL queries]
+    Business[AIMM / iCare / GADS / work / assets] --> Lake[OneLake / Lakehouse]
+    Lake --> NB[Preparation / features / models / scoring]
+    NB --> Tables[Curated reliability and weather tables]
+    Tables --> Import[OneGridModelImport]
+    Tables --> Twin[OneGridOntology]
+    Import --> App[OneGrid application]
+    KQL --> App
+    Import --> Agent[Fabric Data Agent]
+    Agent --> App
+    Outputs[Blob model outputs] -. OneLake shortcut .-> Lake
+```
 
-## Authenticate
+## Ingest operational data
 
-Separate the signed-in user, app runtime managed identity, Fabric provisioning identity,
-workspace identity/cloud connections, and Import refresh service principal. Inventory the
-permissions and credential lifecycle for each.
+The custom Eventstream source `PIForwarderEndpoint` accepts the canonical source-event
+shape. Connectors publish through an Event Hubs-compatible transport; the shared connector
+core provides durable buffering, acknowledgments, drain processing, and heartbeats.
 
-Enable the necessary tenant settings only for approved identities/groups. User sign-in at
-the app does not automatically make backend DAX/KQL requests execute as that user.
+Publish/rebind the supplied
+[`pi-events-stream` artifact](../../planetary-computer-pro-poc/infra/fabric/eventstream/pi-events-stream/)
+to the target Eventhouse before enabling source producers. Confirm destination, table
+mapping, and source connection in the deployed workspace.
 
-## Understand network security
-
-Fabric is not deployed inside the workload's VNet. Evaluate inbound and outbound paths
-separately, and test feature support for the selected capacity, region, and item types.
-
-### Inbound network security
-
-Agree on tenant access, Conditional Access, and supported Fabric Private Link configuration
-with Fabric administrators. Test app APIs, browser access, SQL analytics, DAX/KQL, automation,
-and operator access under the restrictions. Do not assume an App Service private endpoint
-also restricts Fabric.
-
-### Outbound network security
-
-Choose supported managed private endpoints, managed VNets, or trusted workspace access for
-the actual Fabric-to-source path. These capabilities are not interchangeable. Verify
-shortcuts, notebooks, SQL refresh connections, and ingestion under the chosen source
-firewall/storage controls.
-
-## Secure Data
-
-Classify asset coordinates, maintenance records, operational telemetry, manuals, prompts,
-and derived forecasts. Define approved processing, retention, sharing, and export boundaries.
-Service encryption does not replace correct permissions or data minimization.
-
-### Understand tenants in multiple geographies
-
-Document capacity/workspace placement and the geography of source data, copies, shortcuts,
-model processing, and diagnostics. Multi-geo placement is not a disaster-recovery plan.
-Validate the actual feature and residency requirements rather than inferring them from an
-Azure resource group's region.
-
-## Access data
-
-### Workspace roles
-
-Separate administrators, developers, runtime query identities, and refresh identities.
-Grant the documented workspace/item permissions needed for each path, with periodic review.
-Do not grant all users workspace administration to solve a data access issue.
-
-### Share items
-
-Approve reports, semantic models, Data Agent access, links, exports, and external sharing.
-Trace access to underlying data and derived results, not just the visible report or page.
-
-### Limit access
-
-Test the effective authorization of DAX, KQL, SQL, OneLake, chat tools, and exports. A shared
-backend identity can have broader access than the user; enforce the application's authorized
-data boundary and verify negative tests. Do not claim user-specific RLS merely because the
-browser signed in.
-
-## Protect data
-
-Use the organization's Fabric/Purview classification, sensitivity labels, lineage, retention,
-and DLP standards where supported. Minimize restricted data in prompts and diagnostic logs.
-Approve preview or unavailable controls explicitly; exclude features that cannot meet a
-mandatory requirement.
-
-## Recover data
-
-Protect source data, item definitions, model connection/binding configuration, grants, and
-ingestion checkpoints. Test item-specific restoration, semantic model refresh, KQL queries,
-counts, and timestamps.
-
-Capacity DR settings and Power BI continuity do not imply every Fabric item has identical
-recovery behavior. Follow [Fabric reliability](https://learn.microsoft.com/fabric/security/reliability-fabric)
-and [experience-specific guidance](https://learn.microsoft.com/fabric/security/experience-specific-guidance).
-Use the [OneGrid multiregion design](multiregion.md) to coordinate application recovery.
-
-## Administer Fabric
-
-Assign tenant, capacity, workspace, data, and on-call owners. Monitor capacity contention,
-query failures, Import refresh, credential expiry, and ingestion lag. Schedule refresh
-after data updates; a successful provisioning-time refresh is not a continuous schedule.
-
-The current app path uses Import. The repository records a Direct Lake/service-identity
-query limitation; validate any replacement against the exact runtime identity/query path.
-
-## Audit Logs
-
-Collect the supported administrative and activity/audit signals required by policy. Correlate
-identity, item/workspace, application request, deployment, refresh, and ingestion events.
-Protect evidence access and retention; redact tokens and restricted data. Verify that
-required events are actually captured rather than assuming app logs cover all SaaS activity.
-
-## Capabilities
-
-| Capability | OneGrid baseline | Enterprise validation |
+| Connector | Source access | Continuity mechanism |
 | --- | --- | --- |
-| Workspace/data artifacts | Provisioner creates the selected plane and artifacts | Confirm intended tenant/capacity/items and permissions |
-| Import refresh | Unified path can bind and refresh using a dedicated identity | Schedule, rotate credentials, alert, and test recovery |
-| Network isolation | No complete private Fabric integration profile supplied | Validate inbound/outbound feature compatibility and every dependency path |
-| Data governance | Governance artifacts exist; effective access depends on configuration | Test roles, labels, lineage, sharing, exports, and actual query identities |
-| Disaster recovery | No end-to-end automated failover supplied | Implement and rehearse item-specific recovery against RTO/RPO |
-| Operations | Component provisioning is not a full alert/SLO suite | Establish [Day 2 operations](../operations.md) and escalation |
+| PI forwarder | PI Web API channels and polling | Durable SQLite outbox, certificate-based publisher identity, heartbeat |
+| Relational forwarder | SQL Server or Oracle polling | Durable per-source watermark and the same outbox/publisher core |
 
-## Related content
+Required event fields are `webId`, `tag`, `ts`, `value`, and `plant`. Optional fields include
+`valueType`, `questionable`, `substituted`, `source`, and `host`. `ts` is UTC event time;
+quality flags preserve source measurement quality.
 
-- [Fabric security overview](https://learn.microsoft.com/fabric/security/security-overview).
-- [Fabric adoption roadmap](https://learn.microsoft.com/power-bi/guidance/fabric-adoption-roadmap).
-- [OneGrid Fabric provisioning implementation](../implementations.md#onegrid-implementation-map).
-- [Regulated control review](regulated-workload.md).
+Eventhouse lands records in `PiEventsRaw`. The update policy produces `PiEvents` with
+typed/curated columns, including ingestion time. Configure connectors to write to the source
+endpoint rather than directly modifying the curated table. Monitor queue depth, latest
+event time, ingest latency, and source heartbeats.
+
+The connector implementation and configuration are in the
+[operational data-plane package](../../planetary-computer-pro-poc/infra/bolt-ons/data-plane/).
+
+## Curate history and calculate predictions
+
+| Stage | Supplied artifacts | Output |
+| --- | --- | --- |
+| Source preparation | `Process-PIData`, `Process-AIMM-Data`, `Process-iCare-Data`, `Process-GADS-Data`, intake checklist | Standardized source data |
+| Discovery and cleanup | Data archaeology, diagnostics, schema cleanup, dimension mapping | Validated keys, schemas, coverage |
+| Features | Gold feature selection, label construction, feature engineering | Model-ready features and labels |
+| Reliability | Predictive model, batch scoring, SmartSignal anomaly workflows | Health, watchlist, advisories, short-term risk |
+| Long-term risk | Cox and survival notebooks | Survival and long-term prediction results |
+| Presentation | Daily narrative, real-time report, KQL dashboards | Operator summaries and observations |
+| Orchestration | `Prediction_Pipeline` | Repeatable prediction processing |
+
+Use a controlled schedule for source loads, transformations, scoring, and model refresh.
+Historical bundles and synthetic seeds support evaluation; preserve their provenance when
+transitioning to customer sources.
+
+## Build the unified asset model
+
+The `generate_onegrid_data` notebook builds `og.*` tables using the hierarchy
+`dim_site -> dim_unit -> dim_asset -> dim_tag`. Reliability and weather attach to the same
+keys. Validate parent-child joins and orphan records before publishing downstream models.
+
+| Domain | Tables |
+| --- | --- |
+| Dimensions | `dim_site`, `dim_unit`, `dim_asset`, `dim_tag` |
+| Reliability | `aakr_health`, `watchlist`, `anomaly_advisories`, `root_cause`, `predictions_shortterm`, `predictions_longterm` |
+| Work and narrative | `fact_work_requests`, `daily_narrative` |
+| Weather | `dim_weather_event`, `WeatherForecast`, `fact_asset_exposure`, `fact_posture` |
+
+The unified deployment seeds HURDAT reference data, executes the generator, synchronizes
+SQL endpoint metadata, deploys `OneGridModelImport`, binds its SQL connection, and refreshes
+the model. The generator's overwrite behavior should be confined to intended generated
+tables; use reviewed ingestion/transformation jobs for customer production data.
+
+## Serve queries and relationships
+
+**DAX.** The app targets `OneGridModelImport` through `PBI_WORKSPACE` and `PBI_DATASET`.
+A dedicated service principal refreshes the SQL-backed Import connection. Schedule refresh
+after data processing; query-time app identity and refresh identity are different roles.
+
+**KQL.** The app targets the Eventhouse query service and database through `KUSTO_CLUSTER`
+and `KUSTO_DATABASE`. Validate actual data in `PiEvents` and `PCIOutages`; model-backed
+pages and telemetry-backed pages have separate freshness signals.
+
+**Digital Twin Builder.** `OneGridOntology` contextualizes plants, units, assets, sensors,
+work, advisories, outages, and predictions. The ontology complements the application
+knowledge graph and the asset hierarchy.
+
+**Fabric Data Agent.** The provisioner configures/publishes `OneGridOntologyAgent` and wires
+its identifiers into the app. Test representative questions against its configured data
+sources and effective identity permissions.
+
+**Weather integration.** The `fabricplane` phase applies `HazardGeometry`, `AssetRegistry`,
+spatial joins, and composite-risk functions. The `pcp_model_outputs` shortcut connects Blob
+outputs when a storage connection is provided or created through workspace identity.
+The shortcut exposes files; validate the ingestion/transformation path that populates
+analytical hazard tables separately.
+
+## Govern identities and data access
+
+| Identity or role | Purpose |
+| --- | --- |
+| Fabric provisioner | Workspace/item creation, capacity assignment, configuration |
+| App managed identity | Runtime DAX/KQL and configured Data Agent queries |
+| Import refresh service principal | SQL connection binding and scheduled/model refresh |
+| Workspace identity | Storage connection and shortcut access |
+| Persona groups | Executive, control-room, maintenance, ontology, reviewer, platform administration |
+
+The governance configuration has two modes: `demo` provisions configured persona roles;
+`inventory` reviews existing access without role writes. Configure existing Entra security
+groups, decide whether group auto-creation is allowed, and review `leastPrivilegeApp`.
+
+OneLake role definitions scope table/folder access. The governance manifest also records
+row-filter and hidden-column intent; implement and verify the corresponding semantic/SQL
+enforcement for every relevant query path. The app's governance view explains access
+inventory; it is not the enforcement layer.
+
+Test a permitted and denied case through DAX, KQL, SQL, OneLake, chat, and exports. A shared
+runtime identity requires explicit application/data-boundary enforcement rather than assuming
+the signed-in user's permissions automatically flow to all tools.
+
+## Network and administration
+
+Coordinate tenant access, Conditional Access, Fabric connectivity, source firewalls, and
+workspace connections with platform owners. Select the appropriate inbound and outbound
+controls for each path. Verify app queries, SQL refresh, notebooks, shortcuts, provisioning,
+and operator access under the selected network restrictions.
+
+Assign capacity/workspace owners, data owners, identity owners, and an on-call contact.
+Collect supported administrative and activity signals, correlate them with app/deployment
+events, and apply approved retention and redaction.
+
+## Recovery and operations
+
+Protect source data, item definitions, model connections, grants, reference files, and
+connector checkpoints. Restore each item type using its recovery mechanism, rebind dependent
+IDs/connections, refresh the Import model, and compare expected counts and timestamps.
+
+Monitor DAX/KQL latency, capacity contention, refresh duration, failed notebooks, source lag,
+and identity expiry. Use the [operations procedures](../operations-runbook.md) and
+[multiregion design](multiregion.md) to coordinate data and application recovery.

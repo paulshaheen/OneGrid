@@ -1,126 +1,224 @@
-# OneGrid landing zone architecture
+# OneGrid asset and weather intelligence architecture
 
-OneGrid is an Azure workload accelerator for asset, weather, and operational intelligence
-in energy and oil and gas. It combines Microsoft Fabric, Microsoft Planetary Computer Pro,
-Azure OpenAI models in Microsoft Foundry, and optional Aurora weather inference with a
-Microsoft Entra-authenticated application.
+OneGrid brings operational data, asset and maintenance records, geospatial information,
+weather forecasts, and AI into a unified asset-intelligence application. Energy and oil
+and gas teams use the same asset context to investigate equipment health, prioritize
+maintenance, assess storm exposure, and coordinate response.
 
-An enterprise deployment has two distinct parts:
+The solution uses Microsoft Fabric for real-time and historical analytics, Microsoft
+Planetary Computer Pro for geospatial services, Azure OpenAI in Microsoft Foundry for
+AI-assisted analysis, and Aurora on Azure Machine Learning for weather inference. A unified
+application on Azure App Service presents the results through operational, engineering,
+and executive experiences.
 
-- **Platform landing zone:** your organization's existing identity, connectivity, security,
-  management, and governance foundation.
-- **Workload landing zone:** the environments in which your team deploys and operates OneGrid,
-  integrated with that foundation.
+## Architecture
 
-> [!IMPORTANT]
-> The supplied implementation is a single-region, App Service-based evaluation accelerator.
-> Enterprise integration, regulated controls, and multiregion recovery below are target
-> designs, not deployable template profiles. AKS is an alternative, not a deployed component.
-> This project is not an official Microsoft reference architecture or a compliance certification.
+[![OneGrid logical architecture: operational and asset sources feed Fabric Eventstream, Eventhouse, Lakehouse, notebooks, Digital Twin Builder, and semantic models. Geospatial, weather, and AI planes connect to the Entra-authenticated OneGrid application on App Service. ARM and deployment scripts provision and connect the components.](docs/onegrid-logical-architecture.png)](docs/onegrid-logical-architecture.png)
 
-Article structure: [What is an Azure landing zone?](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/).
-The linked articles use the corresponding baseline, enterprise, regulated, multiregion,
-Fabric security, and operations article structures; see the
-[source-to-document map](docs/implementations.md#documentation-structure).
+The architecture separates six responsibilities:
 
-## In this article
-
-- [Azure landing zone architecture](#azure-landing-zone-architecture)
-- [Platform landing zone](#platform-landing-zone)
-- [Workload landing zone](#workload-landing-zone)
-- [Technology adoption in an Azure landing zone](#technology-adoption-in-an-azure-landing-zone)
-- [Next steps](#next-steps)
-
-## Azure landing zone architecture
-
-Use the conceptual view to establish responsibilities. Then select the workload reference
-architecture that matches your requirements. A workload deployment button does not create
-the enterprise foundation.
-
-### Conceptual architectures
-
-```mermaid
-flowchart TB
-    Platform["Existing platform landing zone: identity, connectivity, security, governance"]
-    Platform -. Shared controls and services .-> Workload
-    subgraph Workload["OneGrid workload landing zone"]
-        Dev[Development environment]
-        Test[Test environment]
-        Prod[Production environment / target design]
-    end
-    Workload --> Fabric[Microsoft Fabric / SaaS tenant and data governance]
-    Workload --> AI[Azure OpenAI and optional Aurora inference]
-    Workload --> Geo[Optional Planetary Computer Pro GeoCatalog]
-```
-
-This is a conceptual ownership diagram, not a deployment diagram. The evaluation template
-creates one environment, not all three. Fabric remains a SaaS dependency, not a service
-deployed inside the workload's VNet.
-
-### Reference architectures
-
-| Architecture | Scenario | Implementation |
+| Plane | Responsibility | Main components |
 | --- | --- | --- |
-| [Baseline architecture](docs/architecture/baseline.md) | Validate application, data, geospatial, and AI flows in one region. | Existing Bicep, Fabric provisioning, and release workflow; tenant prerequisites and verification required. |
-| [Enterprise landing zone integration](docs/architecture/enterprise-landing-zone.md) | Connect the workload to existing security, networking, and governance. | Target design; separate enterprise implementation still required. |
-| [Regulated workload architecture](docs/architecture/regulated-workload.md) | Establish shared responsibility, control boundaries, evidence, and release gates. | Target design; control implementation and independent assessment required. |
-| [Multiregion architecture](docs/architecture/multiregion.md) | Recover application and data journeys after a regional outage. | Target design; no automated cross-region replication or failover supplied. |
+| **Data and analytics** | Ingest telemetry, curate asset history, run reliability analytics, and expose governed business data | Fabric Eventstream, Eventhouse/KQL, OneLake/Lakehouse, notebooks, pipeline, semantic models, Digital Twin Builder, Data Agent |
+| **Geospatial** | Catalog customer imagery and geospatial assets; provide STAC search, tiles, and spatial context | Planetary Computer Pro GeoCatalog, Blob Storage, ingestion managed identity |
+| **Weather and Aurora** | Prepare weather inputs, run GPU inference, track storms, and publish application-ready forecasts | Container Apps Job, Azure ML workspace and online endpoint, Container Registry, Blob Storage |
+| **AI and models** | Interpret questions and ground answers in operational, business, and equipment context | Azure OpenAI model deployment, OneGrid Node AI agent, Fabric data tools, manuals retrieval |
+| **Application** | Deliver the unified user experience and server-side APIs | App Service on Linux/Node 22, report-app BFF, TanStack Start/React SSR, REST, WebSocket, Entra ID |
+| **Deployment and management** | Provision resources, create Fabric items, configure identities, and distribute the app | ARM/Bicep, deployment scripts, PowerShell provisioner, GitHub release package, monitoring |
 
-These are architectural increments. Start with the baseline, integrate with the platform,
-then add regulated or multiregion controls where business requirements justify them.
+### Workflow
 
-## Platform landing zone
+1. **Acquire operational and business data.** Historian/PI and SCADA-derived readings enter
+   the real-time lane. AIMM, iCare, GADS, CMMS/work orders, asset registers, and GIS data
+   provide business and spatial context. Equipment manuals supply maintenance knowledge.
+2. **Process real-time telemetry.** Fabric Eventstream receives events through the
+   `PIForwarderEndpoint` custom source. Eventhouse lands canonical events in `PiEventsRaw`;
+   an update policy produces the curated `PiEvents` table for KQL queries.
+3. **Curate history and calculate health.** Fabric notebooks prepare source datasets,
+   engineer features, detect anomalies, calculate short-term stop risk and long-term
+   survival, and produce scored results and daily narratives.
+4. **Unify the asset context.** The conformed hierarchy
+   `dim_site -> dim_unit -> dim_asset -> dim_tag` links reliability, maintenance, telemetry,
+   weather exposure, and operational posture. Digital Twin Builder adds asset relationships.
+5. **Serve business and operational queries.** The Import semantic model serves DAX
+   queries; Eventhouse serves KQL. The application uses both without requiring users to
+   switch analytical tools.
+6. **Add geospatial context.** Customer raster assets are registered in GeoCatalog using
+   managed-identity ingestion. STAC search and rendered tiles add imagery and GIS context
+   to the map.
+7. **Generate weather intelligence.** The scheduled Container Apps Job retrieves NOAA GFS
+   initial conditions, invokes Aurora, tracks storms, and publishes normalized
+   `WeatherEvent` objects to `model-outputs/weather-events.json`.
+8. **Present decisions and explanations.** Users sign in with Entra ID to view asset health,
+   twin context, alerts, forecasts, and exposure. The Node AI agent uses Azure OpenAI and
+   connected data tools to explain findings and answer questions.
 
-The platform team owns subscription vending, management groups, policy assignments, shared
-connectivity and DNS, identity guardrails, and central security/monitoring. OneGrid should
-consume these capabilities rather than create a second platform foundation.
+### Components
 
-The evaluation template does not deploy management groups, a connectivity hub, enterprise
-policies, a WAF, or centralized security operations. Follow the
-[enterprise ownership and integration contract](docs/architecture/enterprise-landing-zone.md#components)
-before targeting a governed production subscription.
+**Microsoft Fabric.** A workspace contains the schema-enabled Lakehouse, Eventhouse/KQL
+database, Eventstream, notebooks, prediction pipeline, semantic models, dashboards, ontology,
+and Data Agent. ARM creates or connects the capacity; deployment scripts use Fabric APIs
+to provision the workspace and its items.
 
-For platform implementation options, use Microsoft's
-[landing zone guidance](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/implementation-options)
-and the [GitHub implementation catalog](docs/implementations.md#microsoft-reference-implementations).
-Do not redeploy a foundation your organization already operates.
+**Geospatial services.** GeoCatalog provides STAC and tile services. The `sample-assets`
+container stores customer assets for ingestion. A dedicated user-assigned managed identity
+has read access to that container and is associated with the catalog.
 
-## Workload landing zone
+**Weather inference.** An Azure ML workspace hosts the Aurora managed online endpoint and
+GPU deployment. Its supporting resources include storage, Key Vault, and Application
+Insights. A CPU-based Container Apps Job orchestrates the pipeline; the GPU endpoint performs
+inference. The job uses a managed identity for storage, registry, and model access.
 
-The workload team owns the application, workload identities, data products, model
-integrations, deployment configuration, and service objectives within platform guardrails.
-Keep development, test, and production data and permissions separated.
+**AI and knowledge.** An Azure OpenAI account hosts the configured model deployment
+(`gpt-5-mini` by default in ARM). OneGrid hosts agent orchestration alongside the application.
+The agent can query DAX/KQL, use the configured Fabric Data Agent, and retrieve equipment
+manual context. The manuals experience includes a bundled corpus and a separate search
+integration for indexed content.
 
-Use the [baseline architecture](docs/architecture/baseline.md) for the actual runtime,
-components, workflow, alternatives, and Well-Architected considerations. Use
-[enterprise integration](docs/architecture/enterprise-landing-zone.md) for subscription,
-compute, network, policy, monitoring, and change-management decisions.
+**Application hosting.** App Service runs `node report-app/server/index.js`, which serves
+the report APIs, coordinates React SSR and chat, and exposes real-time WebSocket updates.
+The deployment mounts the prebuilt `onegrid-app.zip` from Blob Storage using
+`WEBSITE_RUN_FROM_PACKAGE`.
 
-The [implementation catalog](docs/implementations.md#onegrid-implementation-map) links the
-Bicep, compiled ARM template, portal form, Fabric provisioner, application, and GitHub release
-workflow. Publication of a GitHub package does not prove a running tenant has been updated.
+**Management.** The template creates managed identities and scoped role assignments.
+Separate app-plane and Fabric-plane deployment scripts configure their respective
+dependencies. Application Insights and Log Analytics support the weather/model components;
+workload operations correlate these signals with application, Fabric, and identity health.
 
-## Technology adoption in an Azure landing zone
+## Data model
 
-| Technology | OneGrid implementation | Architecture and operational guidance |
+Reliability and weather share the same asset spine rather than maintaining separate
+registries for the map, digital twin, and maintenance views.
+
+| Data group | Tables or artifacts | Purpose |
 | --- | --- | --- |
-| Microsoft Foundry / Azure OpenAI | Azure OpenAI account/model and app-hosted chat orchestration; optional Azure ML Aurora endpoint. No implied Foundry Agent Service or project. | [Model and tool selection](docs/architecture/baseline.md#model-and-tool-selection), [enterprise compute](docs/architecture/enterprise-landing-zone.md#compute), [Microsoft Foundry implementation](docs/implementations.md#microsoft-reference-implementations). |
-| Microsoft Fabric | Capacity, workspace, Lakehouse, Eventhouse/KQL, Import semantic model, optional Data Agent. | [Fabric security and governance](docs/architecture/fabric.md), [Fabric data plane](docs/architecture/baseline.md#fabric-data-plane), [data operations](docs/operations-runbook.md#data-and-model-lifecycle). |
-| App Service / optional AKS alternative | Linux App Service hosts the unified Node app. AKS is not deployed. | [Alternatives](docs/architecture/baseline.md#alternatives), [AKS reference implementation](docs/implementations.md#microsoft-reference-implementations), [Day 2 guide](docs/operations.md). |
-| Planetary Computer Pro | Optional GeoCatalog for STAC, ingestion, and tiles. | [Baseline workflow](docs/architecture/baseline.md#workflow), [imagery ingestion](docs/deployment-and-data-guide.md#ingest-imagery-and-rasters). |
-| Weather inference | Optional Container Apps Job, Aurora GPU endpoint, and Blob outputs. | [Weather pipeline](planetary-computer-pro-poc/aurora/README.md), [multiregion dependencies](docs/architecture/multiregion.md#components). |
+| Asset hierarchy | `dim_site`, `dim_unit`, `dim_asset`, `dim_tag` | Stable identity, site location, equipment, and signal context |
+| Reliability | `aakr_health`, `watchlist`, `anomaly_advisories`, `root_cause`, `predictions_shortterm`, `predictions_longterm` | Health assessment, prioritization, explanations, and risk |
+| Maintenance | `fact_work_requests`, `daily_narrative` | Work context and operational summaries |
+| Weather | `dim_weather_event`, `WeatherForecast`, `fact_asset_exposure`, `fact_posture` | Events, forecast values, asset exposure, and site response posture |
+| Real-time operations | `PiEventsRaw`, `PiEvents`, `PCIOutages` | Streaming observations and outage/derate context |
+| Relationships | `OneGridOntology` | Plants, units, assets, sensors, work, advisories, outages, and predictions |
 
-## Next steps
+The unified deployment generates the `og.*` Delta tables and deploys
+`OneGridModelImport` over the Lakehouse SQL analytics endpoint. The dedicated refresh
+identity materializes the model; the app's runtime identity queries it. Refresh the
+Import model after its source data changes.
 
-1. Review the [baseline architecture](docs/architecture/baseline.md).
-2. Select an approved evaluation environment, or complete the
-   [enterprise implementation sequence](docs/architecture/enterprise-landing-zone.md#implementation-sequence).
-3. Follow the [deployment runbook](DEPLOY-WITH-COPILOT.md), then
-   [load data and run acceptance checks](docs/deployment-and-data-guide.md).
-4. Establish ownership and procedures using the [Day 2 operations guide](docs/operations.md).
+## Application experiences
 
-**Deploy the evaluation baseline:** the button below launches the current template, not the
-enterprise, regulated, or multiregion target designs. Review permissions and billable Fabric,
-App Service, storage, and optional model resources before deployment.
+| Experience | Information brought together |
+| --- | --- |
+| Fleet and executive views | Availability, watchlist, actions, reliability trends, and business scorecards |
+| Asset explorer and maintenance | Equipment hierarchy, telemetry, advisories, work requests, and manual context |
+| Digital twin and simulation | Asset relationships, component health, telemetry, and failure scenarios |
+| Weather intelligence | Storm tracks, forecast timelines, exposure, corridor weather, and response posture |
+| Oil and gas | Platforms, pipelines, wells, processing/storage facilities, and weather exposure |
+| Governance and administration | Data-access inventory, ontology, thresholds, deployment connections, IT/OT context |
+| Copilot | Natural-language questions grounded in configured operational and business data |
+
+`oneGridModules` selects `exec`, `weather`, `twin`, `infra`, `sap`, `esu`, `onerig`, and
+`copilot`. Core pages remain available independently of those module choices.
+
+## Architecture configurations
+
+| Configuration | Design focus | OneGrid guidance |
+| --- | --- | --- |
+| **Baseline** | Single-region application, data, geospatial, weather, and AI flows | [Baseline architecture](docs/architecture/baseline.md) |
+| **Enterprise landing zone** | Integration with existing identity, security, networking, governance, and management | [Enterprise implementation](docs/architecture/enterprise-landing-zone.md) |
+| **Regulated workload** | Data boundaries, controlled administration, audit evidence, AI oversight, and operational approvals | [Regulated architecture](docs/architecture/regulated-workload.md) |
+| **Multiregion** | Application recovery, Fabric item/data recovery, inference capacity, and controlled failover | [Multiregion architecture](docs/architecture/multiregion.md) |
+
+Use the workload template for OneGrid resources and Fabric provisioning. Apply
+environment-specific networking, enterprise controls, and recovery configuration through
+the platform and workload delivery pipelines.
+
+## Considerations
+
+### Reliability
+
+Measure availability across the complete journey: sign-in, application, DAX/KQL, source
+freshness, model inference, and published forecasts. Keep forecast timestamps and dataset
+refresh times visible. Size App Service and Fabric for peak demand, and define recovery
+objectives per dependency. Protect source data, item definitions, model bindings, and
+application packages so the environment can be restored.
+
+### Security
+
+Separate user authentication, deployment privileges, app runtime permissions, refresh
+credentials, ingestion identity, and forecast-job identity. Use Entra ID and managed identity
+for supported runtime calls. Apply minimum required Azure and Fabric permissions, protect
+the refresh service-principal credential, and validate data access through the backend's
+actual query identity. Enterprise ingress, DNS, egress, and supported private endpoints
+must preserve package loading, Fabric access, inference, and operational administration.
+
+### Cost Optimization
+
+Track Fabric capacity, App Service, GPU uptime, Azure OpenAI tokens, storage, registry,
+diagnostics, and data transfer separately. Use the component selections to match the required
+scenario. Schedule refresh and analytics deliberately, and monitor capacity contention before
+increasing SKUs.
+
+### Operational Excellence
+
+Record source commit, application package, model version, configuration, Fabric item IDs,
+and identity ownership for each environment. Validate changes in nonproduction, retain
+known-good packages, and rehearse rollback and restore. Establish alerts for broken data
+flows as well as application errors.
+
+### Performance Efficiency
+
+Use KQL for streaming operations and DAX for the governed business model. Measure latency,
+concurrency, capacity utilization, refresh duration, model throttling, and forecast cycle
+time with representative asset and telemetry volumes. The forecast job orchestrates work
+with 2 vCPU/4 GiB; Aurora computation runs on the GPU endpoint.
+
+## Deploy this solution
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2FcreateUiDefinition.json)
+
+1. Select the subscription, resource group, and region. Establish Azure role-assignment
+   rights, Fabric tenant/capacity permissions, and Entra registration/refresh identities.
+2. Select the Fabric plane, app, sample storage, AI model, and required modules. Create a
+   Fabric capacity or supply an approved existing one.
+3. Enable historical seeding, GeoCatalog, and Aurora components according to the scenario.
+   Aurora model deployment requires the model asset/terms and A100 quota; forecasting also
+   requires storage and the scheduled job.
+4. Validate and deploy the ARM template. Monitor the app and Fabric provisioning scripts.
+5. Verify the app, sign-in, DAX/KQL, semantic refresh, enabled modules, imagery, chat, and
+   weather outputs. Confirm whether each dataset is seeded, generated, or connected to an
+   operational source.
+
+The deployment accepts `eastus`, `northcentralus`, `westeurope`, `canadacentral`, and `uksouth`.
+Check selected-service availability and quota in the chosen region. The portal selects
+solution components; command-line deployments must set the component parameters explicitly.
+
+For the complete procedure, parameters, identity setup, data formats, and verification,
+see [Deploy and configure OneGrid](docs/deployment-and-data-guide.md). The
+[Copilot deployment runbook](DEPLOY-WITH-COPILOT.md) provides the guided execution workflow.
+
+## Operate the solution
+
+Use the [Day 2 operations guide](docs/operations.md) and
+[operational procedures](docs/operations-runbook.md) to monitor:
+
+- Application/API health, sign-in, WebSocket connections, and deployed package identity.
+- Eventstream ingestion, latest telemetry, KQL queries, and Fabric capacity.
+- Lakehouse updates, semantic-model binding, refresh completion, and DAX results.
+- Azure OpenAI deployment health, grounded answers, token use, and tool access.
+- Aurora inference, job execution, input cycles, and `weather-events.json` freshness.
+- Identity changes, credential expiry, governance decisions, and recovery readiness.
+
+## Implementation
+
+| Entry point | Purpose |
+| --- | --- |
+| [ARM/Bicep](planetary-computer-pro-poc/deploy/azure/main.bicep) | Azure workload resources, identities, role assignments, and deployment scripts |
+| [Compiled ARM template](planetary-computer-pro-poc/deploy/azure/azuredeploy.json) | Deployment payload used by the portal |
+| [Fabric provisioner](planetary-computer-pro-poc/infra/deploy.ps1) | Workspace, artifacts, data/model binding, ontology, permissions, and application wiring |
+| [Fabric artifacts](planetary-computer-pro-poc/infra/fabric/) | Eventstream, KQL, notebooks, pipeline, semantic models, reports, and ontology |
+| [Application](OGE-OneGrid/) | Report BFF, SSR web app, Node AI agent, and operational experiences |
+| [Aurora pipeline](planetary-computer-pro-poc/aurora/) | Weather input preparation, inference, tracking, normalization, and publication |
+| [Release workflow](.github/workflows/release-onegrid-app.yml) | Build and publish the unified app package |
+
+The [implementation guide](docs/implementations.md) maps the logical architecture to
+resource symbols, deployment phases, application settings, and repository locations.

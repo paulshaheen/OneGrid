@@ -1,105 +1,126 @@
+---
+title: Regulated workload architecture for OneGrid
+description: Apply data boundaries, identity controls, auditability, model oversight, and recovery evidence to OneGrid operational and weather intelligence.
+ms.date: 11/23/2026
+ms.topic: conceptual
+---
+
 # OneGrid regulated workload architecture
 
-[Documentation home](../../README.md) | [Enterprise integration](enterprise-landing-zone.md)
+[Solution overview](../../README.md) | [Enterprise implementation](enterprise-landing-zone.md)
 
-This architecture series applies a control-oriented approach to sensitive OneGrid workloads:
-establish shared responsibility, prepare the environment, implement controls, and gather
-evidence before production approval.
+A regulated OneGrid workload combines operational intelligence with explicit control of
+data movement, administration, analytical access, model use, and operational decisions.
+The design retains the same Fabric, geospatial, weather, AI, and application planes while
+assigning controls and evidence to each boundary.
 
-Article structure: [Introduction to AKS regulated cluster for PCI DSS 4.0.1](https://learn.microsoft.com/azure/aks/pci-intro).
-The structure is reused for OneGrid's App Service/Fabric workload; AKS and PCI applicability
-are not assumed.
-
-> [!IMPORTANT]
-> This is a target design, not a regulated deployment profile or compliance certification.
-> Energy-sector, privacy, sovereignty, and payment-card obligations are not interchangeable.
-> Identify applicable requirements with legal, security, and an independent assessor.
-
-## In this article
-
-- [Shared responsibility model](#shared-responsibility-model)
-- [Before you begin](#before-you-begin)
-- [Series overview](#series-overview)
-- [Next steps](#next-steps)
-
-## Shared responsibility model
+## Architecture
 
 ```mermaid
 flowchart LR
-    OT[OT / historian source network] --> Bridge[Approved ingestion boundary]
-    Bridge --> Data[Governed Fabric data products]
-    Users[Approved users / MFA / device policy] --> Edge[Approved application ingress]
-    Edge --> App[OneGrid runtime / scoped identity]
-    App --> Data
-    App --> AI[Approved model endpoint / restricted data and tools]
-    App --> Geo[Approved geospatial and forecast data]
-    App -. Redacted audit events .-> Audit[Central security and evidence store]
-    Data -. Audit and lineage .-> Audit
+    OT[OT / historian source network] --> Bridge[Approved connector / durable buffer]
+    Bridge --> Fabric[Fabric / telemetry and governed data products]
+    Users[Approved users / identity policy] --> Edge[Enterprise application ingress]
+    Edge --> App[OneGrid / scoped runtime identity]
+    App --> Fabric
+    App --> Geo[GeoCatalog / classified imagery and assets]
+    App --> AI[Azure OpenAI / approved prompts and tools]
+    Job[Forecast job / approved inputs] --> Aurora[Aurora endpoint]
+    Aurora --> Job
+    Job --> Outputs[Timestamped model outputs]
+    Outputs --> App
+    App -. Audit events .-> Evidence[Protected audit / evidence retention]
+    Fabric -. Data and admin activity .-> Evidence
+    Job -. Run and provenance records .-> Evidence
 ```
 
-| Responsibility | Accountable party | Boundary |
+The OT boundary is an ingestion boundary. Deploy source connectors with approved source-read
+permissions and outbound publication rather than opening a direct application path into
+plant control networks. The application supports operator decisions; engineering and
+safety-critical actions retain their approved human and control-system processes.
+
+## Shared responsibility and scope
+
+| Owner | Responsibility |
+| --- | --- |
+| Platform/security | Identity guardrails, connectivity, central logs, privileged access, policy and incident response |
+| Workload team | App authorization, runtime configuration, deployment controls, model/tools, workload alerts |
+| Data owner | Classification, permitted uses, retention, source quality, sharing, residency, access decisions |
+| Operations | Source continuity, freshness, maintenance, recovery exercises, incident evidence |
+| Compliance/assessor | Applicable obligations, control mapping, assessment, accepted exceptions |
+
+Define the system boundary before implementation: customer data sources, connector hosts,
+Fabric tenant/workspaces, Azure resources, users, model processing, storage copies, logs,
+and administrative access. Map requirements to this specific inventory and data flow.
+
+## Data protection
+
+Classify asset coordinates, critical-infrastructure metadata, telemetry, work orders,
+equipment manuals, prompts, answers, and derived predictions. Apply minimization and
+approved retention to both primary data and diagnostic copies.
+
+Record regions and processing scope for Fabric capacities, storage, GeoCatalog, Azure ML,
+Azure OpenAI, and recovery copies. The ARM default Azure OpenAI deployment type is
+`GlobalStandard`; choose and verify model processing geography against actual requirements.
+Evaluate encryption/key-management needs per service and test the selected configuration.
+
+Separate generated/seeding data from observed production measurements in ingestion,
+presentation, and evidence. Preserve timestamps, lineage, quality flags, model version,
+forecast input cycle, and publication time.
+
+## Identity and access controls
+
+- Use Entra groups and Conditional Access for user access, with privileged elevation and
+  emergency access procedures for administration.
+- Separate provisioner, runtime, refresh, ingestion, workspace-connection, and forecast
+  identities; inventory grants and credentials.
+- Protect and rotate the Import refresh service-principal secret. Prove a complete model
+  refresh after every credential change.
+- Configure and verify OneLake roles, semantic permissions/filtering, KQL access, SQL access,
+  sharing, exports, and Data Agent tools.
+- Test unauthorized API calls, cross-site/asset data access, chat retrieval, cached answers,
+  and exports. User sign-in and shared service-identity authorization are distinct controls.
+
+## Network and model boundaries
+
+Use the approved enterprise ingress, egress, DNS, service-access, and operator paths.
+Validate model calls, Fabric queries, package mounting, blob channels, and weather/imagery
+source access through those controls.
+
+Approve model versions, tools, grounding sources, prompt retention, and input data classes.
+Evaluate prompt injection, unauthorized tool use, sensitive-data leakage, and ungrounded
+answers before a release. Retain evaluation results and approval records. Apply human
+oversight to generated maintenance and storm-response recommendations.
+
+## Control implementation and evidence
+
+| Objective | OneGrid implementation boundary | Acceptance evidence |
 | --- | --- | --- |
-| Underlying managed service infrastructure | Microsoft, according to each service's responsibility model | Service attestations do not certify customer configuration or the whole solution |
-| Platform guardrails, identity, network, security operations | Organization's platform/security teams | Must implement and operate approved controls |
-| App authorization, data permissions, model tools, configuration, lifecycle | OneGrid workload and data owners | Must verify effective behavior and produce evidence |
-| Applicable obligations, control mapping, assessment | Compliance/legal and qualified independent assessor | Must determine scope and approve evidence; architecture text cannot replace assessment |
+| Source separation | Connector permissions, buffer, endpoint, certificate | Approved network path; source access test; outage/replay exercise |
+| Data authorization | App APIs, Fabric/SQL/KQL permissions, model filters, exports | Permitted/denied test results for actual query identities |
+| Restricted model use | Azure OpenAI/Aurora configuration and agent tools | Model/geography approval, tool policy, evaluation results |
+| Credential protection | Refresh identity, deployment identity, connector certificates | Inventory, rotation drill, redacted logs/artifacts |
+| Administrative control | Platform/workload privileged roles, deployment approvals | Access reviews, elevation records, change approvals |
+| Auditability | Identity, app, Fabric, job, model, deployment events | Searchable correlated events; retention/access test |
+| Supply-chain control | App package, pipeline image, source commit, dependencies | Build/package identity, review results, promotion and rollback evidence |
+| Weather provenance | Input cycle, model/version, job result, normalized output | Timestamp/lineage checks and stale-output test |
+| Continuity | Source checkpoints, Fabric items/data, storage, app/model recovery | Achieved RTO/RPO, restored-query results, incident exercise |
 
-Treat OT ingestion as a separately engineered boundary. Do not create a direct inbound route
-from the app to plant control systems. The workload provides decision support, not a safety
-system or an autonomous control loop.
+Associate each row with the organization's control identifiers, accountable owner, evidence
+location, review cadence, and remediation records.
 
-## Before you begin
+## Operational acceptance
 
-Complete the [enterprise architecture](enterprise-landing-zone.md) integration design.
-Approve the data classification, threat model, system boundary, dependency inventory, control
-owners, service/region eligibility, and evidence-retention requirements.
-
-**Foundry and weather inference.** The default Azure OpenAI SKU is `GlobalStandard`. Validate
-processing geography, logging, abuse-monitoring terms, model/version, and availability
-against actual requirements. Do not send restricted asset metadata, credentials, or raw
-telemetry to models without approval. Use authorized tools, human oversight, and forecast
-provenance/age/uncertainty records. Generated recommendations must not directly actuate OT.
-
-**Fabric.** Validate tenant/workspace, OneLake, semantic-model, KQL, SQL endpoint, and export
-permissions. User sign-in does not automatically impose end-user RLS on shared service-identity
-queries. Test chat, aggregates, downloads, caches, and diagnostics for data isolation.
-Approve preview features explicitly; redesign or exclude features that cannot meet a required
-network or security control.
-
-**AKS, only if adopted.** No cluster is deployed. A future AKS host additionally requires
-cluster/workload identity, network policy, admission controls, image provenance, secrets
-integration, node/pod isolation, patching, and cluster audit retention. These do not replace
-Fabric or AI controls.
-
-## Series overview
-
-Use the following control areas as the review sequence. The linked OneGrid articles provide
-workload-specific design and operating detail; they are not independently certified controls.
-
-| Control area | Target implementation | Evidence and acceptance test | Owner / guidance |
-| --- | --- | --- | --- |
-| Network segmentation | Approved ingress, constrained egress, supported private connectivity, isolated management | Firewall/DNS configuration; blocked bypass and denied-egress tests | Network/platform; [networking](enterprise-landing-zone.md#networking) |
-| Data protection | Classification, minimization, residency, encryption, key management, retention | Data-flow/terms review; key and restore tests; documented service gaps | Data/security; [Fabric data protection](fabric.md#protect-data) |
-| Vulnerability management | Reviewed changes, dependency scanning, artifact provenance, immutable versions | Build evidence, approvals, package digest, tested rollback | Engineering; [release operations](../operations-runbook.md#change-release-and-rollback) |
-| Access controls | Group-based access, MFA/Conditional Access, elevation, server-side and data authorization | Access review; privileged records; disabled-user and cross-boundary negative tests | Identity/application/data; [Fabric access](fabric.md#access-data) |
-| Monitoring operations | Central redacted logs, appropriate retention, restricted evidence access, immutable retention where required | Queryable app/data/admin events; tamper/retention and alert-delivery tests | Security operations; [operations runbook](../operations-runbook.md) |
-| Policy management | Approved policies, least-privilege bootstrap, controlled exceptions | Compliance results; owned, expiring exceptions; credential/privilege inventory | Platform/security; [Azure Policy](enterprise-landing-zone.md#azure-policy) |
-| AI assurance | Approved model/version, prompt/tool review, authorization-aware grounding, human oversight | Prompt-injection/data-leakage tests, evaluation results, model change approval | AI/workload/data; [model selection](baseline.md#model-and-tool-selection) |
-| Credential protection | Approved secret store, rotation, scoped identities, separated deployment privileges | Rotation drill; access logs; secrets absent from code, artifacts, and logs | Platform/workload; [identity lifecycle](../operations-runbook.md#data-and-model-lifecycle) |
-| Continuity and incident response | Tested backup, item recovery, replay, failover where required, escalation | Measured restore against approved RTO/RPO; incident exercise | Workload/SRE; [recovery design](multiregion.md) |
-
-This is not an exhaustive regulatory mapping. Associate each row with the organization's
-actual control identifiers, implementation records, evidence location, and review dates.
+1. Approve system scope, classification, residency, threat model, and control mapping.
+2. Configure enterprise and workload controls in nonproduction.
+3. Exercise positive/negative access, source interruption, stale data, model misuse,
+   credential rotation, restore, and rollback.
+4. Resolve findings or record the approved owner, compensating control, and review date.
+5. Obtain workload, security, data, operational, and applicable assessment approvals.
+6. Reassess after significant changes to sources, models/tools, permissions, regions,
+   service features, or recovery arrangements.
 
 ## Next steps
 
-1. Approve scope, classification, residency, and a formal control mapping.
-2. Implement enterprise and regulated controls in nonproduction.
-3. Run functional, denied-access, AI misuse, recovery, and incident-response tests.
-4. Review evidence; resolve or formally accept every gap.
-5. Obtain the required independent assessment and production approval.
-6. Operate the controls using the [Day 2 guide](../operations.md); reassess after significant
-   service, model, data, identity, or architecture changes.
-
-For the source series and the distinction between design guidance and certification, see
-[Microsoft's regulated AKS guidance](https://learn.microsoft.com/azure/aks/pci-intro).
+Use [Day 2 operations](../operations.md) for recurring control operation and
+[multiregion recovery](multiregion.md) for coordinated regional failure exercises.

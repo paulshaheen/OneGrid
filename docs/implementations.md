@@ -1,87 +1,132 @@
-# OneGrid and Microsoft reference implementations
+---
+title: OneGrid implementation and deployment reference
+description: Map OneGrid logical architecture to ARM resource symbols, Fabric provisioning phases, application settings, and release artifacts.
+ms.date: 11/23/2026
+ms.topic: reference
+---
 
-[Documentation home](../README.md)
+# OneGrid implementation reference
 
-## Implementation status
+[Solution overview](../README.md) | [Deployment procedure](deployment-and-data-guide.md)
 
-Only the existing evaluation baseline has repository deployment entry points. The
-[enterprise](architecture/enterprise-landing-zone.md),
-[regulated](architecture/regulated-workload.md), and
-[multiregion](architecture/multiregion.md) documents describe work to implement and validate;
-there are no corresponding deployment profiles or switches.
+The implementation has three coordinated layers: Azure resources declared in ARM/Bicep,
+Fabric items and connections created through the provisioner, and the packaged application.
+This reference maps the logical diagram to those artifacts.
 
-## OneGrid implementation map
+## Repository entry points
 
-| Artifact | Responsibility | Important boundary |
+| Artifact | Responsibility |
+| --- | --- |
+| [Logical architecture](onegrid-logical-architecture.png) | End-to-end data, geospatial, weather, AI, application, and control planes |
+| [Bicep source](../planetary-computer-pro-poc/deploy/azure/main.bicep) | Azure resource definitions, conditions, role assignments, outputs |
+| [Compiled ARM](../planetary-computer-pro-poc/deploy/azure/azuredeploy.json) | Deployment payload |
+| [Portal form](../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json) | Component, model, app, capacity, and module choices |
+| [In-template wrapper](../planetary-computer-pro-poc/deploy/azure/scripts/onegrid-solution-provision.ps1) | Compose provisioner config from deployed resources and run selected phases |
+| [Provisioner](../planetary-computer-pro-poc/infra/deploy.ps1) | Fabric items, data/model binding, identity/configuration, app wiring |
+| [Configuration shape](../planetary-computer-pro-poc/infra/config.sample.json) | Environment and governance settings |
+| [Fabric artifacts](../planetary-computer-pro-poc/infra/fabric/) | Eventstream, schemas, notebooks, pipeline, models, dashboards, ontology |
+| [Application source](../OGE-OneGrid/) | BFF, SSR web app, Node AI agent |
+| [Weather pipeline](../planetary-computer-pro-poc/aurora/) | Inputs, inference client, tracking, normalization, publication |
+| [Operational connectors](../planetary-computer-pro-poc/infra/bolt-ons/data-plane/) | Durable source ingestion into Eventstream |
+| [Manuals search extension](../planetary-computer-pro-poc/infra/bolt-ons/foundry-iq-manuals/) | Indexed equipment-manual grounding |
+| [App release workflow](../.github/workflows/release-onegrid-app.yml) | Build and publish the unified app package |
+
+## ARM resource inventory
+
+The symbols below are the resource identifiers in the compiled ARM and Bicep sources.
+Conditions select resources according to the chosen components and dependencies.
+
+| Architecture area | Resource symbols | Purpose |
 | --- | --- | --- |
-| [Bicep source](../planetary-computer-pro-poc/deploy/azure/main.bicep) | Azure resources, component selection, identities, deployment-script orchestration | Resource-group scoped; not a platform landing zone deployment |
-| [Compiled ARM template](../planetary-computer-pro-poc/deploy/azure/azuredeploy.json) | Template used by the portal deployment | Keep synchronized with Bicep when infrastructure changes |
-| [Portal form](../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json) | Deployment choices | Component selection is not an enterprise-security profile |
-| [Copilot deployment runbook](../DEPLOY-WITH-COPILOT.md) | Prerequisites, choices, permission checks, deployment and verification | Deployment requires approval and creates billable resources |
-| [Fabric/app phase provisioner](../planetary-computer-pro-poc/infra/deploy.ps1) | Fabric items, models, data, app configuration, and permissions | Azure RBAC does not replace Fabric tenant/workspace authorization |
-| [Sample configuration](../planetary-computer-pro-poc/infra/config.sample.json) | Provisioner configuration shape | Never commit resolved tenant secrets or production configuration |
-| [Application source](../OGE-OneGrid/) | Report API, web UI, chat, and Fabric artifacts | Current production host is App Service, not AKS |
-| [Release workflow](../.github/workflows/release-onegrid-app.yml) | Build and publish `onegrid-app.zip` | Publishes the mutable `app-latest` release on matching `main` pushes or manual dispatch; publication alone does not prove a running tenant app was updated |
-| [Weather pipeline](../planetary-computer-pro-poc/aurora/README.md) | Aurora input, inference, and output workflows | Optional, quota-dependent; verify actual forecast provenance |
-| [Asset samples](../planetary-computer-pro-poc/samples/) | CSV/GeoJSON evaluation data | Samples are not production asset inventory |
+| Geospatial | `geoCatalog` | Planetary Computer Pro STAC/tiles service |
+| Ingestion identity | `ingestIdentity`, `blobReaderAssignment` | Container read access and catalog-associated identity |
+| Shared workload storage | `sampleStorage`, `sampleBlobService` | Asset, application-package, and forecast containers |
+| Storage containers | `sampleContainer`, `onegridAppPackageContainer`, `modelOutputsContainer`, `auroraChannelContainer` | `sample-assets`, `onegrid-app-package`, `model-outputs`, `aurora-channel` |
+| Deployment helper storage | `scriptStorage` | Dedicated deployment-script storage when the configured policy-exception path is used |
+| Fabric deployment identity | `fabricPlaneIdentity`, `fabricPlaneRgOwner` | Provisioning identity and resource-group deployment/role-assignment scope |
+| Storage provisioning grants | `fabricPlaneBlobReaderRole`, `fabricPlaneStorageUaaRole`, `fabricPlaneBlobContributorRole` | Read storage, create workspace-identity grants, upload the app package |
+| Directory permissions | `graphServicePrincipal`, `provisionerGraphRole` | Optional Graph application permission for identity creation |
+| Fabric capacity | `fabricCapacity` | New F-SKU capacity when selected |
+| Application host | `chatAgentPlan`, `chatAgentSite` | Linux App Service plan/site and system-assigned identity |
+| App data-plane grants | `chatAgentStorageContributor`, `chatAgentGeoCatalogAdmin`, `chatAgentAuroraJobOperator` | Storage/catalog operations and job-scoped forecast start/stop |
+| Provisioning | `appProvisionScript`, `fabricPlaneScript` | Independent app and Fabric configuration paths |
+| AI inference | `openAi`, `openAiDeployment`, `openAiDeployerRole` | Azure OpenAI account/model and interactive deployer access |
+| Aurora support | `amlStorage`, `amlKeyVault`, `amlApplicationInsights` | Workspace backing storage, secrets infrastructure, telemetry |
+| Aurora compute | `amlWorkspace`, `auroraEndpoint`, `auroraDeployment` | Managed workspace, Entra-token endpoint, optional GPU model deployment |
+| Job telemetry/runtime | `logAnalytics`, `containerAppsEnv`, `auroraJobIdentity` | Log destination, job environment, user-assigned identity |
+| Pipeline image | `auroraAcr`, `auroraJobAcrPull`, `auroraJobAcrContributor`, `auroraImageBuild` | Registry, pull/build access, deployment-time image build |
+| Job data/model grants | `auroraJobBlobRole`, `auroraJobMlRole` | Output/channel writes and Azure ML inference |
+| Forecast trigger | `auroraJob` | Scheduled client, UTC cron, container resources, retry/timeout, environment |
 
-## Microsoft reference implementations
+## Fabric provisioning phases
 
-These are external reference implementations, not vendored OneGrid components. Review their
-current scope, prerequisites, support guidance, and license. Use pinned versions when
-adopting code; do not deploy multiple overlapping foundations into the same environment.
+| Phase | Main result |
+| --- | --- |
+| `workspace` | Resolve/create workspace, assign capacity, apply workspace administration |
+| `core` | Lakehouse/SQL endpoint, Eventhouse/KQL database, schema and seed operations |
+| `fabricplane` | Model-output storage connection/shortcut and hazard spatial KQL |
+| `artifacts` | Deploy/rebind notebooks, prediction pipeline, KQL dashboards |
+| `data` | Load selected historical data and prepare seeded/generated content |
+| `semantic` | Base Import semantic model/report and connection setup |
+| `oge` | Additional semantic model and `OneGridOntology` Digital Twin Builder item |
+| `unified` | HURDAT reference, `og.*` generator, SQL metadata sync, `OneGridModelImport` binding/refresh |
+| `governance` | Configured OneLake data roles and access-review manifest |
+| `foundry` | Reuse the template's OpenAI deployment or provision the configured model account |
+| `dataagent` | Configure/publish the Fabric Data Agent |
+| `chatagent` | Package mounting, runtime settings, sign-in, dependency configuration |
+| `permissions` | App Eventhouse and Power BI permissions |
+| `dataplane` | Connector integration/configuration, selected separately |
 
-| Area | Microsoft Learn guidance | GitHub implementation | How to use with OneGrid |
-| --- | --- | --- | --- |
-| Platform landing zone | [Implementation options](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/implementation-options) | [Azure/ALZ-PowerShell-Module](https://github.com/Azure/ALZ-PowerShell-Module) | Platform team establishes or evolves shared foundations independently of the workload |
-| AI landing zone | [Foundry enterprise integration](https://learn.microsoft.com/azure/architecture/ai-ml/architecture/baseline-microsoft-foundry-landing-zone) | [Azure/AI-Landing-Zones](https://github.com/Azure/AI-Landing-Zones) | Evaluate AI-specific design and deployment options; reconcile with existing platform ownership |
-| Foundry chat baseline | [Baseline architecture](https://learn.microsoft.com/azure/architecture/ai-ml/architecture/baseline-microsoft-foundry-chat) | [Azure-Samples/microsoft-foundry-baseline](https://github.com/Azure-Samples/microsoft-foundry-baseline) | Reference for private connectivity and managed agent architecture; not a drop-in replacement for OneGrid's app-hosted agent |
-| AKS baseline | [Baseline architecture](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/baseline-aks) | [mspnp/aks-baseline](https://github.com/mspnp/aks-baseline) | Starting point only if the workload moves to AKS; application packaging and integrations remain work |
-| Planetary Computer Pro | [Product documentation](https://learn.microsoft.com/azure/planetary-computer/) | [Azure/microsoft-planetary-computer-pro](https://github.com/Azure/microsoft-planetary-computer-pro) | Microsoft's original notebooks, SDK, and storm-impact sample |
+The phase runner preserves its declared order even when a subset is selected. The ARM wrapper
+adds `unified` when requested. It initializes governance disabled; approved governance
+settings are applied through provisioner configuration.
 
-For **Fabric**, use the [adoption roadmap](https://learn.microsoft.com/power-bi/guidance/fabric-adoption-roadmap),
-[security guidance](https://learn.microsoft.com/fabric/security/security-overview), and OneGrid's
-Fabric provisioner above. Do not confuse an open-mirroring file "landing zone" with an Azure
-platform/workload landing zone. No separate Microsoft Fabric landing zone implementation is
-bundled or claimed here.
+## Application configuration contract
 
-For **regulated AKS** and **multiregion AKS**, use the linked
-[regulated](https://learn.microsoft.com/azure/aks/pci-intro) and
-[multiregion](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-multi-region/aks-multi-cluster)
-guidance to locate current supporting assets. OneGrid does not supply these clusters.
+| Settings | Connects |
+| --- | --- |
+| `PBI_WORKSPACE`, `PBI_DATASET` | Workspace and Import model used by DAX queries |
+| `KUSTO_CLUSTER`, `KUSTO_DATABASE` | Eventhouse query service and KQL database |
+| `AZURE_AI_ENDPOINT`, `AI_DEFAULT_MODEL` | Node AI agent's configured model endpoint/deployment |
+| `FOUNDRY_ENDPOINT`, `FOUNDRY_DEPLOYMENT` | Web application model integration |
+| `DATA_AGENT_WORKSPACE`, `DATA_AGENT_ID` | Published Fabric Data Agent |
+| `GEOCATALOG_URI` | GeoCatalog STAC and tile integration |
+| `ENTRA_CLIENT_ID`, `ENTRA_TENANT_ID` | Application sign-in |
+| `WEBSITE_RUN_FROM_PACKAGE` | Application package location |
+| `REPORT_PORT`, `WEBSITES_PORT` | App Service port configuration, both 8080 |
+| `REPORT_API_URL` | SSR-to-BFF loopback, `http://127.0.0.1:8080` |
+| `ONEGRID_MODULES` | Enabled application modules |
 
-## Production implementation backlog
+Resolve values from the actual deployment, not another environment's IDs. Verify the unified
+model remains the app target after data/model updates.
 
-Before calling an enterprise variant deployable, provide:
+## Storage and weather contracts
 
-1. Parameterized, policy-compatible network and identity integration with existing resources.
-2. A reviewed deployment path that works from the approved private runner environment.
-3. Versioned packages/configuration and an explicit application rollout/rollback procedure.
-4. Automated functional and denied-access tests for app, Fabric, AI, and optional weather.
-5. Provisioned diagnostics, alerts, budgets, and recovery controls with accountable owners.
-6. Evidence that the relevant [enterprise gates](architecture/enterprise-landing-zone.md#exit-criteria)
-   pass. Add regulated/multiregion evidence only when those variants are actually implemented.
-
-## Documentation structure
-
-Each article below follows the source article's **ordered H2/H3 structure**, rather than a
-single generic architecture template. Body text, component inventories, diagrams, decisions,
-and procedures describe OneGrid. Microsoft authors/contributors, site feedback controls,
-and automatically generated "Additional resources" panels are not copied.
-
-| OneGrid article | Microsoft Learn structural source | Structure retained |
+| Artifact/configuration | Producer | Consumer |
 | --- | --- | --- |
-| [Landing page](../README.md) | [What is an Azure landing zone?](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/) | Architecture with conceptual/reference views; platform; workload; technology adoption; next steps |
-| [Baseline](architecture/baseline.md) | [Foundry chat baseline](https://learn.microsoft.com/azure/architecture/ai-ml/architecture/baseline-microsoft-foundry-chat) | Architecture with workflow/components/model selection/alternatives; five-pillar considerations; deployment; contributors; next step; related resources |
-| [Enterprise integration](architecture/enterprise-landing-zone.md) | [Foundry in an Azure landing zone](https://learn.microsoft.com/azure/architecture/ai-ml/architecture/baseline-microsoft-foundry-landing-zone) | Article-layout matrix; architecture; subscription; compute; networking; developer access; monitoring; policy; change management; enterprise architecture; five pillars; end matter |
-| [Regulated workload](architecture/regulated-workload.md) | [Regulated AKS introduction](https://learn.microsoft.com/azure/aks/pci-intro) | Shared responsibility; before you begin; control-series overview; next steps |
-| [Multiregion](architecture/multiregion.md) | [AKS multiregion baseline](https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-multi-region/aks-multi-cluster) | Architecture; components; alternatives; geode/stamp patterns; ordered operational considerations; next steps; related resources |
-| [Fabric](architecture/fabric.md) | [Fabric security overview](https://learn.microsoft.com/fabric/security/security-overview) | Authentication; inbound/outbound networking; geography; workspace/sharing/access; protection; recovery; administration; audit; capabilities; related content |
-| [Day 2 guide](operations.md) | [AKS Day 2 guide](https://learn.microsoft.com/azure/architecture/operator-guides/aks/day-2-operations-guide) | Prerequisites; contributors; next steps and other articles in the series |
+| `sample-assets` | Asset upload/customer ingestion process | GeoCatalog ingestion and app asset workflows |
+| `onegrid-app-package/onegrid-app.zip` | App provisioner | App Service package mount |
+| `aurora-channel` | Forecast client and endpoint transfer path | Aurora inference |
+| `model-outputs/weather-events.json` | Forecast job | Application weather adapter |
+| `pcp_model_outputs` | Fabric storage-connection/shortcut configuration | Lakehouse consumers |
+| `INITIAL_CONDITION_SOURCE=gfs` | ARM job configuration | NOAA GFS input adapter |
+| `AURORA_NUM_STEPS=20` | ARM job configuration | Aurora rollout |
+| `OUTPUT_BLOB_NAME=weather-events.json` | ARM job configuration | Forecast publication |
 
-H4 sections add OneGrid-specific implementation detail without replacing the source H2/H3
-outline. The AKS multiregion article's cluster-bootstrap heading is retained and explicitly
-distinguishes the current App Service deployment from a future AKS host. The detailed
-[operations runbook](operations-runbook.md), this implementation catalog, and the
-[deployment/data guide](deployment-and-data-guide.md) are project procedures, not claimed
-replicas of Microsoft Learn articles.
+The scheduled job uses `AZURE_CLIENT_ID`, `AURORA_ENDPOINT`, blob account/container settings,
+and output-container configuration supplied by ARM.
+
+## Build, promote, and restore
+
+The release workflow runs on matching `OGE-OneGrid/**` or workflow changes on `main`, or
+manual dispatch. It builds the SSR app, includes the BFF/chat/runtime dependencies, excludes
+resolved local target files, and publishes `onegrid-app.zip` under `app-latest`.
+
+The provisioner downloads the source package, uploads it to environment storage, verifies
+the upload, and configures managed-identity mounting. Record which package and configuration
+the host actually uses. Retain immutable known-good artifacts for promotion/rollback;
+publishing a source release alone does not establish a running tenant's version.
+
+Keep Bicep, compiled ARM, and portal choices synchronized when changing infrastructure.
+Validate application, schema/model, bindings, permissions, and source compatibility as one
+release. Use the [operations procedures](operations-runbook.md) for rollback and recovery.

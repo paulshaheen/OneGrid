@@ -1,167 +1,221 @@
-# Deploy OneGrid and load evaluation data
+---
+title: Deploy and configure OneGrid
+description: Deploy OneGrid Azure resources and Fabric items, configure identities and models, load assets and imagery, and verify operational and weather intelligence.
+ms.date: 11/23/2026
+ms.topic: how-to
+---
 
-[Documentation home](../README.md) | [Baseline architecture](architecture/baseline.md)
+# Deploy and configure OneGrid
 
-## Choose the supported path
+[Solution overview](../README.md) | [Implementation reference](implementations.md)
 
-Use [Deploy OneGrid with GitHub Copilot](../DEPLOY-WITH-COPILOT.md) as the current procedural
-runbook. It deploys the same compiled template as the portal button and covers permissions,
-component choices, quota, validation, deployment, monitoring, and smoke tests.
+Deploy OneGrid into the selected subscription and Fabric tenant, then configure its sources,
+models, sign-in, and operational schedules. The deployment has two parts: ARM creates the
+Azure resources; deployment scripts run the Fabric/application provisioner.
 
-For a governed enterprise subscription, complete the
-[enterprise integration design](architecture/enterprise-landing-zone.md) first. The evaluation
-template can conflict with policies that deny public networking or shared-key helper storage.
-There is no enterprise/regulated/multiregion parameter that fixes these incompatibilities.
+## Prerequisites
 
-## Prerequisites and choices
-
-| Area | What to establish before deployment |
+| Area | Requirement |
 | --- | --- |
-| Azure permissions | Rights to create resources and role assignments in the target scope; the runbook uses an Owner-based bootstrap |
-| Resource providers | Providers for selected services; see the runbook's prerequisite checks |
-| Region and quota | Current template accepts `eastus`, `northcentralus`, `westeurope`, `canadacentral`, and `uksouth`; validate every selected service, SKU, model, and quota |
-| Fabric | Tenant settings allowing the deployment identity, capacity rights, and an existing capacity or quota/approval to create one |
-| Entra sign-in | Approved existing SPA registration and callback, or permission for the provisioner to create one |
-| Import refresh | Approved refresh service principal, or approved directory permissions for creation; secure any supplied secret outside Git |
-| Weather inference | Optional Aurora model asset, model terms, A100 quota, and a successful GPU deployment |
-| Cost | Budget for Fabric, App Service, storage, model usage, and optional GPU/scheduling resources |
+| Azure | Subscription/resource group access to create the selected resources and role assignments |
+| Region | One of `eastus`, `northcentralus`, `westeurope`, `canadacentral`, `uksouth`; validate every selected service/SKU and quota |
+| Providers | Register the providers used by selected components, including Orbital, Storage, ManagedIdentity, Web, CognitiveServices, Resources, ContainerInstance, and Fabric |
+| Fabric | Approved tenant settings for provisioning identities; rights to use the capacity and administer the workspace |
+| Sign-in | Existing SPA app registration with `https://<app-host>/auth/callback`, or approved directory permission for creation |
+| Import refresh | Existing refresh service principal and secret, or approved Graph permission for creation |
+| Aurora | Model asset, accepted model terms, A100 quota, Azure ML/Key Vault/Insights providers |
+| Forecast job | Aurora and storage, Container Apps/registry/log providers, permitted source and image access |
+| Enterprise environment | Approved network, DNS, policy, identity, diagnostics, cost, and recovery configuration |
 
-The full OneGrid app depends on the Fabric plane and sample storage in the current template.
-Some dependent components are skipped when prerequisites are disabled; review actual
-deployment outputs rather than assuming every selected feature exists.
+Fabric/Entra permissions are separate from Azure RBAC. Establish them before starting the
+cross-plane deployment. The guided [Copilot runbook](../DEPLOY-WITH-COPILOT.md) provides
+permission, provider, quota, approval, and progress-check commands.
 
-Common template choices include:
+## Choose components
 
-- `deployGeoCatalog`: optional imagery/catalog functionality.
-- `deploySampleStorage`: storage and ingestion identity.
-- `deployAiAgent`: Azure OpenAI model for chat.
-- `deployFabricPlane`, `createFabricCapacity`, `fabricCapacityId`: data-plane provisioning.
-- `deployOneGridApp`, `oneGridModules`, `chatAgentAppServiceSku`: app and visible modules.
-- `deployUnifiedModel`: unified data/Import model path, enabled by default.
-- `enableEntraSignIn`, `entraSignInClientId`: sign-in integration.
-- `grantProvisionerGraphPermission` or `refreshServicePrincipalClientId` /
-  `refreshServicePrincipalObjectId` / `refreshServicePrincipalSecret`: refresh identity setup.
-- `deployAuroraModel`, `createAuroraModelDeployment`, `auroraModelAssetId`,
-  `deployAuroraSchedule`: optional inference and forecast scheduling.
+The compiled ARM defaults and a full-solution selection differ. Set component choices
+explicitly for command-line deployments.
 
-Check exact defaults and dependencies in [Bicep](../planetary-computer-pro-poc/deploy/azure/main.bicep)
-and the [portal form](../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json).
-Keep `exemptStorageFromPolicy=false` unless the platform owner approves a compatible,
-documented exception. Never paste resolved credentials into issues or deployment logs.
+| Parameter | ARM default | Full-solution use |
+| --- | --- | --- |
+| `deploySampleStorage` | `true` | Asset, package, output, and transfer containers |
+| `deployFabricPlane` | `false` | Set `true` for the Fabric workspace/data plane |
+| `deployOneGridApp` | `false` | Set `true` for the unified application |
+| `deployAiAgent` | `true` | Declare/reuse the Azure OpenAI deployment |
+| `deployGeoCatalog` | `true` | Include STAC, imagery, and catalog-backed asset workflows |
+| `createFabricCapacity` | `false` | Set `true` to create capacity, otherwise supply `fabricCapacityId` |
+| `fabricCapacitySku` | `F2` | Size a new capacity for expected load |
+| `createFabricConnection` | `false` | Set `true` for workspace-identity connection/shortcut creation, or supply `fabricConnectionId` |
+| `deployOneGridData` | `false` | Seed the historical data bundle when required |
+| `deployUnifiedModel` | `true` | Generate shared `og.*` tables and bind/refresh `OneGridModelImport` |
+| `deployAuroraModel` | `false` | Include Azure ML workspace and online endpoint |
+| `createAuroraModelDeployment` | `false` | Deploy the published model, or supply `auroraModelAssetId` |
+| `deployAuroraSchedule` | `false` | Include forecast orchestration and scheduled publication |
+| `enableEntraSignIn` | `true` | Configure sign-in using an existing or newly created registration |
 
-## Deployment workflow
+The full app requires the Fabric plane and sample storage. The forecast job requires Aurora
+and sample storage. The model deployment also requires quota and accepted terms. Review
+outputs and provisioning results for the selected combination.
 
-1. Select the subscription, new evaluation resource group, region, components, and budget.
-2. Complete the runbook's Azure, Fabric, Graph, policy, and quota checks.
-3. Review parameters and obtain approval before creating resources.
-4. Validate the compiled template and review `what-if` where appropriate.
-5. Deploy and monitor the app-plane and Fabric-plane provisioning scripts separately.
-6. Record outputs and complete the acceptance checks below.
+Use `oneGridModules` to select `exec`, `weather`, `twin`, `infra`, `sap`, `esu`, `onerig`,
+and `copilot`. An empty list keeps core pages only.
 
-The full deployment can take 30-90 minutes; data seeding and Fabric provisioning can take
-longer. A successful resource creation does not mean all data or optional GPU models are ready.
+## Configure identity and environment
 
-### Application publication
+1. Select the target subscription, region, resource group, workspace, and capacity.
+2. Configure `entraSignInClientId` for a pre-created sign-in registration, or approve
+   creation through the provisioner.
+3. Configure `refreshServicePrincipalClientId`, `refreshServicePrincipalObjectId`, and
+   secure `refreshServicePrincipalSecret`, or approve
+   `grantProvisionerGraphPermission` for identity creation.
+4. Keep secret-bearing parameter/configuration files outside source control. Use the
+   approved secret-provider integration and avoid printing resolved parameter values.
+5. Keep `exemptStorageFromPolicy=false` unless the platform owner has approved a scoped,
+   documented policy exception. Validate deployment-script storage access against policy.
+6. Select a package/version and `oneGridRef` appropriate for the release.
 
-The full OneGrid path uses the prebuilt `onegrid-app.zip` from the
-[release workflow](../.github/workflows/release-onegrid-app.yml). The application entry point
-is `node report-app/server/index.js`; App Service uses `WEBSITE_RUN_FROM_PACKAGE`.
-Provisioning can rehost the package into deployment storage.
+For customer governance, configure the provisioner's `governance` block separately: group
+IDs, inventory/demo mode, role creation choices, and app permissions. The ARM wrapper
+initializes governance disabled.
 
-Do not use a standalone `az webapp up` against only the web UI as a substitute for this
-unified package. The report API, chat, SSR application, and runtime dependencies ship together.
-See [implementations](implementations.md) and [release operations](operations-runbook.md#change-release-and-rollback).
+## Deploy resources and provision the solution
 
-## Acceptance checks
+Use the portal button in the [solution overview](../README.md#deploy-this-solution), or
+prepare a complete ARM parameter file outside the repository. Include selected components,
+capacity, sign-in, refresh identity, and any weather choices.
 
-Retain results with the selected components, deployment ID, source/package version, and
-test time. Record disabled features as not applicable; do not report skipped tests as passed.
+The following PowerShell sequence validates and deploys a prepared parameter file:
 
-| Check | Expected result |
-| --- | --- |
-| ARM and provisioning | Resource deployment and both selected provisioning paths complete; skipped/degraded components are explicitly recorded |
-| Process health | `/api/health` responds with HTTP 200 after startup |
-| Authentication | Approved user can sign in; unauthenticated/unauthorized clients cannot retrieve protected data; callback uses the deployed host |
-| Fabric queries | Representative app DAX and KQL calls return expected rows from the intended tenant/workspace, not sample fallback data |
-| Semantic model | SQL connection is bound, Import refresh succeeds, counts/timestamps match the intended source |
-| Data isolation | Users/query identities cannot access data outside the approved boundary, including through chat and exports |
-| Chat, if selected | An authenticated representative question produces a grounded answer and evidence of a data query; model/deployment names match |
-| GeoCatalog, if selected | STAC search, an authorized ingestion, and tile retrieval succeed |
-| Aurora, if selected | Actual model inference succeeds, not just workspace/endpoint creation |
-| Schedule, if selected | A job run publishes valid outputs with current input/output timestamps and provenance |
-| Operations | Alerts, freshness checks, cost ownership, and recovery responsibilities are assigned |
+```powershell
+$resourceGroup = 'onegrid-rg'
+$location = 'westeurope'
+$parametersFile = 'C:\deployment\onegrid.parameters.json'
+$templateFile = '.\planetary-computer-pro-poc\deploy\azure\azuredeploy.json'
 
-The runbook includes a representative chat request. Execute it using the approved authenticated
-client/session; failure without credentials should not be "fixed" by disabling protection.
-If sign-in is unconfigured or an optional feature is degraded, restrict exposure and resolve
-or explicitly exclude that feature before accepting the environment.
+az group create --name $resourceGroup --location $location
+az deployment group validate --resource-group $resourceGroup --template-file $templateFile --parameters "@$parametersFile"
+az deployment group what-if --resource-group $resourceGroup --template-file $templateFile --parameters "@$parametersFile"
+az deployment group create --resource-group $resourceGroup --name onegrid --template-file $templateFile --parameters "@$parametersFile"
+```
 
-## Load an asset register
+Approve resource and cost changes before running the deployment. Ensure `$location` matches
+the parameter file. The full deployment commonly takes 30-90 minutes; data seeding,
+Fabric readiness, and optional model/image work can extend the duration.
 
-Assets and imagery use different paths. An asset register describes **what you operate and
-where it is**. Weather inputs, forecast tracks, and calculated exposure are not asset uploads.
+The template's app and Fabric scripts invoke selected provisioner phases in the defined
+phase order. The wrapper composes configuration from the deployed resources, including
+storage, model endpoint, catalog URI, workspace/capacity, and refresh identity.
 
-Use **CSV** for point assets or **GeoJSON** for points, lines, and polygons. Coordinates use
-WGS 84 (EPSG:4326); GeoJSON coordinate arrays are `[longitude, latitude]`.
+### Monitor provisioning
+
+```powershell
+az deployment group show --resource-group $resourceGroup --name onegrid --query properties.provisioningState -o tsv
+az deployment-scripts show-log --resource-group $resourceGroup --name pcpro-onegrid-provision-app
+az deployment-scripts show-log --resource-group $resourceGroup --name pcpro-onegrid-provision-fabric
+az deployment group show --resource-group $resourceGroup --name onegrid --query properties.outputs -o json
+```
+
+Restrict deployment-log access and redact sensitive material before sharing. Investigate
+app and Fabric results independently. Record skipped components, phase errors, IDs, and
+connection/refresh outcomes.
+
+### Application delivery
+
+The release workflow builds `onegrid-app.zip` with report BFF, React SSR, Node agent, and
+runtime dependencies. Provisioning rehosts the verified package in
+`onegrid-app-package/onegrid-app.zip`; App Service mounts it through
+`WEBSITE_RUN_FROM_PACKAGE` and managed identity. The startup command is
+`node report-app/server/index.js`, and the host uses port 8080.
+
+Deploy this unified package rather than publishing only the web UI. Record the package
+source/version and actual runtime settings as part of acceptance.
+
+## Load and connect data
+
+### Asset register
+
+Use CSV for points and GeoJSON for points/lines/polygons. Coordinates use WGS 84
+(EPSG:4326); GeoJSON arrays use `[longitude, latitude]`.
 
 | Field | Purpose |
 | --- | --- |
-| `id`, `name`, `type` | Stable asset identifier, display name, and supported asset category |
+| `id`, `name`, `type` | Stable asset identity, display name, supported category |
 | `latitude`, `longitude` | Point coordinates |
-| `geometry` | GeoJSON geometry for line/polygon assets instead of point coordinates |
-| `operator`, `region`, `business_unit` | Optional ownership and organizational context |
-| `operating_status`, `criticality` | Operational state and risk-weighting context |
-| `metadata` | Additional asset attributes supported by the selected workflow |
+| `geometry` | GeoJSON geometry for line/polygon assets |
+| `operator`, `region`, `business_unit` | Ownership and organizational context |
+| `operating_status`, `criticality` | Current posture and risk-weighting context |
+| `metadata` | Additional equipment attributes supported by the workflow |
 
-Start with the checked-in samples rather than inventing a schema:
-
-- [Sample CSV](../planetary-computer-pro-poc/samples/sample-assets.csv).
-- [Sample GeoJSON](../planetary-computer-pro-poc/samples/sample-assets.geojson).
+Start with the [sample CSV](../planetary-computer-pro-poc/samples/sample-assets.csv) or
+[sample GeoJSON](../planetary-computer-pro-poc/samples/sample-assets.geojson).
 
 ```csv
 id,name,type,latitude,longitude,operator,region,operating_status,criticality
 PLT-D7,Platform Delta-7,offshore_platform,27.62,-90.35,Meridian Energy,Central Gulf,producing,business_critical
 ```
 
-Use the app's Asset Management workflow where enabled and verify accepted/rejected records,
-coordinates, and resulting counts. The current no-GeoCatalog configuration omits catalog
-imagery and asset-upload functionality; Fabric-backed views remain a separate path.
+Use Asset Management with catalog/storage integration configured. Verify accepted/rejected
+rows, coordinates, duplicates, and resulting counts. Asset-register ingestion is distinct
+from the conformed Fabric generation/loading path; validate how customer assets enter the
+intended analytical products.
 
-Exposure joins asset locations and attributes to forecast information. Validate the scoring
-method and data provenance for the use case; scores and generated recommendations are not
-engineering or safety assurances.
+### Imagery and rasters
 
-## Ingest imagery and rasters
+1. Upload Cloud-Optimized GeoTIFF assets to `sample-assets` or an approved source.
+2. Register the source with the catalog-associated ingestion managed identity.
+3. Submit STAC Items with spatial/temporal metadata and source references.
+4. Verify ingestion status, STAC search, render/mosaic configuration, and tiles.
 
-Imagery is optional and separate from asset-to-weather scoring:
+Public sample imagery can be read from its source with temporary source credentials.
+It is a separate path from customer imagery and from weather outputs.
 
-- **Pixel data:** Cloud-Optimized GeoTIFF (COG).
-- **Metadata:** STAC Items identifying assets and their spatial/temporal properties.
-- **Serving:** GeoCatalog STAC and tile APIs.
+### Telemetry and business history
 
-For customer-owned data:
+Publish or rebind the supplied
+[`pi-events-stream` definition](../planetary-computer-pro-poc/infra/fabric/eventstream/pi-events-stream/)
+in the target workspace. Connect its destination to the intended Eventhouse database and
+`PiEventsRaw` mapping, then confirm the `PIForwarderEndpoint` source connection before
+starting producers.
 
-1. Upload assets to the deployed `sample-assets` container or an approved source.
-2. Register a managed-identity ingestion source using the deployment's container URL and
-   ingestion identity. Verify identity association and Storage Blob Data Reader scope.
-3. Submit the STAC items and verify ingestion status, search, and rendering.
+Use the [operational connectors](../planetary-computer-pro-poc/infra/bolt-ons/data-plane/)
+for PI/relational source ingestion. Validate canonical event fields, source quality,
+durable buffering, watermark/acknowledgment behavior, and heartbeat monitoring.
 
-See [managed-identity ingestion](https://learn.microsoft.com/azure/planetary-computer/set-up-ingestion-credentials-managed-identity)
-and the [Planetary Computer API tutorial](https://learn.microsoft.com/azure/planetary-computer/api-tutorial).
+Load maintenance, asset, and historical data through the approved ingestion workflow.
+Run preparation/scoring, validate conformed keys and counts, synchronize the SQL endpoint,
+then refresh the Import model. Keep generated and observed data distinguishable.
 
-The sample Sentinel-2 workflow can read from Microsoft's public Planetary Computer using a
-short-lived source SAS. It does not mean customer storage contains the source imagery.
-The deployed sample account also holds weather `model-outputs` and, for the full app,
-package artifacts. A private/nonanonymous container does not imply a private network endpoint.
+### Weather
 
-## Operator access and cleanup
+Enable the Aurora model and forecast job, confirm GPU inference, and verify model-output
+publication. The scheduled job uses NOAA GFS inputs, 20 rollout steps, and the default
+UTC schedule `0 1,7,13,19 * * *`. Check both successful processing with storms and a valid
+empty event result when none are detected.
 
-Use [GeoCatalog access guidance](https://learn.microsoft.com/azure/planetary-computer/manage-access)
-to assign the minimum role for an operator's task. Runtime identity permissions do not
-automatically grant the human operator catalog access.
+## Acceptance checks
 
-Before deleting an evaluation environment, export required data and inventory Azure
-resources, Fabric workspaces/items, capacities, Entra registrations, connections, and secrets.
-Resource-group deletion alone does not clean up all SaaS/directory objects. Follow the
-[decommissioning checklist](operations-runbook.md#backup-restore-and-decommissioning), and never
-remove a shared capacity or platform resource without its owner's approval.
+| Check | Expected evidence |
+| --- | --- |
+| Provisioning | ARM state and app/Fabric phase results; selected resource IDs |
+| App | `/api/health`, `/api/status`, and `/webapp/app` respond appropriately |
+| Sign-in | Authorized user journey succeeds; protected-data requests without permission are denied |
+| Fabric target | Correct workspace, `OneGridModelImport`, KQL endpoint/database, and runtime identity |
+| Semantic model | Bound SQL connection, completed refresh, expected counts and source timestamps |
+| Telemetry | Expected `PiEvents`/outage rows, latest event time, and source heartbeat |
+| Asset context | Site/asset joins, watchlist, twin, and weather exposure use intended data |
+| Geospatial | Authorized upload/ingestion, STAC search, and tile retrieval |
+| AI | Configured model responds with grounded data/tool results and authorized manual context |
+| Weather | Successful inference/job, valid output schema, input cycle, publication time, and map events |
+| Governance | Positive/negative data access through actual API, DAX/KQL, chat, SQL, and export paths |
+| Operations | Alerts, refresh/job schedules, identity ownership, costs, and recovery responsibilities |
+
+Record disabled components as not applicable rather than passed. Preserve results with
+deployment ID, source/package/model versions, data mode, and time.
+
+## Manage and remove an environment
+
+Use the [operations guide](operations.md) for maintenance and
+[runbook](operations-runbook.md) for incident, rollback, restore, and decommissioning.
+Resource-group deletion and Fabric/directory cleanup are separate lifecycle operations.
+Confirm retention and shared-resource ownership before removing data, capacities, identities,
+connections, or registrations.
