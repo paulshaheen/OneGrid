@@ -16,23 +16,14 @@ assigning controls and evidence to each boundary.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    OT[OT / historian source network] --> Bridge[Approved connector / durable buffer]
-    Bridge --> Fabric[Fabric / telemetry and governed data products]
-    Users[Approved users / identity policy] --> Edge[Enterprise application ingress]
-    Edge --> App[OneGrid / scoped runtime identity]
-    App --> Fabric
-    App --> Geo[GeoCatalog / classified imagery and assets]
-    App --> AI[Azure OpenAI / approved prompts and tools]
-    Job[Forecast job / approved inputs] --> Aurora[Aurora endpoint]
-    Aurora --> Job
-    Job --> Outputs[Timestamped model outputs]
-    Outputs --> App
-    App -. Audit events .-> Evidence[Protected audit / evidence retention]
-    Fabric -. Data and admin activity .-> Evidence
-    Job -. Run and provenance records .-> Evidence
-```
+[![OneGrid regulated boundaries separate outbound OT publication, Fabric permissions, enterprise ingress, scoped application queries, model processing, and retained audit evidence.](../diagrams/onegrid-regulated-workload.png)](../diagrams/onegrid-regulated-workload.svg)
+
+[Download SVG](../diagrams/onegrid-regulated-workload.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+
+Query arrows identify the requesting workload, including weather-output reads. Identity
+controls and diagnostic export are separate paths. Configure and verify evidence collection
+for every listed service; audit retention isn't part of the application request route.
 
 The OT boundary is an ingestion boundary. Deploy source connectors with approved source-read
 permissions and outbound publication rather than opening a direct application path into

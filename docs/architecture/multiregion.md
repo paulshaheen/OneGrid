@@ -16,23 +16,15 @@ journey rather than assigning one untested objective to the whole workload.
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    Users[Users] --> Route[Global application routing / enterprise ingress]
-    Route --> A[Primary App Service / OneGrid package]
-    Route -. Controlled cutover .-> B[Recovery App Service / same package version]
-    A --> FA[Primary Fabric data products]
-    A --> GA[Primary GeoCatalog and source assets]
-    A --> MA[Primary OpenAI and Aurora endpoints]
-    A --> SA[Primary package and model-output storage]
-    B --> FB[Recovered or secondary Fabric data products]
-    B --> GB[Recovery GeoCatalog and source assets]
-    B --> MB[Recovery OpenAI and Aurora endpoints]
-    B --> SB[Recovery package and model-output storage]
-    FA -. Item definitions / data recovery / rebinding .-> FB
-    SA -. Approved copy or replication .-> SB
-    GA -. Retained assets / catalog reconstruction .-> GB
-```
+[![OneGrid primary and recovery stamps use gated global ingress, region-specific dependencies, configured data recovery, and a single active forecast publisher.](../diagrams/onegrid-multiregion.png)](../diagrams/onegrid-multiregion.svg)
+
+[Download SVG](../diagrams/onegrid-multiregion.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+
+Azure Front Door represents the global ingress implementation. Enable the recovery origin
+only after dependency and data acceptance passes. Dashed green paths represent explicitly
+configured data-copy or item-recovery workflows. Select the recovery mechanism for each
+Fabric item and storage account, then replay, restore permissions, and rebind connections.
 
 Configure each region through the OneGrid resource template and environment-specific
 settings. Maintain routing, replication, item recovery, fencing, and cutover automation
@@ -106,6 +98,11 @@ If primary control is unavailable, use a previously tested fencing/ownership mec
 Use an enterprise-approved global ingress/routing policy. Keep regional origin restrictions,
 certificates, callbacks, DNS, and dependency access equivalent. Do not route users to the
 recovery app until DAX/KQL, authorization, selected model features, and freshness tests pass.
+
+For Azure Front Door, restrict each origin to the approved Front Door path. When using
+Premium private origins, approve and validate each regional Private Link connection.
+Keep the recovery origin disabled until the release gate passes; a successful HTTP health
+probe alone doesn't establish data or model readiness.
 
 Include shared identity, DNS, deployment runners, registries, secrets, and monitoring in
 failure analysis. Ensure the recovery environment does not still depend exclusively on

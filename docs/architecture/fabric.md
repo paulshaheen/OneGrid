@@ -16,23 +16,15 @@ paths to weather exposure and the digital twin.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    PI[PI / operational connectors] --> ES[Eventstream / PIForwarderEndpoint]
-    ES --> Raw[PiEventsRaw]
-    Raw --> Curated[PiEvents / update policy]
-    Curated --> KQL[KQL queries]
-    Business[AIMM / iCare / GADS / work / assets] --> Lake[OneLake / Lakehouse]
-    Lake --> NB[Preparation / features / models / scoring]
-    NB --> Tables[Curated reliability and weather tables]
-    Tables --> Import[OneGridModelImport]
-    Tables --> Twin[OneGridOntology]
-    Import --> App[OneGrid application]
-    KQL --> App
-    Import --> Agent[Fabric Data Agent]
-    Agent --> App
-    Outputs[Blob model outputs] -. OneLake shortcut .-> Lake
-```
+[![OneGrid Fabric ingestion, Lakehouse processing, SQL-backed Import refresh, ontology binding, and application query paths.](../diagrams/onegrid-fabric.png)](../diagrams/onegrid-fabric.svg)
+
+[Download SVG](../diagrams/onegrid-fabric.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+
+The Eventhouse boxes distinguish landing/curation from its query endpoint. The Lakehouse
+and SQL analytics endpoint are two surfaces of the same analytical data. Real-time and
+historical paths join through asset keys; each retains its own ingestion and freshness
+checks. Blue query arrows point from the caller to the service, with responses omitted.
 
 ## Ingest operational data
 
@@ -113,6 +105,10 @@ knowledge graph and the asset hierarchy.
 **Fabric Data Agent.** The provisioner configures/publishes `OneGridOntologyAgent` and wires
 its identifiers into the app. Test representative questions against its configured data
 sources and effective identity permissions.
+
+Despite its name, `OneGridOntologyAgent` is grounded on a semantic-model datasource.
+`OneGridOntology` is a separate native Fabric item. Confirm the resolved semantic-model ID,
+selected tables, and published agent configuration after deployment.
 
 **Weather integration.** The `fabricplane` phase applies `HazardGeometry`, `AssetRegistry`,
 spatial joins, and composite-risk functions. The `pcp_model_outputs` shortcut connects Blob

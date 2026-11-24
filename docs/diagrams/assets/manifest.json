@@ -1,0 +1,168 @@
+{
+  "sources": {
+    "azure": {
+      "url": "https://arch-center.azureedge.net/icons/Azure_Public_Service_Icons_V25.zip",
+      "sha256": "f293d99252b3638557dd08ccbff9f2529083473d39b373fb2af29a7200351339"
+    },
+    "fabric": {
+      "url": "https://raw.githubusercontent.com/microsoft/fabric-samples/564ec4139742b838468fcf8aa44dac4afe02ce92/docs-samples/Icons.zip",
+      "sha256": "fc22e71b0545ed15e22c53f16bf4fb06ffe72daabd3c90a947a6e481c9675e6b"
+    },
+    "entra": {
+      "url": "https://download.microsoft.com/download/3/1/a/31a56038-856a-4489-88e4-ee5a1c4352be/Microsoft%20Entra%20architecture%20icons%20-%20Oct%202023.zip",
+      "sha256": "4e07536706a2d092e6524e5417e2c861333fdbdb41c36f78d44dfa07ccc5eedc"
+    }
+  },
+  "icons": {
+    "app-service.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/app services/10035-icon-service-App-Services.svg",
+      "sha256": "529d83fc80637a96b6d27f6cfac7536e1c5f9b1b67f58aef4e2e3d6f47fd4925"
+    },
+    "blob-storage.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/storage/10086-icon-service-Storage-Accounts.svg",
+      "sha256": "7190d3bb14ce30ce74bd0af873915830fe821e8c5f6ef6f3149e6f7cfb2aa4f7"
+    },
+    "managed-identity.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/identity/10227-icon-service-Managed-Identities.svg",
+      "sha256": "fa2e0fb863e81d7923b5708bed196e19310867a194d23bea96dddc42e302693c"
+    },
+    "container-apps-job.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/other/02884-icon-service-Worker-Container-App.svg",
+      "sha256": "b53c7e6b7af75b25c04231a7dff85074f0c32cc1c306376350c0c8df0cb64417"
+    },
+    "container-registry.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/containers/10105-icon-service-Container-Registries.svg",
+      "sha256": "c134b0a442f203a7eeeb6f99a1f02ed34e51373d7fca59f96c9f125874c9d7d4"
+    },
+    "machine-learning.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/ai + machine learning/038470510-icon-service-Azure-Machine-Learning.svg",
+      "sha256": "66af628f9dd7e49def76a4f6d90f262a5b47866098bc7b97042b541017992ad2"
+    },
+    "azure-openai.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/ai + machine learning/03438-icon-service-Azure-OpenAI.svg",
+      "sha256": "4859f2c78b6b81acbbaf94e7348cb7dcbe97955a038be903de01cf46a7206aad"
+    },
+    "geocatalog.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/ai + machine learning/03755-icon-service-Planetary-Computer-Pro.svg",
+      "sha256": "7983104a8ba8941caf398ab6d08ef7789d9c567404753fcb52417e2c21648995"
+    },
+    "private-endpoint.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/other/02579-icon-service-Private-Endpoints.svg",
+      "sha256": "96de0bb7f0aeb1220d0fd6d337578d5e93dca017d6ea7d42d887aa329b2fd90d"
+    },
+    "virtual-network.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10061-icon-service-Virtual-Networks.svg",
+      "sha256": "64a5e75ecef2f9f69067faa2eb131266cb8f2858706f8ab74bfea5ad0d98b14d"
+    },
+    "firewall.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10084-icon-service-Firewalls.svg",
+      "sha256": "154c416cc15b95b7c6c1ab61a5ecb33f14845197b7d163bd9dc6f1968c14be1e"
+    },
+    "dns-private-resolver.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/02882-icon-service-DNS-Private-Resolver.svg",
+      "sha256": "990d109df8bac6312c886afdf0b521145baa88df78701afca51d7c8f8eaba9ce"
+    },
+    "application-gateway.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10076-icon-service-Application-Gateways.svg",
+      "sha256": "531e668e47cf61872b2811ec67dcc103cee2ecc1d272f07132d6196d68ba6c19"
+    },
+    "front-door.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10073-icon-service-Front-Door-and-CDN-Profiles.svg",
+      "sha256": "b2e9c9a8b091a0694532257354dea94bb8c65b33876826e44dbc9b2aae01cf17"
+    },
+    "key-vault.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/security/10245-icon-service-Key-Vaults.svg",
+      "sha256": "712b426f54f0fc50d0816dc79df709daa7ac5f93ccaf4e9b3527f627f6e9ad97"
+    },
+    "application-insights.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/devops/00012-icon-service-Application-Insights.svg",
+      "sha256": "36c73dea8b1598fbfff84890a2b409600f1339eec8c1bf1a896439e9da8f9dca"
+    },
+    "log-analytics.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/analytics/00009-icon-service-Log-Analytics-Workspaces.svg",
+      "sha256": "7a244a8d7260e84be5c904185db7b04994fe6ed345e2b224163bc5f7e3d97ce0"
+    },
+    "policy.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/management + governance/10316-icon-service-Policy.svg",
+      "sha256": "c3dc70003e793bf73b497f8d8501cdc81f930ce1777fdbfe9b7450afe477771a"
+    },
+    "resource-group.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/general/10007-icon-service-Resource-Groups.svg",
+      "sha256": "4d2b2eacb37735849d2e556074ac8564f92fada70672b40985c77ea666e82977"
+    },
+    "eventstream.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/eventstream_48_item.svg",
+      "sha256": "8c7bbef9bd2f2ecd1d00db305d7705a81855253f64b0c0615e8b74816c0febc0"
+    },
+    "event-house.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/event_house_48_item.svg",
+      "sha256": "ccf6c4a7770eab8ac39cb9301bb5caec8b29fb5dd12c0bb75e93c810d76823ec"
+    },
+    "lakehouse.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/lakehouse_48_item.svg",
+      "sha256": "7f4ba4303e8f507d4ec8e47bc055bace80eb9715ccc58df40021b776a3c65f08"
+    },
+    "notebook.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/notebook_48_item.svg",
+      "sha256": "d1822f787c453b2edf2f5af8ecca2b8b1258e07859dfaf057562b0f166dbc866"
+    },
+    "pipeline.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/pipeline_48_item.svg",
+      "sha256": "a0df60d8e899ff5f8bdb80fe5281cba002735267297f371098f5ff6d55bbe744"
+    },
+    "semantic-model.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/semantic_model_48_item.svg",
+      "sha256": "c0317bc92fea437d374b71788b037705f61983cd59573808ce933f3d03e14abb"
+    },
+    "data-agent.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/data_agent_48_item.svg",
+      "sha256": "cc263e20fdb76f6bcde3a941f926e1cee6a07cee4407ed6374857b3354e60ab6"
+    },
+    "fabric.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/fabric_48_color.svg",
+      "sha256": "ef80d2edbfc1b045241d2e9550b7930b648d8018e0274116a3df6d6ccf3adbf9"
+    },
+    "one-lake.svg": {
+      "source": "fabric",
+      "archive_path": "v6.1.0/package/dist/svg/one_lake_48_color.svg",
+      "sha256": "23fe33bcc61e703f655ac98753512a780bc2ff71d157d6c25682841ed9b6a825"
+    },
+    "entra-id.svg": {
+      "source": "entra",
+      "archive_path": "Microsoft Entra architecture icons - Oct 2023/Microsoft Entra color icons SVG/Microsoft Entra ID color icon.svg",
+      "sha256": "efd9f54562bfb78bf3c77aecdd5fc31b61fce8a1cec78c4370b41fc470e54eda"
+    },
+    "users.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/identity/10230-icon-service-Users.svg",
+      "sha256": "7c08aa6365b41e7f0b74833bfd420f174081f6e90ba278e0c01cd988027eb3ca"
+    }
+  }
+}

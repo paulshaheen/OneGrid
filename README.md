@@ -13,7 +13,10 @@ and executive experiences.
 
 ## Architecture
 
-[![OneGrid logical architecture: operational and asset sources feed Fabric Eventstream, Eventhouse, Lakehouse, notebooks, Digital Twin Builder, and semantic models. Geospatial, weather, and AI planes connect to the Entra-authenticated OneGrid application on App Service. ARM and deployment scripts provision and connect the components.](docs/onegrid-logical-architecture.png)](docs/onegrid-logical-architecture.png)
+[![OneGrid logical architecture: operational and business sources feed Fabric. The application queries KQL, the Import model, GeoCatalog, weather outputs, and AI services. Identity and deployment controls are separate from data movement.](docs/onegrid-logical-architecture.png)](docs/diagrams/onegrid-logical-architecture.svg)
+
+[Download SVG](docs/diagrams/onegrid-logical-architecture.svg) |
+[Editable draw.io diagrams](docs/diagrams/onegrid-architecture.drawio)
 
 The architecture separates six responsibilities:
 

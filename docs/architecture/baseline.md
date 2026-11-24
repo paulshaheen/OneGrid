@@ -16,7 +16,15 @@ decisions refer to the same sites, units, equipment, and sensors.
 
 ## Architecture
 
-[![OneGrid end-to-end logical architecture showing the Fabric, geospatial, weather, AI, application, and deployment planes.](../onegrid-logical-architecture.png)](../onegrid-logical-architecture.png)
+[![OneGrid end-to-end architecture with official service icons and separate data, request, identity, and control flows.](../onegrid-logical-architecture.png)](../diagrams/onegrid-logical-architecture.svg)
+
+[Download SVG](../diagrams/onegrid-logical-architecture.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+
+The view shows the complete enabled solution. Deployment parameters select which planes
+are provisioned. Blue arrows identify the caller of a query or API; green arrows identify
+data movement. Responses are omitted. Identity, configuration, and diagnostics aren't
+intermediate data-processing hops.
 
 ### Workflow
 
@@ -33,6 +41,21 @@ The solution has three processing paths that meet in the application:
 
 User authentication is separate from these data paths. A user signs in with Entra ID, and
 the application uses its workload identities to query its configured dependencies.
+
+### Flow contracts
+
+| Initiator | Destination | Contract |
+| --- | --- | --- |
+| Operational connector | Eventstream custom source | Publish canonical events to the resolved `PIForwarderEndpoint`; validate destination and table mapping first |
+| Eventstream | Eventhouse | Land `PiEventsRaw`; its update policy creates curated `PiEvents` |
+| Fabric notebooks | Lakehouse | Read source tables and persist features, predictions, and narratives using the conformed asset keys |
+| Import refresh identity | Lakehouse SQL analytics endpoint | Materialize `OneGridModelImport` after source updates |
+| Application identity | Semantic model, Eventhouse, configured Data Agent | Initiate DAX, KQL, and grounded-agent requests against the configured item IDs |
+| GeoCatalog ingestion | Source Blob container | Read imagery with the associated ingestion identity; catalog search and tile access are separate application operations |
+| Forecast job | NOAA GFS and Aurora endpoint | Download initial conditions and invoke GPU inference; use `aurora-channel` for large-payload exchange |
+| Forecast job | `model-outputs` | Normalize and publish `weather-events.json` with forecast provenance |
+| Application weather adapter | `model-outputs` | Read published events; starting a job uses the Azure management API, not the scoring or Blob endpoint |
+| OneLake shortcut | `model-outputs` | Read files through the configured storage connection; analytical hazard-table loading is a separate transformation |
 
 ### Components
 
@@ -90,6 +113,12 @@ and asset uploads.
 Keep raster/STAC ingestion distinct from an asset register. CSV/GeoJSON describes customer
 infrastructure; COG/STAC describes imagery. GeoCatalog serves map imagery, while the
 conformed asset hierarchy supplies the business joins.
+
+The browser basemap is a separate path from GeoCatalog. The dark basemap uses Azure Maps
+when `VITE_AZURE_MAPS_KEY` is provided at build time; otherwise it uses Esri. Satellite and
+bathymetry layers use Esri endpoints, and map glyphs use `demotiles.maplibre.org`. Include
+these browser-originated requests in network acceptance rather than treating App Service
+egress controls as browser egress controls.
 
 #### Weather and Aurora plane
 

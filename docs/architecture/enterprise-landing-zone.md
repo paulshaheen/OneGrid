@@ -19,31 +19,14 @@ organization's network, governance, and environment-delivery configuration.
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    Users[Enterprise users] --> Access[Approved application ingress]
-    subgraph Workload[OneGrid workload subscription]
-        Access --> App[App Service / BFF / SSR / AI agent]
-        App --> Geo[GeoCatalog / STAC and tiles]
-        App --> AI[Azure OpenAI model]
-        App --> Storage[Assets / app package / model outputs]
-        Job[Forecast job] --> ML[Aurora / Azure ML]
-        ML --> Job
-        Job --> Storage
-    end
-    App --> Fabric[Fabric workspace / data products / semantic model / KQL]
-    subgraph Platform[Existing enterprise platform]
-        Entra[Entra groups / Conditional Access / privileged access]
-        Network[Connectivity / DNS / egress controls]
-        Governance[Policy / budgets / classification]
-        Monitor[Central monitoring / security operations]
-    end
-    Entra -. Identity controls .-> App
-    Network -. Connectivity integration .-> Workload
-    Governance -. Guardrails .-> Workload
-    Workload -. Diagnostics .-> Monitor
-    Fabric -. Activity and data operations .-> Monitor
-```
+[![OneGrid enterprise networking separates Application Gateway ingress, the App Service private endpoint, outbound VNet integration, dependency private endpoints, hub DNS, and firewall egress. Fabric and PaaS compute remain service-hosted.](../diagrams/onegrid-enterprise-landing-zone.png)](../diagrams/onegrid-enterprise-landing-zone.svg)
+
+[Download SVG](../diagrams/onegrid-enterprise-landing-zone.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+
+This implementation adds Application Gateway WAF, private endpoints, network integration,
+DNS, and platform egress configuration to the OneGrid deployment. Each dependency has its
+own service connection and access policy; the endpoint group represents separate NICs.
 
 ### Components and ownership
 
@@ -98,16 +81,30 @@ Allocate supported App Service integration, private endpoint, ingress, and manag
 subnets through the platform address plan. Configure supported private service connections
 and resource access rules for storage, Azure OpenAI, Azure ML, and Key Vault.
 
+Use the App Service private endpoint for inbound application access. Use a separate,
+delegated integration subnet for outbound connections; VNet integration doesn't provide
+inbound access or move App Service compute into that subnet.
+
 Validate GeoCatalog and Fabric connectivity against the selected service features, region,
 and tenant configuration. Fabric access is a SaaS integration; it is not deployed inside
 the application subnet.
 
+Fabric Private Link protects client-initiated access to Fabric. Configure Fabric-to-source
+access independently, including storage connections and shortcut paths. Select tenant- or
+workspace-level Private Link and verify every required item and endpoint before blocking
+public access.
+
+For private Aurora inference, the job reaches the managed endpoint through the Azure ML
+workspace private endpoint. Azure ML deployment outbound access is controlled through its
+managed network. Configure the Container Apps environment's own network and DNS paths for
+NOAA downloads, registry pulls, inference, and the Blob transfer channel.
+
 ### Ingress
 
-Select the internal or external application entry point. Apply the enterprise reverse proxy
-and WAF pattern where required, restrict direct origin access, and register the published
-host's sign-in callback. Test browser navigation, API authorization, and WebSocket traffic
-through the same entry point.
+The illustrated entry point is Application Gateway WAF, which reaches the App Service
+private endpoint. Select an internal or external frontend, restrict direct origin access,
+and register the published host's sign-in callback. Test browser navigation, API
+authorization, and WebSocket traffic through the same entry point.
 
 ### DNS and egress
 
@@ -121,9 +118,22 @@ Maintain an endpoint matrix for:
 - Azure OpenAI and Azure ML scoring.
 - NOAA GFS, approved weather/static-data sources, and imagery ingestion sources.
 - Container image pulls, source/package distribution, and diagnostic ingestion.
+- Browser-loaded basemap tiles and glyphs: the configured Azure Maps path, selected Esri
+  layers, and `demotiles.maplibre.org`.
 
 Separate bootstrap, build-time, and runtime access. Change public endpoint access only after
 the corresponding private/runtime/deployment paths have been validated.
+
+Test browser-originated map requests from the user's network. These requests don't traverse
+App Service VNet integration. The current basemap adapter selects Azure Maps for the dark
+basemap when `VITE_AZURE_MAPS_KEY` is present at build time; satellite and bathymetry layers
+use Esri, and the default dark basemap also uses Esri when that setting isn't supplied.
+
+For App Service, review application and configuration routing together. When policy requires
+all outbound traffic through the VNet, configure `outboundVnetRouting.allTraffic` and validate
+package mounting, token acquisition, diagnostics, and dependency access through that route.
+An authenticated, nonanonymous Blob container is an authorization boundary; private network
+access additionally requires the corresponding endpoint, DNS, and routing configuration.
 
 ## Identity and data governance
 
