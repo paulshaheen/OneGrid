@@ -34,6 +34,61 @@ Restrict log access and redact before sharing. Correlate deployment/phase result
 application logs and actual runtime settings. Do not copy resolved secrets or whole
 credential-bearing configuration into an incident record.
 
+## Validate network and traffic flows
+
+Use the [enterprise traffic matrix](architecture/enterprise-landing-zone.md#traffic-flow-matrix)
+and the environment's actual endpoint inventory. Test from each initiating network:
+the gateway, App Service runtime, connector host, forecast job environment, connected
+deployment runner, Fabric connection, and user browser. A workstation test doesn't
+prove that a different caller can resolve, reach, or authorize the same destination.
+
+From an approved connected Windows diagnostic host, inspect DNS and transport without
+changing configuration:
+
+```powershell
+$appOrigin = '<app-name>.azurewebsites.net'
+$storageHost = '<storage-account>.blob.core.windows.net'
+$sqlHost = '<resolved-lakehouse-sql-host>'
+
+Resolve-DnsName -Name $appOrigin
+Test-NetConnection -ComputerName $appOrigin -Port 443
+Resolve-DnsName -Name $storageHost
+Test-NetConnection -ComputerName $storageHost -Port 443
+Resolve-DnsName -Name $sqlHost
+Test-NetConnection -ComputerName $sqlHost -Port 1433
+```
+
+Inspect the selected site's inbound and outbound settings without exposing app secrets:
+
+```powershell
+$resourceGroup = '<onegrid-resource-group>'
+$appName = '<app-name>'
+az resource show --resource-group $resourceGroup --resource-type Microsoft.Web/sites --name $appName --query "properties.{publicNetworkAccess:publicNetworkAccess,virtualNetworkSubnetId:virtualNetworkSubnetId,outboundVnetRouting:outboundVnetRouting}" -o json
+```
+
+Then verify the real protocol and identity from the actual caller. TCP success alone
+doesn't establish TLS hostname validation, WAF/proxy behavior, or authorization.
+
+| Path | Acceptance test | Failure evidence to retain |
+| --- | --- | --- |
+| Private ingress | Published host signs in; APIs and WebSocket reconnect work; direct public origin is denied | DNS result, gateway backend/probe status, host/SNI, HTTP result |
+| Package bootstrap | Approved restart/release mounts the intended package over the selected route | Package version, startup event, Blob/network denial if any |
+| Fabric queries/refresh | DAX/KQL and configured Data Agent succeed; SQL query and Import refresh complete | Item IDs, query/refresh result, source and model timestamps |
+| Source ingestion | Connector publishes over the selected AMQP transport and a new curated event appears | Queue/checkpoint, acknowledgment, source event and ingestion times |
+| Forecast job | Job pulls its image, retrieves inputs, scores Aurora, exchanges payloads, and publishes output | Execution ID, model/image version, input cycle, output timestamp |
+| Service-to-storage | GeoCatalog ingestion and configured Fabric source/shortcut read actual content | Connection identity, storage authorization/network result, resulting item |
+| Browser map | Selected basemap, satellite/bathymetry, and glyph requests load on the user's network | Sanitized destination/status; no keys, tokens, or signed URLs |
+
+For SQL, inspect the connection as MSSQL/TDS on TCP 1433, not HTTPS. For Eventstream,
+confirm `UseAmqpWebSockets` matches the firewall/proxy policy and retain processed
+Eventhouse ingestion. For private endpoints, check the selected next hop as well as DNS:
+a default route to a firewall doesn't prove that a private endpoint connection crosses it.
+
+Record UTC test time, environment/release, initiating network, destination, expected route,
+identity reference, observed result, and owner. Redact credentials and payloads. Treat
+unexecuted checks as pending; architecture review isn't deployed endpoint acceptance.
+Require platform/workload approval before changing network policy or restarting services.
+
 ## Monitor user journeys and dependencies
 
 | Signal | Evidence |

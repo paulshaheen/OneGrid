@@ -156,6 +156,22 @@ class ArchitectureDiagramsTests(unittest.TestCase):
         self.assert_flow(scene.name, "ot-publication", "connector", "eventstream", "data")
         self.assert_flow(scene.name, "audit-export", "app", "evidence", "audit")
 
+    def test_enterprise_inference_uses_job_network_not_app_integration(self):
+        scene = self.by_name["onegrid-enterprise-landing-zone"]
+        nodes = {item.id: item for item in scene.items}
+        self.assertEqual(nodes["forecast-job"].parent, "1")
+        self.assert_flow(scene.name, "forecast-inference", "forecast-job", "ml", "request")
+        reachable = {"app"}
+        while True:
+            expanded = reachable | {edge.target for edge in scene.edges
+                                    if edge.kind == "request" and edge.source in reachable}
+            if expanded == reachable:
+                break
+            reachable = expanded
+        self.assertNotIn("ml", reachable)
+        self.assertNotIn("forecast-job", reachable)
+        self.assertIn("Tenant-level Private Link", nodes["fabric"].text[1])
+
     def test_browser_map_requests_do_not_use_app_vnet_integration(self):
         scene = self.by_name["onegrid-enterprise-landing-zone"]
         self.assert_flow(scene.name, "browser-map-access", "users", "browsermaps", "request")

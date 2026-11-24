@@ -1325,7 +1325,7 @@
         <mxCell id="app-pe-body" parent="app-pe" vertex="1" value="Private inbound app access" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=center;verticalAlign=top;spacing=0;fontSize=15;fontColor=#43566B;fontStyle=0;">
           <mxGeometry x="8" y="98" width="364" height="20" as="geometry" />
         </mxCell>
-        <object id="service-pe" label="" tooltip="Dependency endpoints&#10;Fabric / Blob / Azure OpenAI&#10;Azure ML workspace&#10;Service-specific DNS / access">
+        <object id="service-pe" label="" tooltip="Dependency endpoints&#10;Fabric / Blob / Azure OpenAI&#10;Tenant Fabric Private Link&#10;Service-specific DNS / access">
           <mxCell parent="pe-subnet" vertex="1" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;group;container=1;collapsible=0;">
             <mxGeometry x="30" y="300" width="380" height="160" as="geometry" />
           </mxCell>
@@ -1399,7 +1399,7 @@
         <mxCell id="saas-subtitle" parent="saas" vertex="1" value="SaaS / PaaS remain service-hosted" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=left;verticalAlign=top;spacing=0;fontSize=17;fontColor=#43566B;fontStyle=0;">
           <mxGeometry x="20" y="58" width="340" height="22" as="geometry" />
         </mxCell>
-        <object id="fabric" label="" tooltip="Microsoft Fabric&#10;Tenant / workspace access&#10;Separate source egress">
+        <object id="fabric" label="" tooltip="Microsoft Fabric&#10;Tenant-level Private Link&#10;Separate source egress">
           <mxCell parent="saas" vertex="1" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;group;container=1;collapsible=0;">
             <mxGeometry x="30" y="125" width="320" height="145" as="geometry" />
           </mxCell>
@@ -1410,7 +1410,7 @@
         <mxCell id="fabric-title" parent="fabric" vertex="1" value="Microsoft Fabric" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=center;verticalAlign=top;spacing=0;fontSize=18;fontColor=#172B4D;fontStyle=1;">
           <mxGeometry x="8" y="72" width="304" height="23" as="geometry" />
         </mxCell>
-        <mxCell id="fabric-body" parent="fabric" vertex="1" value="Tenant / workspace access" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=center;verticalAlign=top;spacing=0;fontSize=15;fontColor=#43566B;fontStyle=0;">
+        <mxCell id="fabric-body" parent="fabric" vertex="1" value="Tenant-level Private Link" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=center;verticalAlign=top;spacing=0;fontSize=15;fontColor=#43566B;fontStyle=0;">
           <mxGeometry x="8" y="98" width="304" height="20" as="geometry" />
         </mxCell>
         <object id="blob" label="" tooltip="Azure Blob Storage&#10;Assets / package / outputs&#10;Private DNS + authorization">
@@ -1469,8 +1469,19 @@
         <mxCell id="outbound-note" parent="1" vertex="1" value="Inbound: gateway -&amp;gt; app private&lt;br&gt;endpoint.&lt;br&gt;Outbound: app -&amp;gt; integration&lt;br&gt;subnet -&amp;gt; private endpoints or&lt;br&gt;firewall." style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=left;verticalAlign=top;spacing=0;fontSize=21;fontColor=#172B4D;fontStyle=1;">
           <mxGeometry x="1530" y="665" width="390" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="weather-note" parent="1" vertex="1" value="Forecast jobs use their own&lt;br&gt;Container Apps environment&lt;br&gt;networking. Validate NOAA,&lt;br&gt;registry and Aurora blob-channel&lt;br&gt;access there." style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=left;verticalAlign=top;spacing=0;fontSize=20;fontColor=#172B4D;fontStyle=0;">
-          <mxGeometry x="1530" y="865" width="390" height="125" as="geometry" />
+        <object id="forecast-job" label="" tooltip="Aurora forecast job&#10;Own environment / DNS / egress&#10;NOAA / registry / Blob channel">
+          <mxCell parent="1" vertex="1" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;group;container=1;collapsible=0;">
+            <mxGeometry x="1530" y="865" width="390" height="160" as="geometry" />
+          </mxCell>
+        </object>
+        <mxCell id="forecast-job-icon" parent="forecast-job" vertex="1" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;shape=image;aspect=fixed;imageAspect=1;image=data:image/svg+xml,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgdmlld0JveD0iMCAwIDE4IDE4Ij48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImIyN2YxYWQwLTdkMTEtNDI0Ny05ZGEzLTkxYmNlNjIxMWYzMiIgeDE9IjguNzk4IiB5MT0iOC43MDMiIHgyPSIxNC42ODMiIHkyPSI4LjcwMyIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMC4wMDEiIHN0b3AtY29sb3I9IiM3NzNhZGMiIC8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjNTUyZjk5IiAvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJiMmY5MjExMi00Y2E5LTRiMTctYTAxOS1jOWYyNmMxYTRhOGYiIHgxPSI1Ljc2NCIgeTE9IjMuNzc3IiB4Mj0iNS43NjQiIHkyPSIxMy43OCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iI2E2N2FmNCIgLz48c3RvcCBvZmZzZXQ9IjAuOTk5IiBzdG9wLWNvbG9yPSIjNzczYWRjIiAvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxnIGlkPSJiOGEwNDg2YS01NTAxLTRkOTItYjU0MC1hNzY2YzRiM2I1NDgiPjxnPjxnPjxnPjxwYXRoIGQ9Ik0xNi45MzIsMTEuNTc4YTguNDQ4LDguNDQ4LDAsMCwxLTcuOTUsNS41OSw4LjE1LDguMTUsMCwwLDEtMi4zMy0uMzMsMi4xMzMsMi4xMzMsMCwwLDAsLjE4LS44M2MuMDEsMCwuMDMuMDEuMDQuMDFhNy40MjIsNy40MjIsMCwwLDAsMi4xMS4zLDcuNjQ2LDcuNjQ2LDAsMCwwLDYuODUtNC4yOGwuMDEtLjAxWiIgZmlsbD0iIzMyYmVkZCIgLz48cGF0aCBkPSJNMy41ODIsMTQuMDY4YTIuMDI1LDIuMDI1LDAsMCwwLS42NC41Niw4LjYsOC42LDAsMCwxLTEuNjctMi40NGwxLjA0LjIzdi4yNmEuNi42LDAsMCwwLC40Ny41OWwuMTQuMDNhNi4xMzYsNi4xMzYsMCwwLDAsLjYyLjczWiIgZmlsbD0iIzMyYmVkZCIgLz48cGF0aCBkPSJNMTIuMzUyLjk1OGEyLjI4LDIuMjgsMCwwLDAtLjI3LjgxYy0uMDItLjAxLS4wNS0uMDItLjA3LS4wM2E3LjQ3OSw3LjQ3OSwwLDAsMC0zLjAzLS42Myw3LjY0Myw3LjY0MywwLDAsMC01LjksMi44bC0uMjkuMDZhLjYuNiwwLDAsMC0uNDguNTh2LjQ2bC0xLjAyLjE5QTguNDU0LDguNDU0LDAsMCwxLDguOTgyLjI2OCw4LjYsOC42LDAsMCwxLDEyLjM1Mi45NThaIiBmaWxsPSIjMzJiZWRkIiAvPjxwYXRoIGQ9Ik0xNi44NzIsNS43bC0xLjA5LS4zOGE2LjYsNi42LDAsMCwwLS43Mi0xLjE2Yy0uMDItLjAzLS4wNC0uMDUtLjA1LS4wN2EyLjA4MywyLjA4MywwLDAsMCwuNzItLjQ1QTcuODEsNy44MSwwLDAsMSwxNi44NzIsNS43WiIgZmlsbD0iIzMyYmVkZCIgLz48cGF0aCBkPSJNMTAuMDcyLDExLjkwOGwyLjU0LjU2TDguNjcyLDE0LjFjLS4wMiwwLS4wMy4wMS0uMDUuMDFhLjE1NC4xNTQsMCwwLDEtLjE1LS4xNVYzLjQ0OGEuMTU0LjE1NCwwLDAsMSwuMTUtLjE1LjA5LjA5LDAsMCwxLC4wNS4wMWw0LjQ2LDEuNTYtMy4wNS41N2EuNTY1LjU2NSwwLDAsMC0uNDQuNTR2NS40QS41MzcuNTM3LDAsMCwwLDEwLjA3MiwxMS45MDhaIiBmaWxsPSIjZmZmIiAvPjxnPjxnIGlkPSJlOTE4ZjI4Ni01MDMyLTQ5NDItYWQyOS1lYTE3ZTZmMWNjOTAiPjxwYXRoIGQ9Ik0xLjEsNS42NjhsMS4yMS0uMjN2Ni41NWwtMS4yMy0uMjctLjk5LS4yMmEuMTExLjExMSwwLDAsMS0uMDktLjEydi01LjRhLjEyLjEyLDAsMCwxLC4wOS0uMTJaIiBmaWxsPSIjYTY3YWY0IiAvPjwvZz48Zz48ZyBpZD0iYTQ3YTk5ZGQtNGQ0Ny00YzcwLThjNDItYzVhYzI3NGNlNDk2Ij48Zz48cGF0aCBkPSJNMTAuMDcyLDExLjkwOGwyLjU0LjU2TDguNjcyLDE0LjFjLS4wMiwwLS4wMy4wMS0uMDUuMDFhLjE1NC4xNTQsMCwwLDEtLjE1LS4xNVYzLjQ0OGEuMTU0LjE1NCwwLDAsMSwuMTUtLjE1LjA5LjA5LDAsMCwxLC4wNS4wMWw0LjQ2LDEuNTYtMy4wNS41N2EuNTY1LjU2NSwwLDAsMC0uNDQuNTR2NS40QS41MzcuNTM3LDAsMCwwLDEwLjA3MiwxMS45MDhaIiBmaWxsPSJ1cmwoI2IyN2YxYWQwLTdkMTEtNDI0Ny05ZGEzLTkxYmNlNjIxMWYzMikiIC8+PHBhdGggZD0iTTguNTg2LDMuMywyLjg3OCw0LjM3OGEuMTc3LjE3NywwLDAsMC0uMTQuMTc1VjEyLjY4YS4xNzcuMTc3LDAsMCwwLC4xMzcuMTc0TDguNTgxLDE0LjFhLjE3Ni4xNzYsMCwwLDAsLjIxLS4xNzRWMy40NzhBLjE3NS4xNzUsMCwwLDAsOC42MTksMy4zWiIgZmlsbD0idXJsKCNiMmY5MjExMi00Y2E5LTRiMTctYTAxOS1jOWYyNmMxYTRhOGYpIiAvPjwvZz48L2c+PHBvbHlnb24gcG9pbnRzPSI1Ljk0OCA0LjkyMSA1Ljk0OCAxMi40ODMgNy45MzQgMTIuODE0IDcuOTM0IDQuNTY0IDUuOTQ4IDQuOTIxIiBmaWxsPSIjYjc5NmY5IiBvcGFjaXR5PSIwLjUiIC8+PHBvbHlnb24gcG9pbnRzPSIzLjUwOSA1LjMyOSAzLjUwOSAxMS45NTQgNS4yMzggMTIuMzE3IDUuMjM4IDUuMDMxIDMuNTA5IDUuMzI5IiBmaWxsPSIjYjc5NmY5IiBvcGFjaXR5PSIwLjUiIC8+PC9nPjwvZz48L2c+PHBhdGggZD0iTTE2LDIuMDQ4YTEuNzU1LDEuNzU1LDAsMSwxLTEuNzYtMS43NkExLjc1NiwxLjc1NiwwLDAsMSwxNiwyLjA0OFoiIGZpbGw9IiMzMmJlZGQiIC8+PGNpcmNsZSBjeD0iNC42NSIgY3k9IjE1Ljk3MyIgcj0iMS43NTkiIGZpbGw9IiMzMmJlZGQiIC8+PC9nPjxwYXRoIGQ9Ik0xOCw2LjY4OXYzLjg0NGEuMjIyLjIyMiwwLDAsMS0uMTMzLjJsLS43NjYuMzE2LTMuMDcsMS4yNjgtLjAxMSwwYS4xMjYuMTI2LDAsMCwxLS4wMzgsMCwuMS4xLDAsMCwxLS4xLS4xVjUuMjM0YS4xLjEsMCwwLDEsLjA1NC0uMDg4bDAsMCwuMDE5LDBhLjAzMS4wMzEsMCwwLDEsLjAxOSwwLC4wNTUuMDU1LDAsMCwxLC4wMzQuMDA4bC4wMTEsMCwuMDEyLDBMMTcuMDUsNi4ybC44LjI4MkEuMjEzLjIxMywwLDAsMSwxOCw2LjY4OVoiIGZpbGw9IiM3NzNhZGMiIC8+PHBhdGggZD0iTTEzLjk1OSw1LjE0bC0zLjguNzE1YS4xMTguMTE4LDAsMCwwLS4wOTMuMTE3djUuNDA5YS4xMTguMTE4LDAsMCwwLC4wOTEuMTE2bDMuOC44MzFhLjExNS4xMTUsMCwwLDAsLjEzNy0uMDkuMTA5LjEwOSwwLDAsMCwwLS4wMjZWNS4yNTZhLjExNy4xMTcsMCwwLDAtLjExNS0uMTE4QS4wODIuMDgyLDAsMCwwLDEzLjk1OSw1LjE0WiIgZmlsbD0iI2E2N2FmNCIgLz48L2c+PC9nPjwvc3ZnPg==;">
+          <mxGeometry x="159" y="4" width="72" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-job-title" parent="forecast-job" vertex="1" value="Aurora forecast job" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=center;verticalAlign=top;spacing=0;fontSize=18;fontColor=#172B4D;fontStyle=1;">
+          <mxGeometry x="8" y="80" width="374" height="23" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-job-body" parent="forecast-job" vertex="1" value="Own environment / DNS / egress" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=center;verticalAlign=top;spacing=0;fontSize=15;fontColor=#43566B;fontStyle=0;">
+          <mxGeometry x="8" y="106" width="374" height="20" as="geometry" />
         </mxCell>
         <mxCell id="platform" parent="1" vertex="1" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;rounded=1;arcSize=4;container=1;collapsible=0;fillColor=#F4F8FC;strokeColor=#6D8CA6;strokeWidth=1.5;dashed=0;">
           <mxGeometry x="40" y="1320" width="2320" height="120" as="geometry" />
@@ -1483,6 +1494,9 @@
         </mxCell>
         <mxCell id="platform-subtitle" parent="platform" vertex="1" value="Policy / RBAC / budgets / change approvals / central monitoring | validate runner, package-bootstrap and source-ingestion paths before restricting endpoints" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=left;verticalAlign=top;spacing=0;fontSize=17;fontColor=#43566B;fontStyle=0;">
           <mxGeometry x="20" y="58" width="2280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-inference-label" parent="1" vertex="1" value="Job -&amp;gt; workspace PE -&amp;gt; scoring" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=left;verticalAlign=top;spacing=0;fontSize=17;fontColor=#0078D4;fontStyle=0;fillColor=#FFFFFF;">
+          <mxGeometry x="1955" y="975" width="370" height="22" as="geometry" />
         </mxCell>
         <mxCell id="dns-links-label" parent="1" vertex="1" value="Private DNS / forwarding configuration" style="fontFamily=Segoe UI;html=1;whiteSpace=wrap;text;align=left;verticalAlign=top;spacing=0;fontSize=17;fontColor=#CA5010;fontStyle=0;fillColor=#FFFFFF;">
           <mxGeometry x="570" y="552" width="430" height="22" as="geometry" />
@@ -1643,15 +1657,15 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="private-ml" parent="1" edge="1" source="service-pe" target="ml" style="edgeStyle=none;rounded=0;strokeColor=#0078D4;strokeWidth=2.5;endArrow=block;endFill=1;dashed=0;exitX=0.594737;exitY=0.375;entryX=0.4;entryY=0.103448;exitPerimeter=0;entryPerimeter=0;">
+        <mxCell id="forecast-inference" parent="1" edge="1" source="forecast-job" target="ml" style="edgeStyle=none;rounded=0;strokeColor=#0078D4;strokeWidth=2.5;endArrow=block;endFill=1;dashed=0;exitX=0.592308;exitY=0.25;entryX=0.4;entryY=0.241379;exitPerimeter=0;entryPerimeter=0;">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
-              <mxPoint x="1400" y="645" />
-              <mxPoint x="1400" y="710" />
-              <mxPoint x="1475" y="710" />
-              <mxPoint x="1475" y="1050" />
-              <mxPoint x="2010" y="1050" />
-              <mxPoint x="2010" y="1040" />
+              <mxPoint x="1920" y="905" />
+              <mxPoint x="1920" y="945" />
+              <mxPoint x="1950" y="945" />
+              <mxPoint x="1950" y="1095" />
+              <mxPoint x="2010" y="1095" />
+              <mxPoint x="2010" y="1060" />
             </Array>
           </mxGeometry>
         </mxCell>

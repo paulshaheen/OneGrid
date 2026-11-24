@@ -25,6 +25,21 @@ Query arrows identify the requesting workload, including weather-output reads. I
 controls and diagnostic export are separate paths. Configure and verify evidence collection
 for every listed service; audit retention isn't part of the application request route.
 
+### Workflow
+
+1. An approved connector reads operational sources in the transfer zone and publishes
+   outward to Eventstream; it doesn't expose an application-to-plant control path.
+2. Fabric ingests telemetry and curates asset history under the configured workspace,
+   source-connection, table, and semantic permissions.
+3. Users authenticate at the published application host. The backend authorizes each
+   request before its workload identity queries the configured data and model services.
+4. AI tools and Aurora process only their approved inputs. Weather output retains its
+   input cycle, model version, and publication timestamp for operational review.
+5. Supported identity, application, data, model, job, and deployment events flow to
+   controlled evidence stores outside the user request path.
+6. Release and operational acceptance test both permitted and denied behavior; owners
+   approve exceptions and retain evidence against the organization's control mapping.
+
 The OT boundary is an ingestion boundary. Deploy source connectors with approved source-read
 permissions and outbound publication rather than opening a direct application path into
 plant control networks. The application supports operator decisions; engineering and
@@ -77,6 +92,20 @@ forecast input cycle, and publication time.
 Use the approved enterprise ingress, egress, DNS, service-access, and operator paths.
 Validate model calls, Fabric queries, package mounting, blob channels, and weather/imagery
 source access through those controls.
+
+Use the [enterprise traffic matrix](enterprise-landing-zone.md#traffic-flow-matrix)
+as the network-control inventory. Associate each enabled path with a data class, caller
+identity, destination, enforcement point, and evidence owner. In particular:
+
+- Prove that the private application path works and its direct public origin is denied.
+- Verify tenant-level Fabric connectivity for the combined semantic-model workspace,
+  processed Eventstream ingestion, and independently authorized storage connections.
+- Test Aurora from the forecast job's environment, not from an unrelated operator host
+  or App Service console.
+- Approve browser-originated map/glyph access and external forecast inputs separately
+  from server egress. A private application endpoint doesn't make those requests private.
+- Record public and private destination choices explicitly; managed identity, encryption,
+  and data-processing geography are separate controls.
 
 Approve model versions, tools, grounding sources, prompt retention, and input data classes.
 Evaluate prompt injection, unauthorized tool use, sensitive-data leakage, and ungrounded

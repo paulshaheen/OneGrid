@@ -30,7 +30,21 @@ Configure each region through the OneGrid resource template and environment-spec
 settings. Maintain routing, replication, item recovery, fencing, and cutover automation
 alongside the regional deployments in the workload delivery pipeline.
 
-## Components
+### Workflow
+
+1. Front Door sends normal user traffic to the accepted primary origin. App Service
+   queries its configured regional data, geospatial, storage, and model endpoints.
+2. Source ingestion, semantic refresh, and forecast publication run under the primary
+   environment's ownership. Recovery copies and item definitions follow the chosen
+   dependency-specific protection mechanisms.
+3. During an incident, operators fence primary writers, recover dependencies, and apply
+   the recovery environment's actual IDs, connections, permissions, and DNS configuration.
+4. The recovery environment passes data-backed readiness checks, including access,
+   freshness, model inference, and sole forecast-publisher ownership.
+5. Operators enable recovery traffic only after these gates pass, observe the restored
+   journeys, and reconcile state before an approved failback.
+
+### Components
 
 | Component | Regional preparation | Recovery verification |
 | --- | --- | --- |
@@ -104,9 +118,32 @@ Premium private origins, approve and validate each regional Private Link connect
 Keep the recovery origin disabled until the release gate passes; a successful HTTP health
 probe alone doesn't establish data or model readiness.
 
+For public App Service origins, combine the `AzureFrontDoor.Backend` service tag with
+an access restriction that matches **this profile's** `X-Azure-FDID` value. The shared
+service tag alone doesn't identify the workload's Front Door instance. For Premium
+private origins, approve each origin connection and explicitly verify public-origin
+denial. Keep backend hostnames, TLS/SNI, custom probes, and application sign-in callbacks
+consistent with the published host.
+
+Recover the forecast job's network independently from App Service. The recovery job
+must resolve and reach its regional Aurora endpoint, registry, input sources, and Blob
+channel before publication is enabled. Revalidate service-to-source connections for
+Fabric refresh, shortcuts, and GeoCatalog; global web routing doesn't recover these paths.
+
 Include shared identity, DNS, deployment runners, registries, secrets, and monitoring in
 failure analysis. Ensure the recovery environment does not still depend exclusively on
 the failed region for package loading or critical configuration.
+
+### Cutover acceptance
+
+| Gate | Pass condition |
+| --- | --- |
+| Origin access | Approved Front Door path succeeds; direct public-origin access is denied |
+| Application | Sign-in, REST, and WebSocket reconnect succeed on the published host |
+| Data | Actual recovery item IDs, bindings, permissions, DAX/KQL results, and freshness meet the declared objectives |
+| Inference | Approved model/version responds; Aurora produces a valid normalized forecast when enabled |
+| Publication ownership | Primary writer is fenced and the recovery job is the sole authorized active publisher |
+| Operations | DNS, package loading, connected administration, diagnostics, and alert delivery don't depend exclusively on the failed region |
 
 ## Recovery procedure
 

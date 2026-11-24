@@ -26,6 +26,20 @@ and SQL analytics endpoint are two surfaces of the same analytical data. Real-ti
 historical paths join through asset keys; each retains its own ingestion and freshness
 checks. Blue query arrows point from the caller to the service, with responses omitted.
 
+### Workflow
+
+1. Source connectors publish canonical events to the resolved Eventstream custom endpoint.
+2. The processed Eventhouse destination writes `PiEventsRaw`; its update policy creates
+   the curated `PiEvents` serving table.
+3. Notebooks load and transform historical sources, calculate reliability results, and
+   persist tables using the shared asset hierarchy.
+4. The Import refresh connection reads the Lakehouse SQL analytics endpoint and
+   materializes `OneGridModelImport` after processing completes.
+5. The application queries KQL and DAX independently. The Data Agent queries its
+   configured semantic-model datasource; the ontology is a separate relationship item.
+6. Operators verify source event time, processing completion, model refresh time, and
+   query results before declaring the complete data product current.
+
 ## Ingest operational data
 
 The custom Eventstream source `PIForwarderEndpoint` accepts the canonical source-event
@@ -142,9 +156,33 @@ the signed-in user's permissions automatically flow to all tools.
 ## Network and administration
 
 Coordinate tenant access, Conditional Access, Fabric connectivity, source firewalls, and
-workspace connections with platform owners. Select the appropriate inbound and outbound
-controls for each path. Verify app queries, SQL refresh, notebooks, shortcuts, provisioning,
-and operator access under the selected network restrictions.
+workspace connections with platform owners. For the existing combined workspace, use
+tenant-level Private Link when private client access is required. `OneGridModelImport`
+is part of this design: workspace-level Private Link is not a drop-in replacement for
+the combined semantic-model workspace. A data-only workspace split changes item IDs,
+source connections, permissions, and application targets and requires its own validation.
+
+Keep the supplied Eventstream destination in `ProcessedIngestion` mode. Rebind the
+workspace, Eventhouse, database, and table mapping without changing it to direct ingestion.
+The connectors default to AMQP over WebSockets on TCP 443; native AMQP/TLS on TCP 5671
+is a separate explicit configuration choice.
+
+Distinguish these connections during acceptance:
+
+| Connection | Network responsibility | Required evidence |
+| --- | --- | --- |
+| App -> DAX/KQL/Data Agent | Client DNS, selected tenant private connectivity, identity, and item permissions | Authorized queries against the expected item IDs |
+| Operator/provisioning SQL client -> SQL analytics | Client TDS path on TCP 1433; SQL-aware firewall rules | Authenticated query, not just a successful TCP connection |
+| Import refresh -> SQL analytics | Fabric connection and refresh identity | Refresh completes after source processing; rows/timestamps agree |
+| Fabric -> Blob shortcut/source | Independently configured source access and connection identity | Both metadata listing and actual content read succeed |
+| Notebook/pipeline -> source/output | Fabric execution network and connection configuration | Successful processing and persisted results |
+
+Don't model encrypted SQL as HTTPS on port 1433 or route Fabric-hosted refresh through
+the application subnet. Inbound Fabric Private Link doesn't provide an outbound path
+to a firewalled source. Use the
+[enterprise traffic matrix](enterprise-landing-zone.md#traffic-flow-matrix) for platform
+integration and the [network procedure](../operations-runbook.md#validate-network-and-traffic-flows)
+to capture deployed evidence.
 
 Assign capacity/workspace owners, data owners, identity owners, and an on-call contact.
 Collect supported administrative and activity signals, correlate them with app/deployment
@@ -159,3 +197,9 @@ IDs/connections, refresh the Import model, and compare expected counts and times
 Monitor DAX/KQL latency, capacity contention, refresh duration, failed notebooks, source lag,
 and identity expiry. Use the [operations procedures](../operations-runbook.md) and
 [multiregion design](multiregion.md) to coordinate data and application recovery.
+
+## Next steps
+
+- [Deploy and configure sources, models, and identities](../deployment-and-data-guide.md).
+- [Integrate Fabric with the enterprise landing zone](enterprise-landing-zone.md).
+- [Establish Day 2 operations](../operations.md).

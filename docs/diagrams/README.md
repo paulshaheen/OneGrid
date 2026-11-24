@@ -89,17 +89,32 @@ from App Service outbound networking.
 The following service guidance was checked for the routing and recovery design. These are
 service contracts used by OneGrid, not substituted reference-solution architectures.
 
+Service guidance reviewed on November 23, 2026. Recheck item compatibility and endpoint
+requirements when changing a service feature, network policy, region, or release.
+
 | Boundary | Applied rule | Microsoft Learn service guidance |
 | --- | --- | --- |
-| App ingress and egress | Private endpoint handles inbound; VNet integration handles outbound | [App Service VNet integration](https://learn.microsoft.com/azure/app-service/overview-vnet-integration) |
+| App ingress and egress | Private endpoint handles inbound; VNet integration handles outbound; disable the public origin explicitly | [App Service VNet integration](https://learn.microsoft.com/azure/app-service/overview-vnet-integration), [App Service private endpoints](https://learn.microsoft.com/azure/app-service/overview-private-endpoint) |
+| Reverse-proxy identity | Preserve the published hostname and validate backend TLS/SNI and probes | [Application Gateway and App Service](https://learn.microsoft.com/azure/application-gateway/configure-web-app), [Host name preservation](https://learn.microsoft.com/azure/architecture/best-practices/host-name-preservation) |
 | App bootstrap | Validate application and configuration traffic, including package and token dependencies | [App Service routing](https://learn.microsoft.com/azure/app-service/configure-vnet-integration-routing), [Run from package](https://learn.microsoft.com/azure/app-service/deploy-run-package) |
-| Fabric SaaS | Private Link secures inbound client access; source access is configured independently | [Fabric Private Link](https://learn.microsoft.com/fabric/security/security-private-links-overview) |
-| Eventstream | Publish and bind the Eventhouse destination and mapping before source producers | [Eventhouse destination](https://learn.microsoft.com/fabric/real-time-intelligence/event-streams/add-destination-kql-database) |
+| Private endpoint routing | A default firewall route doesn't override the endpoint's more-specific route; inspection needs endpoint network policies and specific routes | [Private endpoint network policies](https://learn.microsoft.com/azure/private-link/disable-private-endpoint-network-policy) |
+| Fabric SaaS | Use tenant-level private connectivity for the combined Import-model workspace; configure source access independently | [Fabric Private Link](https://learn.microsoft.com/fabric/security/security-private-links-overview), [Workspace-level item compatibility](https://learn.microsoft.com/fabric/security/security-workspace-level-private-links-support) |
+| Eventstream | Preserve `ProcessedIngestion`; bind the Eventhouse destination/mapping before producers; default connector transport is AMQP over WebSockets | [Eventhouse destination](https://learn.microsoft.com/fabric/real-time-intelligence/event-streams/add-destination-kql-database), [Event Hubs protocol/ports](https://learn.microsoft.com/azure/event-hubs/event-hubs-faq#what-ports-do-i-need-to-open-on-the-firewall) |
+| SQL analytics | SQL clients use encrypted TDS on TCP 1433, not HTTPS; Fabric refresh has its own connection | [Fabric SQL connectivity](https://learn.microsoft.com/fabric/data-warehouse/connectivity) |
+| Azure OpenAI | Resolve the account hostname through its private endpoint and authorize the actual app client | [Azure OpenAI networking](https://learn.microsoft.com/azure/foundry-classic/openai/how-to/network?view=foundry-classic) |
 | Aurora inference | Workspace private endpoint handles managed-endpoint inbound; managed network handles deployment outbound | [Secure managed online endpoints](https://learn.microsoft.com/azure/machine-learning/how-to-secure-online-endpoint?view=azureml-api-2) |
 | GeoCatalog | Associate ingestion identity, grant Blob read access, and configure the container ingestion source | [Managed identity ingestion](https://learn.microsoft.com/azure/planetary-computer/set-up-ingestion-credentials-managed-identity) |
-| Forecast job | Scheduled/on-demand finite execution is separate from the managed online endpoint | [Container Apps jobs](https://learn.microsoft.com/azure/container-apps/jobs) |
-| Regional ingress | Restrict direct origins and gate traffic on workload readiness | [Front Door origin security](https://learn.microsoft.com/azure/frontdoor/origin-security) |
+| Forecast job | Job inference uses its own environment network; select VNet-integrated workload profiles at creation for UDR egress and retain platform dependencies | [Container Apps jobs](https://learn.microsoft.com/azure/container-apps/jobs), [Environment networking](https://learn.microsoft.com/azure/container-apps/networking), [Firewall dependencies](https://learn.microsoft.com/azure/container-apps/firewall-integration) |
+| Private image delivery | Private endpoints require a Premium registry; verify image-data DNS and build/pull access | [Container Registry private endpoints](https://learn.microsoft.com/azure/container-registry/container-registry-private-endpoints) |
+| Regional ingress | Restrict public origins by service tag and profile ID, or validate Premium private origins; gate cutover on workload readiness | [Front Door origin security](https://learn.microsoft.com/azure/frontdoor/origin-security) |
 | Fabric recovery | Select recovery mechanisms per item and capacity; recover bindings and operational data | [Fabric reliability](https://learn.microsoft.com/fabric/security/reliability-fabric) |
+
+The article structure separates the solution overview, architecture/workflow/components,
+design decisions, Well-Architected considerations, deployment, and operations. Enterprise
+decisions cover the eight
+[Azure landing zone design areas](https://learn.microsoft.com/azure/cloud-adoption-framework/ready/landing-zone/design-areas).
+These conventions organize OneGrid's own implementation; they don't introduce unrelated
+services or imply that enterprise controls are created by the baseline template.
 
 Use the [deployment acceptance steps](../deployment-and-data-guide.md) and
 [operations runbook](../operations-runbook.md) to validate deployed endpoint reachability,

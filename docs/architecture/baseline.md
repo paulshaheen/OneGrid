@@ -161,6 +161,34 @@ Creating the Aurora workspace/endpoint and deploying its GPU model are separate 
 Allocate quota and accept model terms before inference validation. Choose model processing
 geography and version according to data requirements.
 
+## Networking
+
+The baseline connects to authenticated service endpoints. The supplied template creates
+the application, resources, and identity assignments; the enterprise network layer adds
+the gateway, VNet integration, private endpoints, private DNS, and controlled egress.
+Select that layer through the [enterprise implementation](enterprise-landing-zone.md)
+when the workload must use the organization's private connectivity and inspection policies.
+
+Treat these as independent traffic boundaries:
+
+1. **Browser to application.** Use HTTPS and secure WebSockets through the published host.
+   Register its sign-in callback and preserve the host through any reverse proxy.
+2. **Application to dependencies.** Resolve the configured Fabric, Azure OpenAI, catalog,
+   and Blob endpoints from the App Service runtime. VNet integration controls outbound
+   connections; it doesn't provide private inbound application access.
+3. **Forecast job to inference and storage.** The Container Apps environment provides
+   this path. Its DNS, image pulls, NOAA access, Azure ML scoring, and Blob channel must
+   work without relying on App Service networking.
+4. **Service-to-source access.** GeoCatalog reads imagery with its ingestion identity.
+   Fabric refresh and shortcuts read their configured sources. A client private endpoint
+   to a service doesn't establish that service's outbound connection to storage.
+5. **Browser to map providers.** Validate tiles and glyphs on the user's network,
+   independently of the server-side application path.
+
+The [traffic-flow matrix](enterprise-landing-zone.md#traffic-flow-matrix) identifies the
+protocol and enterprise route for each caller. Keep authentication, network reachability,
+and data freshness as separate acceptance checks.
+
 ## Deployment architecture
 
 The [ARM template](../../planetary-computer-pro-poc/deploy/azure/azuredeploy.json) provisions
@@ -185,6 +213,16 @@ workspace -> core -> fabricplane -> artifacts -> data -> semantic -> oge -> unif
 
 Selection determines which phases execute. Governance configuration controls OneLake role
 provisioning. Operational connectors are enabled through the separate `dataplane` phase.
+
+## Design decisions
+
+| Decision | Rationale | Trade-off |
+| --- | --- | --- |
+| Separate real-time KQL and Import/DAX serving | Operators query current observations while business measures use curated history | Each path needs its own permissions, freshness target, and incident checks |
+| Use one conformed asset hierarchy | Reliability, maintenance, twin context, and weather exposure share stable joins | Source onboarding must reconcile identifiers and reject orphan records |
+| Package the UI, BFF, and Node agent together | Promote one compatible application artifact | Scale and release these components together; size for combined concurrency |
+| Separate CPU orchestration from GPU inference | Forecast scheduling and data preparation don't consume GPU compute | A successful job trigger doesn't prove the model is healthy or output is current |
+| Keep private connectivity in the enterprise implementation | Integrate with existing DNS, address space, policy, and shared services | Production acceptance includes platform-owned dependencies beyond ARM resource creation |
 
 ## Considerations
 

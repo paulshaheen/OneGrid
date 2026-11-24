@@ -78,6 +78,23 @@ For customer governance, configure the provisioner's `governance` block separate
 IDs, inventory/demo mode, role creation choices, and app permissions. The ARM wrapper
 initializes governance disabled.
 
+### Establish enterprise network prerequisites
+
+For an enterprise environment, approve the
+[traffic-flow matrix](architecture/enterprise-landing-zone.md#traffic-flow-matrix)
+before restricting endpoints. Prepare gateway/private-endpoint/integration subnets,
+connected deployment runners, private DNS, and the required bootstrap and runtime rules.
+
+Use tenant-level Fabric Private Link for the combined OneGrid workspace and retain the
+Eventstream artifact's `ProcessedIngestion` mode. Plan the forecast job's VNet-integrated
+workload profiles environment at creation time when controlled egress is required.
+Select Premium rather than the auto-created Basic registry for a private registry path.
+
+Apply these enterprise changes through reviewed platform/workload IaC. Validate private
+paths, package bootstrap, queries, source access, and image delivery before disabling
+the corresponding public paths. Record results with the
+[network acceptance procedure](operations-runbook.md#validate-network-and-traffic-flows).
+
 ## Deploy resources and provision the solution
 
 Use the portal button in the [solution overview](../README.md#deploy-this-solution), or

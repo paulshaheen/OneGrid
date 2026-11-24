@@ -375,7 +375,7 @@ def enterprise():
     s.node("app-pe", 1020, 385, 380, 130, "App Service endpoint",
            "Private inbound app access\nOrigin access restricted", "private-endpoint", "pe-subnet")
     s.node("service-pe", 1020, 585, 380, 160, "Dependency endpoints",
-           "Fabric / Blob / Azure OpenAI\nAzure ML workspace\nService-specific DNS / access", "private-endpoint", "pe-subnet")
+           "Fabric / Blob / Azure OpenAI\nTenant Fabric Private Link\nService-specific DNS / access", "private-endpoint", "pe-subnet")
     s.box("integration-subnet", 550, 825, 880, 260, "App integration subnet",
           "Dedicated delegated subnet | outbound application and configuration routing", parent="vnet")
     s.node("integration", 585, 935, 810, 125, "App Service VNet integration",
@@ -387,7 +387,7 @@ def enterprise():
     s.box("saas", 1980, 170, 380, 1040, "Service endpoints",
           "SaaS / PaaS remain service-hosted")
     s.node("fabric", 2010, 295, 320, 145, "Microsoft Fabric",
-           "Tenant / workspace access\nSeparate source egress", "fabric", "saas")
+           "Tenant-level Private Link\nSeparate source egress", "fabric", "saas")
     s.node("blob", 2010, 545, 320, 145, "Azure Blob Storage",
            "Assets / package / outputs\nPrivate DNS + authorization", "blob-storage", "saas")
     s.node("ai", 2010, 785, 320, 145, "Azure OpenAI",
@@ -398,9 +398,9 @@ def enterprise():
            "GeoCatalog / Entra / ARM\nExplicit endpoint allowlist")
     s.text("outbound-note", 1530, 665, 390,
            "Inbound: gateway -> app private endpoint.\nOutbound: app -> integration subnet -> private endpoints or firewall.", 21, True)
-    s.text("weather-note", 1530, 865, 390,
-           "Forecast jobs use their own Container Apps environment networking. "
-           "Validate NOAA, registry and Aurora blob-channel access there.", 20)
+    s.node("forecast-job", 1530, 865, 390, 160, "Aurora forecast job",
+           "Own environment / DNS / egress\nNOAA / registry / Blob channel",
+           "container-apps-job")
     s.box("platform", 40, 1320, 2320, 120, "Existing enterprise platform",
           "Policy / RBAC / budgets / change approvals / central monitoring | validate runner, package-bootstrap and source-ingestion paths before restricting endpoints",
           icon="policy")
@@ -419,8 +419,9 @@ def enterprise():
            [(1400, 650), (1960, 650), (1960, 615), (2010, 615)])
     s.edge("private-ai", "service-pe", "ai",
            [(1400, 680), (1490, 680), (1490, 820), (1960, 820), (1960, 855), (2010, 855)])
-    s.edge("private-ml", "service-pe", "ml",
-           [(1400, 710), (1475, 710), (1475, 1050), (1980, 1050), (2010, 1050)])
+    s.edge("forecast-inference", "forecast-job", "ml",
+           [(1920, 945), (1950, 945), (1950, 1095), (2010, 1095)],
+           label="Job -> workspace PE -> scoring", at=(1955, 975), label_width=370)
     s.edge("dns-query", "integration", "dns",
            [(585, 970), (480, 970), (480, 680), (420, 680)])
     s.edge("egress", "integration", "firewall",

@@ -88,6 +88,26 @@ Separate app-plane and Fabric-plane deployment scripts configure their respectiv
 dependencies. Application Insights and Log Analytics support the weather/model components;
 workload operations correlate these signals with application, Fabric, and identity health.
 
+### Traffic flows and network boundaries
+
+The browser, application, Fabric services, and forecast job initiate different connections.
+Their traffic doesn't share a single network path:
+
+- **User access:** browser -> application ingress -> App Service. In the enterprise
+  implementation, Application Gateway WAF reaches the application's private endpoint.
+- **Application dependencies:** App Service initiates DAX, KQL, AI, catalog, and Blob
+  requests. Its outbound VNet integration is separate from inbound private access.
+- **Forecast inference:** the Container Apps Job retrieves inputs and calls Aurora through
+  its own environment network. App Service starts an on-demand execution through Azure
+  Resource Manager; it doesn't proxy the scoring request.
+- **Service and browser access:** Fabric refresh, shortcuts, and GeoCatalog ingestion
+  have service-originated connections. Basemap tiles and glyphs are fetched by the
+  browser. Neither path inherits App Service's outbound routing.
+
+Use the [enterprise traffic-flow matrix](docs/architecture/enterprise-landing-zone.md#traffic-flow-matrix)
+to plan protocols, DNS, private connectivity, and egress. Validate the actual callers with
+the [network acceptance procedure](docs/operations-runbook.md#validate-network-and-traffic-flows).
+
 ## Data model
 
 Reliability and weather share the same asset spine rather than maintaining separate
