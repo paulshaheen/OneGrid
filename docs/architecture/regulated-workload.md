@@ -1,7 +1,7 @@
 ---
 title: Regulated workload architecture for OneGrid
 description: Apply data boundaries, identity controls, auditability, model oversight, and recovery evidence to OneGrid operational and weather intelligence.
-ms.date: 11/23/2026
+ms.date: 11/24/2026
 ms.topic: conceptual
 ---
 
@@ -16,10 +16,12 @@ assigning controls and evidence to each boundary.
 
 ## Architecture
 
-[![OneGrid regulated boundaries separate outbound OT publication, Fabric permissions, enterprise ingress, scoped application queries, model processing, and retained audit evidence.](../diagrams/onegrid-regulated-workload.png)](../diagrams/onegrid-regulated-workload.svg)
+[![Detailed regulated blueprint with outbound-only OT publication, explicit Fabric and runtime permissions, private ingress, model and geospatial boundaries, operational approvals, and retained evidence.](../diagrams/onegrid-reference-regulated.png)](../diagrams/onegrid-reference-regulated.svg)
 
-[Download SVG](../diagrams/onegrid-regulated-workload.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+[Download SVG](../diagrams/onegrid-reference-regulated.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[Monitoring detail](../diagrams/onegrid-reference-monitoring.png) |
+[Traffic and security contracts](traffic-and-security.md)
 
 Query arrows identify the requesting workload, including weather-output reads. Identity
 controls and diagnostic export are separate paths. Configure and verify evidence collection

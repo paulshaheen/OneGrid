@@ -1,7 +1,7 @@
 ---
 title: Baseline architecture for OneGrid asset and weather intelligence
 description: Design and deploy OneGrid with Microsoft Fabric, geospatial services, Aurora weather inference, Azure OpenAI, and Azure App Service.
-ms.date: 11/23/2026
+ms.date: 11/24/2026
 ms.topic: conceptual
 ---
 
@@ -16,10 +16,12 @@ decisions refer to the same sites, units, equipment, and sensors.
 
 ## Architecture
 
-[![OneGrid end-to-end architecture with official service icons and separate data, request, identity, and control flows.](../onegrid-logical-architecture.png)](../diagrams/onegrid-logical-architecture.svg)
+[![Detailed OneGrid baseline with actual service boundaries, runtime identities, protocols, Fabric refresh, geospatial ingestion, model inference, and publication paths.](../diagrams/onegrid-reference-baseline.png)](../diagrams/onegrid-reference-baseline.svg)
 
-[Download SVG](../diagrams/onegrid-logical-architecture.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+[Download SVG](../diagrams/onegrid-reference-baseline.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[All nine technical sheets](../diagrams/onegrid-reference-gallery.html) |
+[Traffic and security contracts](traffic-and-security.md)
 
 The view shows the complete enabled solution. Deployment parameters select which planes
 are provisioned. Blue arrows identify the caller of a query or API; green arrows identify

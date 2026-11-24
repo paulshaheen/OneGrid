@@ -3,7 +3,32 @@
 These diagrams describe the OneGrid solution and its enterprise, regulated, and recovery
 implementations. They use official Azure, Microsoft Entra, and Microsoft Fabric icons.
 
-## Views
+## Detailed reference architecture
+
+Start with the [nine-sheet technical gallery](onegrid-reference-gallery.html) and
+[routing, identity, security, monitoring, and recovery contracts](../architecture/traffic-and-security.md).
+These detailed drawings show the baseline, Fabric, enterprise networking, DNS, weather,
+identity, monitoring, regulated workload, and multiregion recovery.
+
+Both light and dark SVGs **and** PNGs are exported by actual draw.io Desktop from native
+editable [light](onegrid-reference-architecture.drawio) and
+[dark](onegrid-reference-architecture-dark.drawio) documents. The light versions follow
+the clean subnet/endpoint/reference-drawing style of the supplied examples. Example IP
+allocations are explicitly labeled; enterprise additions are distinguished from baseline IaC.
+
+```powershell
+python .\docs\diagrams\build_reference_architecture.py
+python .\docs\diagrams\build_reference_architecture.py --check
+python .\docs\diagrams\build_reference_architecture.py --render --drawio $drawio
+python .\docs\diagrams\build_reference_architecture.py --render --drawio $drawio --check
+```
+
+Set `$drawio` to the actual desktop executable as shown below. The reference builder generates
+the nine-page native documents and gallery without third-party Python packages. Image export
+uses the native CLI for both formats (`--export --format svg/png --page-index --size page`);
+SVG export embeds icons. No hosted renderer receives the solution content.
+
+## Overview views (retained)
 
 | View | Scalable image | PNG preview |
 | --- | --- | --- |
@@ -12,6 +37,27 @@ implementations. They use official Azure, Microsoft Entra, and Microsoft Fabric 
 | Enterprise landing zone | [SVG](onegrid-enterprise-landing-zone.svg) | [PNG](onegrid-enterprise-landing-zone.png) |
 | Regulated workload | [SVG](onegrid-regulated-workload.svg) | [PNG](onegrid-regulated-workload.png) |
 | Multiregion recovery | [SVG](onegrid-multiregion.svg) | [PNG](onegrid-multiregion.png) |
+
+### Dark, grid-backed views
+
+Open the [dark architecture gallery](onegrid-dark-gallery.html) to compare all five views.
+These versions use a dark drafting grid, official service icons, outlined service cards with
+full component descriptions, and the same verified boundaries and traffic relationships as
+the light diagrams. The light publication diagrams above are preserved.
+
+| View | Scalable image | PNG preview |
+| --- | --- | --- |
+| Baseline and logical architecture | [SVG](onegrid-logical-architecture-dark.svg) | [PNG](onegrid-logical-architecture-dark.png) |
+| Fabric data and analytics | [SVG](onegrid-fabric-dark.svg) | [PNG](onegrid-fabric-dark.png) |
+| Enterprise landing zone | [SVG](onegrid-enterprise-landing-zone-dark.svg) | [PNG](onegrid-enterprise-landing-zone-dark.png) |
+| Regulated workload | [SVG](onegrid-regulated-workload-dark.svg) | [PNG](onegrid-regulated-workload-dark.png) |
+| Multiregion recovery | [SVG](onegrid-multiregion-dark.svg) | [PNG](onegrid-multiregion-dark.png) |
+
+The [dark draw.io document](onegrid-architecture-dark.drawio) contains five editable pages.
+Connectors attach to the service-card boundaries in this version. The background grid is
+a locked image; services, icons, descriptions, boundaries, and connectors remain editable.
+Download the gallery and its adjacent images for local browsing; GitHub does not render HTML
+galleries as web pages. The SVG and PNG links work independently.
 
 Open [onegrid-architecture.drawio](onegrid-architecture.drawio) in diagrams.net or a compatible
 draw.io editor. It contains five named pages. Service groups, boundaries, text, icons, and connectors
@@ -27,6 +73,8 @@ Python 3.10 or later builds SVGs and the native draw.io document using the stand
 ```powershell
 python .\docs\diagrams\build_architecture_diagrams.py
 python .\docs\diagrams\build_architecture_diagrams.py --check
+python .\docs\diagrams\build_architecture_diagrams.py --dark
+python .\docs\diagrams\build_architecture_diagrams.py --dark --check
 python -m unittest discover -s .\docs\diagrams -p "test_*.py"
 ```
 
@@ -38,6 +86,8 @@ distribution, then supply the executable path (version 27.0.2 or later):
 $drawio = 'C:\Program Files\draw.io\draw.io.exe'
 python .\docs\diagrams\build_architecture_diagrams.py --png --drawio $drawio
 python .\docs\diagrams\build_architecture_diagrams.py --png --drawio $drawio --check
+python .\docs\diagrams\build_architecture_diagrams.py --dark --png --drawio $drawio
+python .\docs\diagrams\build_architecture_diagrams.py --dark --png --drawio $drawio --check
 ```
 
 Use Segoe UI on the publication machine. PNG text rasterization depends on installed fonts;

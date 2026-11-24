@@ -13,10 +13,16 @@ and executive experiences.
 
 ## Architecture
 
-[![OneGrid logical architecture: operational and business sources feed Fabric. The application queries KQL, the Import model, GeoCatalog, weather outputs, and AI services. Identity and deployment controls are separate from data movement.](docs/onegrid-logical-architecture.png)](docs/diagrams/onegrid-logical-architecture.svg)
+[![Detailed OneGrid baseline with end-to-end data, request, identity and control paths, actual service boundaries, ports, Fabric refresh, geospatial ingestion and forecast publication.](docs/diagrams/onegrid-reference-baseline.png)](docs/diagrams/onegrid-reference-baseline.svg)
 
-[Download SVG](docs/diagrams/onegrid-logical-architecture.svg) |
-[Editable draw.io diagrams](docs/diagrams/onegrid-architecture.drawio)
+[Download SVG](docs/diagrams/onegrid-reference-baseline.svg) |
+[Editable draw.io diagrams](docs/diagrams/onegrid-reference-architecture.drawio) |
+[Nine-sheet light/dark gallery](docs/diagrams/onegrid-reference-gallery.html) |
+[Routing, identity, security and monitoring](docs/architecture/traffic-and-security.md)
+
+The technical set also covers Fabric, enterprise subnets/private endpoints, DNS, weather
+orchestration, identity scopes, logging/monitoring, regulated controls, and regional recovery.
+Enterprise additions and illustrative IP allocations are labeled separately from baseline IaC.
 
 The architecture separates six responsibilities:
 

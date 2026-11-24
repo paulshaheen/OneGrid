@@ -1,7 +1,7 @@
 ---
 title: Multiregion architecture for OneGrid
 description: Design coordinated regional recovery for OneGrid App Service, Fabric data products, geospatial assets, Azure OpenAI, and Aurora weather inference.
-ms.date: 11/23/2026
+ms.date: 11/24/2026
 ms.topic: conceptual
 ---
 
@@ -16,10 +16,12 @@ journey rather than assigning one untested objective to the whole workload.
 
 ## Architecture
 
-[![OneGrid primary and recovery stamps use gated global ingress, region-specific dependencies, configured data recovery, and a single active forecast publisher.](../diagrams/onegrid-multiregion.png)](../diagrams/onegrid-multiregion.svg)
+[![Detailed primary and recovery stamps with Front Door managed private origins, separate regional app and job networks, dependency-specific recovery, item rebinding, validation gates, and single-publisher fencing.](../diagrams/onegrid-reference-multiregion.png)](../diagrams/onegrid-reference-multiregion.svg)
 
-[Download SVG](../diagrams/onegrid-multiregion.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+[Download SVG](../diagrams/onegrid-reference-multiregion.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[All nine technical sheets](../diagrams/onegrid-reference-gallery.html) |
+[Traffic and security contracts](traffic-and-security.md)
 
 Azure Front Door represents the global ingress implementation. Enable the recovery origin
 only after dependency and data acceptance passes. Dashed green paths represent explicitly

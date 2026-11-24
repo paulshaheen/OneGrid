@@ -232,5 +232,102 @@ class ArchitectureDiagramsTests(unittest.TestCase):
             diagrams.validate(scene)
 
 
+class DarkArchitectureDiagramsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scenes = diagrams.scenes(dark=True)
+        cls.generated = diagrams.outputs(dark=True)
+
+    def test_all_five_dark_views_validate(self):
+        self.assertEqual(len(self.scenes), 5)
+        for scene in self.scenes:
+            with self.subTest(scene=scene.name):
+                self.assertTrue(scene.dark)
+                self.assertTrue(scene.name.endswith("-dark"))
+                diagrams.validate(scene)
+
+    def test_light_architecture_relationships_are_preserved(self):
+        for light, dark in zip(diagrams.scenes(), self.scenes):
+            with self.subTest(scene=dark.name):
+                self.assertEqual(light.title, dark.title)
+                self.assertEqual(
+                    [(e.id, e.source, e.target, e.kind, e.dashed) for e in light.edges],
+                    [(e.id, e.source, e.target, e.kind, e.dashed) for e in dark.edges],
+                )
+                self.assertEqual(
+                    [(i.id, i.parent, i.text) for i in light.items if i.kind == "node"],
+                    [(i.id, i.parent, i.text) for i in dark.items if i.kind == "node"],
+                )
+
+    def test_full_service_descriptions_are_visible(self):
+        for scene in self.scenes:
+            items = {item.id: item for item in scene.items}
+            for node in (item for item in scene.items if item.kind == "node"):
+                with self.subTest(scene=scene.name, node=node.id):
+                    if node.text[1]:
+                        body = items[node.id + "-body"]
+                        self.assertEqual(" ".join(body.text), " ".join(node.text[1].split()))
+                        self.assertGreaterEqual(body.size, 13)
+
+    def test_dark_sources_are_current_and_deterministic(self):
+        self.assertEqual(self.generated, diagrams.outputs(dark=True))
+        for path, content in self.generated.items():
+            with self.subTest(path=path.name):
+                self.assertEqual(path.read_bytes(), content)
+
+    def test_dark_edge_labels_do_not_cover_service_cards(self):
+        for scene in self.scenes:
+            nodes = [item for item in scene.items if item.kind == "node"]
+            for label in (item for item in scene.items if item.kind == "edge-label"):
+                for node in nodes:
+                    with self.subTest(scene=scene.name, label=label.id, node=node.id):
+                        overlap = (
+                            max(label.x - 3, node.x) < min(label.x + label.w + 3, node.x + node.w)
+                            and max(label.y - 1, node.y) < min(label.y + label.h + 1, node.y + node.h)
+                        )
+                        self.assertFalse(overlap)
+
+    def test_dark_native_pages_have_locked_grid_and_editable_cards(self):
+        root = ET.fromstring(self.generated[diagrams.HERE / "onegrid-architecture-dark.drawio"])
+        self.assertEqual(len(root.findall("diagram")), 5)
+        for page, scene in zip(root.findall("diagram"), self.scenes):
+            self.assertEqual(page.find("mxGraphModel").attrib["background"], diagrams.DARK_BACKGROUND)
+            grid = page.find("mxGraphModel/root/mxCell[@id='page-grid']")
+            self.assertIn("locked=1;", grid.attrib["style"])
+            groups = {item.attrib["id"]: item for item in page.findall("mxGraphModel/root/object")}
+            for node in (item for item in scene.items if item.kind == "node"):
+                style = groups[node.id].find("mxCell").attrib["style"]
+                self.assertIn("container=1;", style)
+                self.assertIn("fillColor=", style)
+                self.assertNotIn("locked=1;", style)
+
+    def test_dark_svg_has_grid_and_official_icons(self):
+        for scene in self.scenes:
+            root = ET.fromstring(diagrams.svg(scene))
+            self.assertIsNotNone(root.find(".//" + SVG + "pattern"))
+            self.assertEqual(len(root.findall(SVG + "g/" + SVG + "polyline")), len(scene.edges))
+            for image in root.findall(".//" + SVG + "image"):
+                encoded = image.attrib["href"].split(",", 1)[1]
+                self.assertEqual(ET.fromstring(base64.b64decode(encoded)).tag, SVG + "svg")
+
+    def test_dark_gallery_links_all_views(self):
+        html = self.generated[diagrams.HERE / "onegrid-dark-gallery.html"].decode("utf-8")
+        self.assertNotIn("<script", html)
+        self.assertEqual(html.count("<section "), 5)
+        for target in re.findall(r'(?:href|src)="([^"]+)"', html):
+            if not target.startswith("#"):
+                with self.subTest(target=target):
+                    self.assertTrue((diagrams.HERE / target).is_file())
+
+    def test_dark_png_exports_cover_full_pages(self):
+        for scene in self.scenes:
+            with self.subTest(scene=scene.name):
+                data = (diagrams.HERE / (scene.name + ".png")).read_bytes()
+                self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+                width, height = struct.unpack(">II", data[16:24])
+                self.assertEqual(width, diagrams.WIDTH)
+                self.assertIn(height, (scene.height, scene.height + 1))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import copy
 from dataclasses import dataclass, field
 from hashlib import sha256
 from html import escape
@@ -24,6 +25,14 @@ COLORS = {
 }
 INK = "#172B4D"
 MUTED = "#43566B"
+DARK_BACKGROUND = "#10161D"
+DARK_COLORS = {
+    "request": "#63B9FF",
+    "data": "#70D997",
+    "control": "#FFB365",
+    "identity": "#C9A6FF",
+    "audit": "#AFBFCC",
+}
 
 
 def lines(value, width, size):
@@ -62,6 +71,7 @@ class Edge:
     points: tuple
     kind: str
     dashed: bool = False
+    caption: str = ""
 
 
 @dataclass
@@ -72,6 +82,8 @@ class Scene:
     height: int
     items: list = field(default_factory=list)
     edges: list = field(default_factory=list)
+    dark: bool = False
+    cards: bool = False
 
     def text(self, id, x, y, w, text, size=18, bold=False, parent="1", color=INK,
              align="left"):
@@ -137,7 +149,7 @@ class Scene:
                                    color=COLORS[kind])
             label_item.kind = "edge-label"
 
-    def decorate(self):
+    def decorate(self, icon_routes=True):
         self.text("page-title", 40, 28, WIDTH - 80, self.title, 36, True)
         self.text("page-description", 40, 88, WIDTH - 80, self.description, 21,
                   color=MUTED)
@@ -156,7 +168,7 @@ class Scene:
         self.text("page-footnote", 40, self.height - 38, WIDTH - 80,
                   "Arrowheads indicate the initiator of a request or the destination of data. "
                   "Optional components are labeled; dashed boundaries mark a separately controlled scope.", 16, color=MUTED)
-        return route_icons(self)
+        return route_icons(self) if icon_routes else self
 
 
 def logical():
@@ -559,8 +571,135 @@ def multiregion():
     return s.decorate()
 
 
-def scenes():
-    return [logical(), fabric(), enterprise(), regulated(), multiregion()]
+def scenes(dark=False):
+    result = [logical(), fabric(), enterprise(), regulated(), multiregion()]
+    return [dark_scene(scene) for scene in result] if dark else result
+
+
+def dark_scene(source):
+    return card_scene(source, dark=True)
+
+
+def card_scene(source, dark=False):
+    scene = copy.deepcopy(source)
+    if dark:
+        scene.name += "-dark"
+    scene.dark = dark
+    scene.cards = True
+    items = {item.id: item for item in scene.items}
+    nodes = [item for item in scene.items if item.kind == "node"]
+    node_ids = {node.id for node in nodes}
+    scene.items = [item for item in scene.items if item.parent not in node_ids]
+    palette = {INK: "#EDF5FF" if dark else INK, MUTED: "#B7C8DA" if dark else MUTED}
+    if dark:
+        palette.update({COLORS[kind]: color for kind, color in DARK_COLORS.items()})
+    for item in scene.items:
+        item.color = palette.get(item.color, item.color)
+        if item.id == "weather-read-label":
+            item.y = 811
+        elif item.id == "aurora-invoke-label":
+            item.x = 1178
+            item.w = 58
+        if item.kind == "scope" and dark:
+            item.fill = "#19232D" if item.parent == "1" else "#121B24"
+            item.stroke = "#3D85AF"
+    for node in nodes:
+        node.fill = "#0F171F" if dark else "#FFFFFF"
+        node.stroke = "#416780" if dark else "#6D8CA6"
+        node.dashed = "(optional)" in node.text[0]
+        icon = items.get(node.id + "-icon")
+        offset = 76 if icon else 14
+        width = node.w - offset - 14
+        title, body = node.text
+        for title_size, body_size in ((18, 15), (17, 14), (16, 13)):
+            heading = lines(title, width, title_size)
+            detail = lines(body, width, body_size) if body else ()
+            heading_height = len(heading) * (title_size + 5)
+            detail_height = len(detail) * (body_size + 5)
+            if 24 + heading_height + (5 + detail_height if body else 0) <= node.h:
+                break
+        else:
+            raise ValueError(f"{scene.name}/{node.id}: card text does not fit")
+        if icon:
+            scene.items.append(Item(node.id + "-icon", "icon", node.x + 14,
+                                    node.y + 14, 48, min(48, node.h - 28),
+                                    parent=node.id, icon=icon.icon))
+        scene.text(node.id + "-title", node.x + offset, node.y + 12, width,
+                   title, title_size, True, node.id, color=palette[INK])
+        if body:
+            scene.text(node.id + "-body", node.x + offset,
+                       node.y + 17 + heading_height, width, body, body_size,
+                       parent=node.id, color=palette[MUTED])
+
+    def trim(points, node):
+        for index, (a, b) in enumerate(zip(points, points[1:])):
+            if not (node.x <= b[0] <= node.x + node.w
+                    and node.y <= b[1] <= node.y + node.h):
+                if a[0] == b[0]:
+                    boundary = (a[0], node.y if b[1] < node.y else node.y + node.h)
+                else:
+                    boundary = (node.x if b[0] < node.x else node.x + node.w, a[1])
+                return [boundary, *points[index + 1:]]
+        raise ValueError(f"{scene.name}/{node.id}: connector never leaves card")
+
+    for edge in scene.edges:
+        points = trim(list(edge.points), items[edge.source])
+        edge.points = tuple(reversed(trim(list(reversed(points)), items[edge.target])))
+    return scene
+
+
+def grid_svg(height):
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{height}" '
+        f'viewBox="0 0 {WIDTH} {height}"><defs>'
+        '<pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">'
+        '<path d="M24,0 H0 V24" fill="none" stroke="#25313D" stroke-width="0.7"/>'
+        '</pattern></defs>'
+        f'<rect width="100%" height="100%" fill="{DARK_BACKGROUND}"/>'
+        '<rect width="100%" height="100%" fill="url(#grid)"/></svg>'
+    )
+
+
+def gallery(views):
+    labels = ("Baseline", "Fabric data and analytics", "Enterprise landing zone",
+              "Regulated workload", "Multiregion recovery")
+    rows = []
+    sections = []
+    for scene, label in zip(views, labels):
+        name = escape(scene.name)
+        rows.append(f'<tr><th scope="row"><a href="#{name}">{label}</a></th>'
+                    f'<td>{escape(scene.description)}</td></tr>')
+        sections.append(
+            f'<section id="{name}"><h2>{label}</h2><p>{escape(scene.description)}</p>'
+            f'<p><a href="{name}.svg">Open scalable diagram</a> | '
+            f'<a href="{name}.png">Open PNG</a></p>'
+            f'<a href="{name}.svg"><img src="{name}.svg" '
+            f'width="{WIDTH}" height="{scene.height}" alt="{escape(scene.title)}"></a>'
+            '<p><a href="#top">Back to configurations</a></p></section>'
+        )
+    return (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<title>OneGrid - dark architecture configurations</title><style>'
+        ':root{color-scheme:dark}html{scroll-behavior:smooth}'
+        'body{margin:0;background:#0C1117;color:#EDF5FF;font:16px/1.6 "Segoe UI",Arial,sans-serif}'
+        'main{max-width:1800px;margin:auto;padding:32px}h1{font-size:36px;margin:0 0 12px}'
+        'h2{font-size:28px}a{color:#63B9FF}a:focus-visible{outline:2px solid #FFB365}'
+        'table{width:100%;border-collapse:collapse;margin:28px 0}'
+        'th,td{border:1px solid #416780;padding:14px;text-align:left}'
+        'tr:nth-child(even){background:#19232D}section{margin:60px 0;scroll-margin-top:24px}'
+        'img{display:block;width:100%;height:auto;border:1px solid #416780;border-radius:8px}'
+        'p{color:#B7C8DA}@media(max-width:700px){main{padding:16px}h1{font-size:28px}}'
+        '</style></head><body><main id="top"><h1>OneGrid architecture configurations</h1>'
+        '<p>Dark, grid-backed views with official Microsoft icons, service details, '
+        'controlled boundaries, and labeled traffic flows. Click a diagram to inspect it at full size.</p>'
+        '<p><a href="onegrid-architecture-dark.drawio">Open the editable five-page draw.io document</a>'
+        ' | <a href="README.md">Diagram guide and light versions</a></p>'
+        '<table><thead><tr><th scope="col">Configuration</th>'
+        '<th scope="col">Design focus</th></tr></thead><tbody>'
+        + "".join(rows) + '</tbody></table>' + "".join(sections)
+        + '</main></body></html>\n'
+    )
 
 
 def route_icons(scene):
@@ -627,6 +766,7 @@ def image_data(icon, drawio=False):
 
 
 def svg(scene):
+    colors = DARK_COLORS if scene.dark else COLORS
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{scene.height}" '
         f'viewBox="0 0 {WIDTH} {scene.height}" role="img" aria-labelledby="title description">',
@@ -634,20 +774,24 @@ def svg(scene):
         f'<desc id="description">{escape(scene.description)}</desc>',
         '<defs>',
     ]
-    for kind, color in COLORS.items():
+    for kind, color in colors.items():
         out.append(f'<marker id="arrow-{kind}" markerWidth="10" markerHeight="8" refX="9" refY="4" '
                    f'orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,4 L0,8 Z" fill="{color}"/></marker>')
-    out.extend(['</defs>', '<rect width="100%" height="100%" fill="#FFFFFF"/>',
+    background = (grid_svg(scene.height) if scene.dark
+                  else '<rect width="100%" height="100%" fill="#FFFFFF"/>')
+    out.extend(['</defs>', background,
                 '<g font-family="Segoe UI,Arial,sans-serif">'])
     boxes = [item for item in scene.items if item.kind == "scope"]
     foreground = [item for item in scene.items if item.kind != "scope"]
     for item in boxes:
         out.append(rect_svg(item))
+    if scene.cards:
+        out.extend(rect_svg(item) for item in scene.items if item.kind == "node")
     for edge in scene.edges:
         points = " ".join(f"{x},{y}" for x, y in edge.points)
         dashed = edge.dashed or edge.kind in ("control", "identity", "audit")
         dash = ' stroke-dasharray="9 6"' if dashed else ""
-        out.append(f'<polyline id="{edge.id}" points="{points}" fill="none" stroke="{COLORS[edge.kind]}" '
+        out.append(f'<polyline id="{edge.id}" points="{points}" fill="none" stroke="{colors[edge.kind]}" '
                    f'stroke-width="2.5" stroke-linejoin="round"{dash} marker-end="url(#arrow-{edge.kind})"/>')
     for item in foreground:
         if item.kind == "node":
@@ -655,7 +799,7 @@ def svg(scene):
         elif item.kind in ("text", "edge-label"):
             if item.kind == "edge-label":
                 out.append(f'<rect x="{item.x - 3}" y="{item.y - 1}" width="{item.w + 6}" '
-                           f'height="{item.h + 2}" rx="3" fill="#FFFFFF" fill-opacity="0.96"/>')
+                           f'height="{item.h + 2}" rx="3" fill="{DARK_BACKGROUND if scene.dark else "#FFFFFF"}" fill-opacity="0.96"/>')
             text_x = item.x + item.w / 2 if item.align == "center" else item.x
             content = "".join(
                 f'<tspan x="{text_x:g}" y="{item.y + item.size + i * (item.size + 5)}">{escape(line)}</tspan>'
@@ -680,15 +824,28 @@ def rect_svg(item):
 
 
 def drawio_page(scene):
+    colors = DARK_COLORS if scene.dark else COLORS
+    background = DARK_BACKGROUND if scene.dark else "#FFFFFF"
     diagram = ET.Element("diagram", {"id": scene.name, "name": scene.title})
     model = ET.SubElement(diagram, "mxGraphModel", {
         "dx": str(WIDTH), "dy": str(scene.height), "grid": "1", "gridSize": "10",
         "guides": "1", "connect": "1", "page": "1", "pageScale": "1",
-        "pageWidth": str(WIDTH), "pageHeight": str(scene.height), "background": "#FFFFFF",
+        "pageWidth": str(WIDTH), "pageHeight": str(scene.height), "background": background,
     })
     root = ET.SubElement(model, "root")
     ET.SubElement(root, "mxCell", {"id": "0"})
     ET.SubElement(root, "mxCell", {"id": "1", "parent": "0"})
+    if scene.dark:
+        encoded = base64.b64encode(grid_svg(scene.height).encode("utf-8")).decode("ascii")
+        cell = ET.SubElement(root, "mxCell", {
+            "id": "page-grid", "parent": "1", "vertex": "1",
+            "style": "shape=image;imageAspect=0;locked=1;connectable=0;"
+                     f"image=data:image/svg+xml,{encoded};",
+        })
+        ET.SubElement(cell, "mxGeometry", {
+            "x": "0", "y": "0", "width": str(WIDTH),
+            "height": str(scene.height), "as": "geometry",
+        })
     items = {item.id: item for item in scene.items}
     for item in scene.items:
         style = "fontFamily=Segoe UI;html=1;whiteSpace=wrap;"
@@ -697,13 +854,18 @@ def drawio_page(scene):
             style += (f"rounded=1;arcSize=4;container=1;collapsible=0;fillColor={item.fill};"
                       f"strokeColor={item.stroke};strokeWidth=1.5;dashed={int(item.dashed)};")
         elif item.kind == "node":
-            style += "group;container=1;collapsible=0;"
+            if scene.cards:
+                style += (f"rounded=1;arcSize=5;container=1;collapsible=0;"
+                          f"fillColor={item.fill};strokeColor={item.stroke};"
+                          f"strokeWidth=1.5;dashed={int(item.dashed)};")
+            else:
+                style += "group;container=1;collapsible=0;"
         elif item.kind in ("text", "edge-label"):
             attrs["value"] = "<br>".join(escape(line) for line in item.text)
             style += (f"text;align={item.align};verticalAlign=top;spacing=0;fontSize={item.size};"
                       f"fontColor={item.color};fontStyle={int(item.bold)};")
             if item.kind == "edge-label":
-                style += "fillColor=#FFFFFF;"
+                style += f"fillColor={background};"
         elif item.kind == "icon":
             style += "shape=image;aspect=fixed;imageAspect=1;image=" + image_data(item.icon, True) + ";"
         elif item.kind == "swatch":
@@ -732,16 +894,20 @@ def drawio_page(scene):
         source, target = items[edge.source], items[edge.target]
         start, end = edge.points[0], edge.points[-1]
         style = (
-            f"edgeStyle=none;rounded=0;strokeColor={COLORS[edge.kind]};strokeWidth=2.5;"
+            f"edgeStyle=none;rounded=0;strokeColor={colors[edge.kind]};strokeWidth=2.5;"
             f"endArrow=block;endFill=1;dashed={int(edge.dashed or edge.kind in ('control', 'identity', 'audit'))};"
             f"exitX={(start[0] - source.x) / source.w:g};exitY={(start[1] - source.y) / source.h:g};"
             f"entryX={(end[0] - target.x) / target.w:g};entryY={(end[1] - target.y) / target.h:g};"
             "exitPerimeter=0;entryPerimeter=0;"
         )
-        cell = ET.SubElement(root, "mxCell", {
+        attributes = {
             "id": edge.id, "parent": "1", "edge": "1", "source": edge.source,
             "target": edge.target, "style": style,
-        })
+        }
+        if edge.caption:
+            attributes["value"] = edge.caption
+            attributes["style"] += f"fontFamily=Segoe UI;fontSize=14;fontColor={colors[edge.kind]};labelBackgroundColor={background};"
+        cell = ET.SubElement(root, "mxCell", attributes)
         geometry = ET.SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
         points = ET.SubElement(geometry, "Array", {"as": "points"})
         for x, y in edge.points[1:-1]:
@@ -776,8 +942,8 @@ def validate(scene):
                     and max(node.y, other.y) < min(node.y + node.h, other.y + other.h)):
                 raise ValueError(f"{scene.name}: overlapping nodes {node.id} and {other.id}")
     for edge in scene.edges:
-        source = items.get(edge.source + "-icon", items[edge.source])
-        target = items.get(edge.target + "-icon", items[edge.target])
+        source = items[edge.source] if scene.cards else items.get(edge.source + "-icon", items[edge.source])
+        target = items[edge.target] if scene.cards else items.get(edge.target + "-icon", items[edge.target])
         if not on_boundary(source, edge.points[0]) or not on_boundary(target, edge.points[-1]):
             raise ValueError(f"{scene.name}/{edge.id}: detached edge endpoint")
         for (x1, y1), (x2, y2) in zip(edge.points, edge.points[1:]):
@@ -797,30 +963,34 @@ def validate(scene):
     ET.fromstring(ET.tostring(drawio_page(scene)))
 
 
-def outputs():
+def outputs(dark=False):
     manifest = json.loads((HERE / "assets" / "manifest.json").read_text(encoding="utf-8"))
     for name, metadata in manifest["icons"].items():
         if sha256((HERE / "assets" / name).read_bytes()).hexdigest() != metadata["sha256"]:
             raise ValueError(f"Official icon changed: {name}")
     document = ET.Element("mxfile", {"host": "app.diagrams.net", "type": "device", "pages": "5"})
     result = {}
-    for scene in scenes():
+    views = scenes(dark)
+    for scene in views:
         validate(scene)
         content = svg(scene)
         result[HERE / (scene.name + ".svg")] = content.encode("utf-8")
         document.append(drawio_page(scene))
     ET.indent(document)
-    result[HERE / "onegrid-architecture.drawio"] = ET.tostring(document, encoding="utf-8", xml_declaration=True) + b"\n"
+    name = "onegrid-architecture-dark.drawio" if dark else "onegrid-architecture.drawio"
+    result[HERE / name] = ET.tostring(document, encoding="utf-8", xml_declaration=True) + b"\n"
+    if dark:
+        result[HERE / "onegrid-dark-gallery.html"] = gallery(views).encode("utf-8")
     return result
 
 
-def png_outputs(executable, document):
+def png_outputs(executable, document, dark=False):
     result = {}
     with tempfile.TemporaryDirectory(prefix="onegrid-drawio-") as directory:
         folder = Path(directory)
         source = folder / "onegrid-architecture.drawio"
         source.write_bytes(document)
-        for index, scene in enumerate(scenes(), 1):
+        for index, scene in enumerate(scenes(dark), 1):
             output = folder / (scene.name + ".png")
             subprocess.run([
                 str(executable), "--disable-update", "--export", "--format", "png",
@@ -839,12 +1009,14 @@ def main():
     parser.add_argument("--png", action="store_true", help="Render publication PNGs with draw.io Desktop.")
     parser.add_argument("--drawio", type=Path, help="Path to the draw.io Desktop executable (v27.0.2 or later).")
     parser.add_argument("--check", action="store_true", help="Validate and compare generated files without writing.")
+    parser.add_argument("--dark", action="store_true", help="Build dark grid-backed service-card views and gallery.")
     args = parser.parse_args()
     if args.png and (args.drawio is None or not args.drawio.is_file()):
         parser.error("--png requires --drawio with the path to a draw.io Desktop executable")
-    generated = outputs()
+    generated = outputs(args.dark)
     if args.png:
-        generated.update(png_outputs(args.drawio, generated[HERE / "onegrid-architecture.drawio"]))
+        name = "onegrid-architecture-dark.drawio" if args.dark else "onegrid-architecture.drawio"
+        generated.update(png_outputs(args.drawio, generated[HERE / name], args.dark))
     stale = []
     for path, content in generated.items():
         if args.check:

@@ -1,7 +1,7 @@
 ---
 title: Deploy OneGrid in an enterprise Azure landing zone
 description: Integrate OneGrid application, Fabric data products, geospatial services, and AI workloads with enterprise identity, networking, security, and governance.
-ms.date: 11/23/2026
+ms.date: 11/24/2026
 ms.topic: conceptual
 ---
 
@@ -19,10 +19,12 @@ organization's network, governance, and environment-delivery configuration.
 
 ## Architecture
 
-[![OneGrid enterprise networking separates Application Gateway ingress, the App Service private endpoint, outbound VNet integration, dependency private endpoints, hub DNS, and firewall egress. Fabric and PaaS compute remain service-hosted.](../diagrams/onegrid-enterprise-landing-zone.png)](../diagrams/onegrid-enterprise-landing-zone.svg)
+[![Detailed OneGrid enterprise blueprint with separate delegated subnets, per-service private endpoint NICs, independent job networking, DNS endpoints, firewall routes, and service-hosted compute. Example CIDRs are design allocations.](../diagrams/onegrid-reference-enterprise.png)](../diagrams/onegrid-reference-enterprise.svg)
 
-[Download SVG](../diagrams/onegrid-enterprise-landing-zone.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+[Download SVG](../diagrams/onegrid-reference-enterprise.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[DNS detail](../diagrams/onegrid-reference-dns.png) |
+[Traffic and security contracts](traffic-and-security.md)
 
 This implementation adds Application Gateway WAF, private endpoints, network integration,
 DNS, and platform egress configuration to the OneGrid deployment. Each dependency has its

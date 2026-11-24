@@ -1,7 +1,7 @@
 ---
 title: Data and analytics architecture for OneGrid in Microsoft Fabric
 description: Configure OneGrid ingestion, real-time analytics, asset models, predictive workflows, semantic queries, and data governance in Microsoft Fabric.
-ms.date: 11/23/2026
+ms.date: 11/24/2026
 ms.topic: conceptual
 ---
 
@@ -16,10 +16,12 @@ paths to weather exposure and the digital twin.
 
 ## Architecture
 
-[![OneGrid Fabric ingestion, Lakehouse processing, SQL-backed Import refresh, ontology binding, and application query paths.](../diagrams/onegrid-fabric.png)](../diagrams/onegrid-fabric.svg)
+[![Detailed Fabric architecture separating connector authentication, processed ingestion, Lakehouse scoring, TDS refresh, DAX and KQL serving, native ontology, Data Agent grounding, and the optional authenticated source connection.](../diagrams/onegrid-reference-fabric.png)](../diagrams/onegrid-reference-fabric.svg)
 
-[Download SVG](../diagrams/onegrid-fabric.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-architecture.drawio)
+[Download SVG](../diagrams/onegrid-reference-fabric.svg) |
+[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[Identity detail](../diagrams/onegrid-reference-identity.png) |
+[Traffic and security contracts](traffic-and-security.md)
 
 The Eventhouse boxes distinguish landing/curation from its query endpoint. The Lakehouse
 and SQL analytics endpoint are two surfaces of the same analytical data. Real-time and
