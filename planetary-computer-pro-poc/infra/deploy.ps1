@@ -7,12 +7,13 @@
      + Eventstream + all notebooks + pipeline
    * Loads the bundled historical data (Lakehouse Delta tables + Eventhouse PiEvents)
    * An Import semantic model (SQL endpoint) + report, refreshed via a fixed-identity SP
-   * An Azure AI Foundry account + model deployments (model selector backend)
-   * The chat agent on Azure Container Apps (managed identity, no GitHub token)
+   * A Microsoft Foundry account + model deployments (model selector backend)
+   * The chat/report web app on Azure App Service, running the prebuilt package
+     (managed identity, no GitHub token)
    * All required identity grants
 
- Prerequisites: az CLI logged in (az login), an EXISTING Fabric capacity, and the
- containerapp az extension (auto-installed). Fill config.json (see config.sample.json).
+ Prerequisites: az CLI logged in (az login) and an EXISTING Fabric capacity.
+ Fill config.json (see config.sample.json).
 
  Usage:   ./deploy.ps1 -ConfigPath ./config.json
           ./deploy.ps1 -ConfigPath ./config.json -Only foundry,chatagent   # subset
@@ -1052,7 +1053,10 @@ function Phase-ChatAgent {
   }
   # Aurora weather inference card: point the Explorer at the ARM-provisioned scoring endpoint.
   if ($cfg.pcp -and $cfg.pcp.auroraEndpoint) { $envVars += "AURORA_ENDPOINT=$($cfg.pcp.auroraEndpoint)" }
-  if ($cfg.pcp -and $cfg.pcp.auroraDeployed) { $envVars += "AURORA_MODEL_DEPLOYED=$($cfg.pcp.auroraDeployed)" }
+  # ARM renders string(bool) as "True"/"False"; the app reads a lowercase "true", so normalise here.
+  if ($cfg.pcp -and $null -ne $cfg.pcp.auroraDeployed -and "$($cfg.pcp.auroraDeployed)" -ne '') {
+    $envVars += "AURORA_MODEL_DEPLOYED=$("$($cfg.pcp.auroraDeployed)".Trim().ToLowerInvariant())"
+  }
   # Lets the Deployment page's "Run Aurora forecast now" button start the same scheduled
   # Container Apps Job the cron trigger runs, via the app identity's Container Apps Jobs
   # Operator grant (main.bicep chatAgentAuroraJobOperator) - no separate credentials needed.

@@ -3,7 +3,7 @@
 A **turnkey Azure environment** for exploring
 [Microsoft Planetary Computer Pro](https://github.com/Azure/microsoft-planetary-computer-pro):
 a single **Deploy to Azure** button stands up a **GeoCatalog**, optional sample storage with
-a scoped managed identity, an optional GeoAI **model plane** (Azure OpenAI + the Aurora
+a scoped managed identity, an optional GeoAI **model plane** (a Microsoft Foundry model + the Aurora
 weather model), and an optional **web app** running on **Azure App Service (Linux, Node)**
 that signs in with your Microsoft Entra identity and lets you browse, ingest, and visualize
 your geospatial data.
@@ -24,7 +24,7 @@ What the button deploys (pick the complete environment or only what you need):
   workflows against your GeoCatalog,
 - an optional **sample-data storage account + user-assigned managed identity** for the secure
   managed-identity ingestion path (bring your own data),
-- an optional **AI agent**, an **Azure OpenAI (Microsoft Foundry)** account + GPT model
+- an optional **AI agent**, a **Microsoft Foundry** account + GPT model
   deployment (`gpt-5-mini` by default) for agentic / reasoning GeoAI scenarios against the
   GeoCatalog, key-less via managed identity, and
 - an optional **Aurora weather model** on a **Foundry (Azure ML) GPU managed-compute
@@ -80,14 +80,14 @@ into the GeoCatalog (the enterprise STAC catalog), which then feeds downstream a
 models, using this POC's concrete components (every box is an Azure resource this template
 provisions in your subscription; the AI agent and Aurora are optional):
 
-[![Logical architecture for the Planetary Computer Pro POC: public and private data ingest into a GeoCatalog inside your Azure subscription, which feeds the optional Microsoft Foundry GeoAI models (Azure OpenAI agent and Aurora) and the web app.](deploy/azure/media/logical-architecture.png)](deploy/azure/media/logical-architecture.png)
+[![Logical architecture for the Planetary Computer Pro POC: public and private data ingest into a GeoCatalog inside your Azure subscription, which feeds the optional Microsoft Foundry GeoAI models (the AI agent and Aurora) and the web app.](deploy/azure/media/logical-architecture.png)](deploy/azure/media/logical-architecture.png)
 
 ```mermaid
 flowchart LR
     U[You<br/>Microsoft Entra sign-in] -->|HTTPS| APP[Web app<br/>Azure App Service - Node SSR]
     APP -->|managed identity| GC[(GeoCatalog<br/>STAC / Tiler / ingestion)]
     APP -->|managed identity| SA[Sample storage<br/>model outputs]
-    APP -->|managed identity| FDN[Foundry<br/>Azure OpenAI agent]
+    APP -->|managed identity| FDN[Microsoft Foundry<br/>AI agent]
     APP -->|managed identity| AUR[Aurora<br/>GPU endpoint]
     GC --> APP
 ```
@@ -103,14 +103,14 @@ is the **model plane**:
   (authenticated with Microsoft Entra ID / managed identity) to pull imagery and metadata, and
   passes it to a GeoAI model hosted in Foundry (discriminative models like land classification
   and object detection, foundation models like Aurora for weather, or reasoning/agentic
-  workflows on Azure OpenAI).
+  workflows on Microsoft Foundry models).
 - **Model outputs**: the model's results (e.g., a land-cover raster or detected features) are
   written back to Azure Blob Storage as STAC items and **ingested into the GeoCatalog** through
   the same managed-identity ingestion path this POC sets up, so outputs become first-class,
   searchable layers alongside the source imagery.
 
 This POC deploys the data plane (the GeoCatalog + ingestion) **and, optionally, the model
-plane**: selecting the **AI agent** component provisions an Azure OpenAI (Foundry) account +
+plane**: selecting the **AI agent** component provisions a Microsoft Foundry account +
 GPT deployment (key-less via managed identity), and selecting the **Aurora weather model**
 component provisions a Foundry (Azure ML) workspace + GPU managed-compute endpoint, with the
 GPU model deployment gated behind a model asset ID + quota so it never hard-fails.
@@ -133,7 +133,7 @@ assumes you already have the Azure infrastructure. This repo fills that gap:
 | A **place to explore the data** | A web app on Azure App Service (Entra sign-in, STAC browse, tile map, ingest/GeoAI workflows) |
 | **Blob storage** for assets/outputs | Sample storage account + container |
 | An **identity** wired to the GeoCatalog | Managed identities with data-plane roles, associated to the GeoCatalog |
-| A **model plane** to run GeoAI | Optional Azure OpenAI (Foundry) agent + optional Aurora GPU Foundry endpoint |
+| A **model plane** to run GeoAI | Optional Microsoft Foundry agent + optional Aurora GPU Foundry endpoint |
 
 Net effect: one **Deploy to Azure** button turns a set of prerequisites and a manual setup
 guide into a ready-to-run environment, without forking or duplicating Microsoft's code, so
@@ -147,7 +147,7 @@ their samples stay the source of truth.
 | `Microsoft.Web` | The web app (App Service plan + site) |
 | `Microsoft.Storage` | Sample-data storage account |
 | `Microsoft.ManagedIdentity` | Ingestion managed identity |
-| `Microsoft.CognitiveServices` | Azure OpenAI (Foundry) agent (optional) |
+| `Microsoft.CognitiveServices` | Microsoft Foundry agent (optional) |
 | `Microsoft.MachineLearningServices` | Aurora Foundry workspace + GPU endpoint (optional) |
 | `Microsoft.KeyVault` | Backing key vault for the Aurora Foundry workspace (optional) |
 | `Microsoft.Insights` | Application Insights dependency for the Aurora Foundry workspace (optional) |

@@ -1119,7 +1119,8 @@ export const getDataPlaneStatus = createServerFn({ method: "GET" }).handler(
       geoCatalogConfigured: Boolean(geoCatalogUrl),
       uploadConfigured: Boolean(uploadContainerUrl),
       auroraEndpointConfigured: Boolean(process.env["AURORA_ENDPOINT"]),
-      auroraModelDeployed: process.env["AURORA_MODEL_DEPLOYED"] === "true",
+      // ARM's string(bool) yields "True"/"False", so compare case-insensitively.
+      auroraModelDeployed: (process.env["AURORA_MODEL_DEPLOYED"] ?? "").trim().toLowerCase() === "true",
       auroraAdapterConnected,
       geoCatalogLive,
       foundryLive,

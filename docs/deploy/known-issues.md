@@ -1,7 +1,7 @@
 ---
 title: Known issues for OneGrid deployments
 description: Current limitations and inconsistencies in the OneGrid template, portal form, provisioner, and documentation, with their impact, workarounds, and status.
-ms.date: 11/24/2026
+ms.date: 11/25/2026
 ms.topic: troubleshooting-known-issue
 ---
 
@@ -20,7 +20,9 @@ from, its effect on a deployment, a workaround, and a status:
 - **Verify:** The code and the documentation disagree, or the effect depends on your
   environment. Confirm it before you rely on either.
 
-For problems with a known fix, see [Troubleshooting](troubleshooting.md).
+For problems with a known fix, see [Troubleshooting](troubleshooting.md). For issues that are
+now fixed in the code, and what an earlier deployment needs, see
+[Fixed in the repository](#fixed-in-the-repository).
 
 | Issue | Area | Status |
 | --- | --- | --- |
@@ -32,14 +34,8 @@ For problems with a known fix, see [Troubleshooting](troubleshooting.md).
 | [The provisioner sets tags on the resource group](#the-provisioner-sets-tags-on-the-resource-group) | Provisioning | Verify |
 | [Deleting the resource group leaves Fabric and directory objects](#deleting-the-resource-group-leaves-fabric-and-directory-objects) | Lifecycle | By design |
 | [The region list applies without GeoCatalog](#the-region-list-applies-without-geocatalog) | Template | Open |
-| [Portal and template text describe a Container App](#portal-and-template-text-describe-a-container-app) | Portal form | Open |
-| [Forecast job text asks for a prebuilt image](#forecast-job-text-asks-for-a-prebuilt-image) | Portal form | Open |
-| [Fabric plane text says an existing capacity is required](#fabric-plane-text-says-an-existing-capacity-is-required) | Portal form | Open |
-| [The historical data seed is preselected](#the-historical-data-seed-is-preselected) | Portal form | Open |
 | [Portal and template defaults differ](#portal-and-template-defaults-differ) | Portal form | By design |
-| [Larger Fabric SKUs are command-line only](#larger-fabric-skus-are-command-line-only) | Portal form | Open |
 | [Sign-in wiring can't be turned off in the portal](#sign-in-wiring-cant-be-turned-off-in-the-portal) | Portal form | Open |
-| [The Deployment page can report the Aurora model as missing](#the-deployment-page-can-report-the-aurora-model-as-missing) | Application | Verify |
 | [A pre-created sign-in registration needs its redirect URI](#a-pre-created-sign-in-registration-needs-its-redirect-uri) | Provisioning | By design |
 | [Studio shared quota isn't available to the template](#studio-shared-quota-isnt-available-to-the-template) | Aurora | By design |
 | [The deploy wizard doesn't create GeoCatalog, Aurora, or the forecast job](#the-deploy-wizard-doesnt-create-geocatalog-aurora-or-the-forecast-job) | Deploy wizard | By design |
@@ -172,68 +168,13 @@ filters regions by GeoCatalog availability. The restriction applies even when
 
 ## Portal form
 
-### Portal and template text describe a Container App
-
-The web app runs on App Service: the template declares an App Service plan and web app
-(`chatAgentPlan`, `chatAgentSite`), which mount the prebuilt `onegrid-app.zip` with
-`WEBSITE_RUN_FROM_PACKAGE`; no server-side build runs. Several texts still describe an earlier
-design:
-
-- The portal option **OneGrid web app (AI Foundry + chat/report)** says it deploys a "chat/report
-  Container App (built from source via ACR)".
-- The `deployOneGridApp` description, and the `oneGridAppEnabled` output description, say
-  "Container App".
-- The `oneGridAppUrl` output description says the app serves after "the first Oryx build".
-- The provisioner's header comment says the chat agent runs on Azure Container Apps.
-
-- **Workaround:** None needed for the deployment. Use App Service for operations, monitoring,
-  and network planning.
-- **Status:** Open.
-- **Source:** [`createUiDefinition.json`](../../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json);
-  [`main.bicep`](../../planetary-computer-pro-poc/deploy/azure/main.bicep);
-  [`deploy.ps1`](../../planetary-computer-pro-poc/infra/deploy.ps1).
-
-### Forecast job text asks for a prebuilt image
-
-The portal option **Aurora scheduled forecast job (Container Apps)** says the job needs "a
-prebuilt pipeline image", and the job section's information box says to build the image after
-you deploy. The template builds the image itself: the deployment script
-`pcpro-aurora-image-build` runs `az acr build` before the job is created.
-
-- **Workaround:** Leave **Custom pipeline image (optional override)** blank. Use the
-  `auroraImageBuildCommand` output only to rebuild the image.
-- **Status:** Open.
-- **Source:** [`createUiDefinition.json`](../../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json);
-  [`main.bicep`](../../planetary-computer-pro-poc/deploy/azure/main.bicep) (`auroraImageBuild`).
-
-### Fabric plane text says an existing capacity is required
-
-The portal option **OneGrid Fabric plane (OneLake + hazard join)** and the `deployFabricPlane`
-description say the Fabric plane requires an existing Fabric capacity. The template can create
-one: `createFabricCapacity`.
-
-- **Workaround:** Check **Create a new Fabric capacity for me**, or set `createFabricCapacity` to
-  `true`.
-- **Status:** Open.
-- **Source:** [`createUiDefinition.json`](../../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json);
-  [`main.bicep`](../../planetary-computer-pro-poc/deploy/azure/main.bicep) (`deployFabricPlane`).
-
-### The historical data seed is preselected
-
-The portal option **OneGrid historical data seed (large)** says it's off by default, but the
-form preselects it. The template default, `deployOneGridData`, is `false`. Seeding downloads
-hundreds of megabytes and adds deployment time.
-
-- **Workaround:** Clear the option when you don't need the demo dataset.
-- **Status:** Open.
-- **Source:** [`createUiDefinition.json`](../../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json)
-  (`steps('components').selected` default).
-
 ### Portal and template defaults differ
 
 With every default kept, the portal deploys the Fabric plane, the web app, and the data seed,
 and creates the storage connection. The template's defaults leave all four off, so a
-command-line deployment with few parameters deploys much less than the portal.
+command-line deployment with few parameters deploys much less than the portal. The data seed
+downloads hundreds of megabytes and adds deployment time; clear **OneGrid historical data seed
+(large)** in the form when you don't need the demo dataset.
 
 - **Workaround:** Start from a [parameter file](../../planetary-computer-pro-poc/deploy/azure/parameters/README.md).
   `baseline-required` reproduces the portal's component selection. The
@@ -242,16 +183,6 @@ command-line deployment with few parameters deploys much less than the portal.
 - **Status:** By design.
 - **Source:** [`createUiDefinition.json`](../../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json);
   [`main.bicep`](../../planetary-computer-pro-poc/deploy/azure/main.bicep).
-
-### Larger Fabric SKUs are command-line only
-
-The template accepts `F2` through `F2048` for `fabricCapacitySku`. The portal form's
-**New Fabric capacity SKU** list stops at `F256`.
-
-- **Workaround:** Deploy from the [command line](deploy-cli.md) for `F512`, `F1024`, or `F2048`.
-- **Status:** Open.
-- **Source:** [`createUiDefinition.json`](../../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json);
-  [`main.bicep`](../../planetary-computer-pro-poc/deploy/azure/main.bicep) (`fabricCapacitySku`).
 
 ### Sign-in wiring can't be turned off in the portal
 
@@ -265,21 +196,6 @@ supply; it doesn't turn off sign-in wiring.
   (`outputs.enableEntraSignIn`).
 
 ## Application and Aurora
-
-### The Deployment page can report the Aurora model as missing
-
-The template passes `string(deployAuroraDeployment)` to the provisioner, which writes it to the
-web app's `AURORA_MODEL_DEPLOYED` setting. Azure Resource Manager renders a Boolean as `True` or
-`False`, and the app treats the model as deployed only when the setting equals lowercase
-`true`. The Deployment page can then show **Model required** after the GPU deployment
-succeeded.
-
-- **Workaround:** Use the `auroraModelDeployed` deployment output and the endpoint in Azure
-  Machine Learning studio as the source of truth.
-- **Status:** Verify.
-- **Source:** [`main.bicep`](../../planetary-computer-pro-poc/deploy/azure/main.bicep)
-  (`PCP_AURORA_DEPLOYED`); [`deploy.ps1`](../../planetary-computer-pro-poc/infra/deploy.ps1)
-  (`Phase-ChatAgent`); `OGE-OneGrid/webapp/src/lib/services/azure/server.ts`.
 
 ### A pre-created sign-in registration needs its redirect URI
 
@@ -347,6 +263,23 @@ disabled and sends nothing, and the in-template wrapper also sets `telemetry.ena
 - **Status:** Open.
 - **Source:** [`config.sample.json`](../../planetary-computer-pro-poc/infra/config.sample.json);
   [`deploy.ps1`](../../planetary-computer-pro-poc/infra/deploy.ps1) (`Send-Telemetry`).
+
+## Fixed in the repository
+
+These issues are fixed in the repository's code. A deployment gets a fix only when it runs code
+that contains the fix. The deployment scripts clone the provisioner from `oneGridRef`, and the
+web app runs the package at `oneGridAppPackageUrl`. An environment deployed before a fix keeps
+the old behavior until you redeploy it from a ref and a package that include the fix.
+
+| Issue | Fix | Earlier deployments |
+| --- | --- | --- |
+| The Deployment page could show **Model required** after the Aurora GPU deployment succeeded. Azure Resource Manager renders `string(true)` as `True`, and the app accepted only lowercase `true` in `AURORA_MODEL_DEPLOYED`. | The provisioner writes the setting in lowercase, and the app compares it case-insensitively. | Redeploy, or move the web app to a package built from the fixed code. Until then, use the `auroraModelDeployed` output and the endpoint in Azure Machine Learning studio. |
+| Portal, template, and provisioner text described the web app as a Container App built from source, with an Oryx build. | The text describes the App Service web app that runs the prebuilt package. | No action needed. |
+| The portal said the forecast job needs a prebuilt pipeline image, and to build it after you deploy. | The text says the template builds the image during the deployment, and that `auroraImageBuildCommand` rebuilds it. | No action needed. |
+| The portal and `deployFabricPlane` said the Fabric plane needs an existing Fabric capacity. | The text names both choices: an existing capacity, or a new one with `createFabricCapacity`. | No action needed. |
+| The data seed option said it was off by default, but the form preselects it. | The text says the form selects the option by default. | No action needed. |
+| The portal's **New Fabric capacity SKU** list stopped at `F256`. | The list offers `F2` through `F2048`, the same range as the template. | No action needed. |
+| Portal and template text used an earlier name for the model service. | The text names Microsoft Foundry throughout. | No action needed. |
 
 ## Next steps
 

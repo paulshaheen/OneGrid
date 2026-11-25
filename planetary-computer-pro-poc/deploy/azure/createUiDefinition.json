@@ -6,7 +6,7 @@
     "config": {
       "isWizard": false,
       "basics": {
-        "description": "Deploy OneGrid on Azure: choose any of a Microsoft Planetary Computer Pro **GeoCatalog**, sample-data storage, an Azure OpenAI (Microsoft Foundry) agent, the Microsoft Aurora weather model on a GPU Foundry endpoint, and the **OneGrid web app** (Fabric plane + chat/report web app). [Learn more](https://github.com/paulshaheen/OneGrid).",
+        "description": "Deploy OneGrid on Azure: choose any of a Microsoft Planetary Computer Pro **GeoCatalog**, sample-data storage, a Microsoft Foundry AI agent, the Microsoft Aurora weather model on a GPU Foundry endpoint, and the **OneGrid web app** (Fabric plane + chat/report web app). [Learn more](https://github.com/paulshaheen/OneGrid).",
         "location": {
           "label": "Region",
           "toolTip": "GeoCatalog is available in these regions during Preview.",
@@ -92,9 +92,9 @@
                   "description": "Storage account and managed identity for the bring-your-own-data ingestion path."
                 },
                 {
-                  "label": "AI agent (Azure OpenAI / Foundry)",
+                  "label": "AI agent (Microsoft Foundry)",
                   "value": "aiAgent",
-                  "description": "Azure OpenAI account + GPT deployment for agentic / reasoning GeoAI scenarios."
+                  "description": "Microsoft Foundry account and model deployment (gpt-5-mini by default) for agentic and reasoning GeoAI scenarios."
                 },
                 {
                   "label": "Aurora weather model (GPU Foundry endpoint)",
@@ -104,22 +104,22 @@
                 {
                   "label": "Aurora scheduled forecast job (Container Apps)",
                   "value": "auroraSchedule",
-                  "description": "Azure Container Apps Job that runs the Aurora forecast pipeline every 6 hours and publishes weather-events.json, keeping the map live without manual runs. Requires the Aurora weather model + sample storage, plus a prebuilt pipeline image."
+                  "description": "Azure Container Apps Job that runs the Aurora forecast pipeline every 6 hours and publishes weather-events.json, keeping the map live without manual runs. Requires the Aurora weather model + sample storage. The template builds the pipeline image into its own registry during deployment."
                 },
                 {
                   "label": "OneGrid Fabric plane (OneLake + hazard join)",
                   "value": "fabricPlane",
-                  "description": "Provisions OneGrid's Microsoft Fabric operational plane in-template: a Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join + composite-risk tables, and (when a connection id is supplied) a OneLake shortcut to the model-outputs container. Runs OneGrid deploy.ps1 headless from the deployment as a user-assigned identity. Requires sample storage and an existing Fabric capacity."
+                  "description": "Provisions OneGrid's Microsoft Fabric operational plane in-template: a Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join + composite-risk tables, and (when a connection id is supplied) a OneLake shortcut to the model-outputs container. Runs OneGrid deploy.ps1 headless from the deployment as a user-assigned identity. Requires sample storage and a Fabric capacity: an existing one, or a new F-SKU capacity the template creates."
                 },
                 {
-                  "label": "OneGrid web app (AI Foundry + chat/report)",
+                  "label": "OneGrid web app (Microsoft Foundry + chat/report)",
                   "value": "oneGridApp",
-                  "description": "Stands up the OneGrid web application into this resource group: the AI Foundry account (reused from the AI agent when selected) and the chat/report Container App (built from source via ACR). Requires the OneGrid Fabric plane. The Fabric-plane identity is granted Owner on THIS resource group so the provisioner can create the resources and assign the app's data-plane roles."
+                  "description": "Stands up the OneGrid web application into this resource group: the Microsoft Foundry account (reused from the AI agent when selected) and an App Service web app that runs the prebuilt OneGrid package from private storage. Requires the OneGrid Fabric plane. The Fabric-plane identity is granted Owner on THIS resource group so the provisioner can create the resources and assign the app's data-plane roles."
                 },
                 {
                   "label": "OneGrid historical data seed (large)",
                   "value": "oneGridData",
-                  "description": "Seeds the full OneGrid historical demo dataset into the lakehouse/eventhouse, cloud-seeded from the public release bundle (hundreds of MB, adds deployment time). Off by default. Requires the OneGrid Fabric plane."
+                  "description": "Seeds the full OneGrid historical demo dataset into the lakehouse/eventhouse, cloud-seeded from the public release bundle (hundreds of MB, adds deployment time). Selected by default in this form; clear it to skip the download. Requires the OneGrid Fabric plane."
                 }
               ]
             }
@@ -179,7 +179,7 @@
             "visible": "[and(contains(steps('modules').selected, 'copilot'), not(contains(steps('components').selected, 'aiAgent')))]",
             "options": {
               "icon": "Warning",
-              "text": "Copilot chat needs the AI agent (Azure OpenAI / Foundry) component. Select it on the Components step, or the chat will not be able to answer."
+              "text": "Copilot chat needs the AI agent (Microsoft Foundry) component. Select it on the Components step, or the chat will not be able to answer."
             }
           },
           {
@@ -263,7 +263,7 @@
           {
             "name": "aiAgentSection",
             "type": "Microsoft.Common.Section",
-            "label": "AI agent (Azure OpenAI / Foundry)",
+            "label": "AI agent (Microsoft Foundry)",
             "visible": "[contains(steps('components').selected, 'aiAgent')]",
             "elements": [
               {
@@ -271,7 +271,7 @@
                 "type": "Microsoft.Common.TextBox",
                 "label": "Model deployment name",
                 "defaultValue": "gpt-5-mini",
-                "toolTip": "Name of the Azure OpenAI model deployment.",
+                "toolTip": "Name of the Microsoft Foundry model deployment.",
                 "constraints": {
                   "required": true,
                   "regex": "^[a-zA-Z0-9._-]{2,64}$",
@@ -339,7 +339,7 @@
                 "visible": true,
                 "options": {
                   "icon": "Info",
-                  "text": "Runs the Aurora pipeline as a scheduled Container Apps Job so the map stays live without manual runs. The template provisions a dedicated Azure Container Registry and grants the job pull access automatically — you don't manage a registry. It needs the Aurora weather model (the GPU endpoint) and sample storage selected too. After deploying, build the image into the registry once (the exact command is in the deployment outputs, auroraImageBuildCommand): az acr build -r <registry> -t aurora-pipeline:latest aurora."
+                  "text": "Runs the Aurora pipeline as a scheduled Container Apps Job so the map stays live without manual runs. The template provisions a dedicated Azure Container Registry and grants the job pull access automatically — you don't manage a registry. It needs the Aurora weather model (the GPU endpoint) and sample storage selected too. The template builds the pipeline image into that registry during deployment; the auroraImageBuildCommand output gives the command to rebuild it after you change the pipeline code."
                 }
               },
               {
@@ -398,7 +398,7 @@
             "visible": "[contains(steps('components').selected, 'fabricPlane')]",
             "options": {
               "icon": "Info",
-              "text": "The OneGrid Fabric plane is provisioned in-template: during deployment, OneGrid deploy.ps1 runs headless as a user-assigned identity to create the Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join, and (with a connection id) the OneLake shortcut to model-outputs. Prerequisites: the Fabric tenant setting 'Service principals can create workspaces, connections, and deployment pipelines' must be ON. A Fabric workspace cannot be created without a capacity: either let the template create a new F-SKU capacity below, or supply an existing capacity (F-SKU or Trial) that the deployment identity administers. If 'OneGrid web app' is also selected, the AI Foundry account and chat/report Container App are created in this resource group too."
+              "text": "The OneGrid Fabric plane is provisioned in-template: during deployment, OneGrid deploy.ps1 runs headless as a user-assigned identity to create the Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join, and (with a connection id) the OneLake shortcut to model-outputs. Prerequisites: the Fabric tenant setting 'Service principals can create workspaces, connections, and deployment pipelines' must be ON. A Fabric workspace cannot be created without a capacity: either let the template create a new F-SKU capacity below, or supply an existing capacity (F-SKU or Trial) that the deployment identity administers. If 'OneGrid web app' is also selected, the Microsoft Foundry account and the App Service web app are created in this resource group too."
             }
           },
           {
@@ -432,7 +432,10 @@
                 { "label": "F32", "value": "F32" },
                 { "label": "F64", "value": "F64" },
                 { "label": "F128", "value": "F128" },
-                { "label": "F256", "value": "F256" }
+                { "label": "F256", "value": "F256" },
+                { "label": "F512", "value": "F512" },
+                { "label": "F1024", "value": "F1024" },
+                { "label": "F2048", "value": "F2048" }
               ],
               "required": false
             },

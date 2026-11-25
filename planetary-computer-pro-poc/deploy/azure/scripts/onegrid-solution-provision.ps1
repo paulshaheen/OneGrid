@@ -4,8 +4,8 @@
  (Microsoft.Resources/deploymentScripts, kind = AzurePowerShell).
 ================================================================================
  The Fabric operational plane (workspace/lakehouse/eventhouse/KQL/eventstream/
- notebooks/pipeline/semantic model/report), the AI Foundry account, and the
- chat/web-app Container App are NOT ARM resource types. Instead of re-porting that
+ notebooks/pipeline/semantic model/report) is NOT made of ARM resource types, and the
+ Foundry account and web app need settings derived from it. Instead of re-porting that
  logic, this script stands them up by running OneGrid's own battle-tested
  orchestrator (planetary-computer-pro-poc/infra/deploy.ps1) headless, under the
  deployment's user-assigned managed identity, wired to the PCP backend this template built.
@@ -137,7 +137,7 @@ Log "orchestrator: $deployScript"
 
 # --- 4. Compose config.json from ARM params + PCP outputs -------------------------
 $rg = $env:TARGET_RESOURCE_GROUP
-$reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if PCP already deployed Azure OpenAI, reuse it
+$reuseFoundry = [bool]$env:PCP_OPENAI_ENDPOINT   # if the template already deployed a Foundry account, reuse it
 [object[]]$foundryModels = if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) {
   @([ordered]@{ deployment = $env:PCP_OPENAI_DEPLOYMENT; model = $env:PCP_OPENAI_DEPLOYMENT; format = 'OpenAI' })
 } else {
@@ -180,7 +180,7 @@ $cfg = [ordered]@{
   }
   foundry = [ordered]@{
     resourceGroup = $rg
-    # When reusing the template's Azure OpenAI account, wire the app to that account and its
+    # When reusing the template's Microsoft Foundry account, wire the app to that account and its
     # actual model deployment (otherwise the app asks for a gpt-4o deployment that doesn't exist).
     accountName   = $(if ($reuseFoundry -and $env:PCP_OPENAI_ACCOUNT_ID) { ($env:PCP_OPENAI_ACCOUNT_ID -split '/')[-1] } else { "$($env:NAME_PREFIX)-foundry" })
     defaultModel  = $(if ($reuseFoundry -and $env:PCP_OPENAI_DEPLOYMENT) { $env:PCP_OPENAI_DEPLOYMENT } else { 'gpt-4o' })

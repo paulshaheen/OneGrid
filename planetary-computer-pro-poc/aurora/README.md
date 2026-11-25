@@ -106,23 +106,24 @@ This builds initial conditions, detects storms, runs the endpoint with
 
 The scheduled trigger is **part of the main deployment**. Select **“Aurora
 scheduled forecast job (Container Apps)”** in the portal wizard (or set
-`deployAuroraSchedule=true`) and supply a prebuilt pipeline image. The template
-then provisions an Azure Container Apps **Job** with a cron trigger, a managed
-identity, and its role assignments — no separate module.
-
-Build and push the image first (uses the `Dockerfile` in this folder), then
-deploy with the image reference:
+`deployAuroraSchedule=true`, with `deployAuroraModel=true` and sample storage).
+The template then provisions an Azure Container Registry, builds this folder's
+`Dockerfile` into it during the deployment (the `pcpro-aurora-image-build`
+deployment script), and creates an Azure Container Apps **Job** with a cron
+trigger, a managed identity, and its role assignments — no separate module and
+no prebuilt image.
 
 ```bash
-# Build & push the image to your registry.
-az acr build -r <your-registry> -t aurora-pipeline:latest aurora
-
 # Deploy (or redeploy) the environment with the scheduled job enabled.
 az deployment group create -g pcpro-poc-rg \
   -f deploy/azure/main.bicep \
-  -p deployAuroraModel=true deployAuroraSchedule=true \
-     auroraJobImage=<your-registry>.azurecr.io/aurora-pipeline:latest
+  -p deployAuroraModel=true deployAuroraSchedule=true
 ```
+
+After you change the pipeline code, rebuild the image with the command in the
+`auroraImageBuildCommand` deployment output. To run your own image instead, set
+`auroraJobImage` to its full reference; the template then skips the registry and
+the build.
 
 The job runs `python -m aurora_pipeline.run` on the ECMWF cycle cadence
 (default cron `0 1,7,13,19 * * *`, ~1 h after each 00/06/12/18 UTC synoptic cycle
@@ -135,9 +136,10 @@ on the sample storage account (for the scratch channel and `model-outputs`) and
 **AzureML Data Scientist** on the workspace automatically. The job authenticates
 to the endpoint and storage with that identity — **no keys or `AURORA_ENDPOINT_TOKEN`**
 (when the token is unset the pipeline mints an AAD token from the managed
-identity). The one manual step is granting the identity **AcrPull** on your
-registry so it can pull the image; its principal ID is in the deployment outputs
-(`auroraJobIdentityPrincipalId`).
+identity). It also grants **AcrPull** on the registry it provisions. If you set
+`auroraJobImage` to an image in another Azure Container Registry, grant the
+identity **AcrPull** on that registry yourself; its principal ID is in the
+deployment outputs (`auroraJobIdentityPrincipalId`).
 
 ## Layout
 

@@ -71,7 +71,7 @@ Ask these questions, ideally in one structured question. Defaults match the port
 | --- | --- | --- | --- |
 | Planetary Computer Pro GeoCatalog | `deployGeoCatalog` | on | Optional. Without it the web app still reads live Fabric data, but has no catalog imagery layers or asset uploads |
 | Sample storage + ingestion identity | `deploySampleStorage` | on | Required by the Fabric plane and the web app |
-| AI agent (Azure OpenAI / Foundry) | `deployAiAgent` | on | Required for Copilot chat |
+| AI agent (Microsoft Foundry) | `deployAiAgent` | on | Required for Copilot chat |
 | OneGrid Fabric plane | `deployFabricPlane` | on | Required by the web app |
 | OneGrid web app | `deployOneGridApp` | on | |
 | Historical data seed (large) | `deployOneGridData` | on | Adds deployment time |
@@ -215,7 +215,7 @@ Vault reference. Use them as a reference; still write the user's file to the tem
 
 Show the user a short plan: subscription, resource group, region, components, modules,
 capacity, and the costs to expect (Fabric capacity and App Service bill while running; the
-GeoCatalog, Azure OpenAI and storage bill by use). Ask for a "yes" to continue.
+GeoCatalog, Microsoft Foundry and storage bill by use). Ask for a "yes" to continue.
 
 ### Step 4 — Validate
 
@@ -269,7 +269,7 @@ Stop polling when the state is `Succeeded` or `Failed`. On failure, find the fai
    `<app-url>/api/chat`. The response is a server-sent event stream; read the final line that
    starts with `data: {"type":"done"`. Its `reply` should be an answer, and `queries` should
    list at least one query. An `API error (404) DeploymentNotFound` reply means the app's
-   `AI_DEFAULT_MODEL` setting doesn't match the Azure OpenAI deployment name.
+   `AI_DEFAULT_MODEL` setting doesn't match the Microsoft Foundry model deployment name.
 5. Grant the user access to browse the GeoCatalog (if deployed):
    `az role assignment create --assignee <user-object-id> --role "GeoCatalog Administrator" --scope <geoCatalogResourceId output>`
 

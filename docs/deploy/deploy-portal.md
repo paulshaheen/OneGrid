@@ -58,11 +58,11 @@ parameter per component.
 | --- | --- | --- | --- |
 | **Planetary Computer Pro GeoCatalog** | `deployGeoCatalog` | Yes | |
 | **Sample storage + ingestion identity** | `deploySampleStorage` | Yes | |
-| **AI agent (Azure OpenAI / Foundry)** | `deployAiAgent` | Yes | |
+| **AI agent (Microsoft Foundry)** | `deployAiAgent` | Yes | |
 | **Aurora weather model (GPU Foundry endpoint)** | `deployAuroraModel` | No | A100 quota and Marketplace terms |
 | **Aurora scheduled forecast job (Container Apps)** | `deployAuroraSchedule` | No | The Aurora weather model and sample storage |
 | **OneGrid Fabric plane (OneLake + hazard join)** | `deployFabricPlane` | Yes | Sample storage |
-| **OneGrid web app (AI Foundry + chat/report)** | `deployOneGridApp` | Yes | The Fabric plane |
+| **OneGrid web app (Microsoft Foundry + chat/report)** | `deployOneGridApp` | Yes | The Fabric plane |
 | **OneGrid historical data seed (large)** | `deployOneGridData` | Yes | The Fabric plane |
 
 The template skips a component whose dependency isn't selected. The form warns you, on the
@@ -71,9 +71,8 @@ dependency, but not when the web app or data seed is selected without the Fabric
 Selecting the web app also sends `enableEntraSignIn` = `true`; the form has no separate
 control for it.
 
-Some option descriptions are out of date: the web app runs on App Service from a prebuilt
-package, not a Container App built through a registry, and the forecast job doesn't need a
-prebuilt image. See [known issues](known-issues.md#portal-form).
+The web app runs on App Service from a prebuilt package, and the template builds the forecast
+job's pipeline image itself, so neither needs a build step from you.
 
 Below the list, the storage policy controls set the [storage policy exemption](getting-started.md#storage-policy):
 
@@ -111,7 +110,7 @@ The **AI** tab has three sections. Each appears only when its component is selec
 
 ### AI agent
 
-The **AI agent (Azure OpenAI / Foundry)** section appears when the AI agent component is
+The **AI agent (Microsoft Foundry)** section appears when the AI agent component is
 selected.
 
 | Control | Parameter | Default | What it controls |
@@ -158,7 +157,7 @@ is selected.
 | Control | Parameter | Default | What it controls |
 | --- | --- | --- | --- |
 | **Create a new Fabric capacity for me** | `createFabricCapacity` | Cleared | Creates a new F-SKU capacity in the resource group. It's billed hourly until you pause or delete it |
-| **New Fabric capacity SKU** | `fabricCapacitySku` | `F2` | The new capacity's size, from `F2` to `F256`. Shown when the box is checked |
+| **New Fabric capacity SKU** | `fabricCapacitySku` | `F2` | The new capacity's size, from `F2` to `F2048`. Shown when the box is checked |
 | **Capacity admin (email or object id, optional)** | `fabricCapacityAdmin` | blank | A person to add as a capacity administrator, by user principal name or object ID. Shown when the box is checked |
 | **Existing Fabric capacity (resource ID or GUID)** | `fabricCapacityId` | blank | The capacity to deploy onto. Shown and required when the box is cleared |
 | **Fabric workspace name** | `fabricWorkspaceName` | `OneGrid` | The Fabric workspace's display name: 1 to 64 letters, numbers, spaces, dashes, or underscores |

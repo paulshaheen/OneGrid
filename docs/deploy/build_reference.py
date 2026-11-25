@@ -113,19 +113,13 @@ UNGROUPED = "Ungrouped"
 # mislead. Each one is traceable to code; see docs/deploy/known-issues.md.
 NOTES: dict[str, str] = {
     "location": "The allowed list applies even when `deployGeoCatalog` is `false`.",
-    "deployFabricPlane": "An existing capacity isn't required: set `createFabricCapacity` to "
-                         "`true` to have the template create one.",
     "auroraJobImage": "When this is blank, the deployment builds the image into the "
                       "provisioned registry for you; run `az acr build` only to rebuild it.",
-    "deployOneGridApp": "The template deploys the web app on App Service (`chatAgentSite`), "
-                        "not Container Apps; see [known issues](../known-issues.md#portal-and-template-text-describe-a-container-app).",
     "deployOneGridData": "The portal form preselects this component although the template "
                          "default is `false`.",
     "deployAuroraSchedule": "The template builds the pipeline image into its own registry "
                             "(`pcpro-aurora-image-build`), so no prebuilt image is needed "
                             "unless you set `auroraJobImage`.",
-    "fabricCapacitySku": "The portal form offers `F2` to `F256`; set larger SKUs from the "
-                         "command line.",
     "createFabricConnection": "The portal form checks this box by default; the template "
                               "default is `false`.",
     "enableEntraSignIn": "The portal form sends `true` whenever the web app is selected. "

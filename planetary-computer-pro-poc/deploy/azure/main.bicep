@@ -1,7 +1,7 @@
 // =====================================================================================
 // Microsoft Planetary Computer Pro — Rapid POC
 // Provisions a GeoCatalog and (optionally) a web app (Azure App Service, Node), sample-
-// data storage, an Azure OpenAI (Foundry) agent, and the Aurora weather model so you can
+// data storage, a Microsoft Foundry agent, and the Aurora weather model so you can
 // prove the end-to-end ingest → configure → visualize flow.
 // =====================================================================================
 
@@ -50,7 +50,7 @@ param geoCatalogTier string = 'Basic'
 @description('Deploy a sample-data storage account and a user-assigned managed identity for the managed-identity ingestion path (bring-your-own-data scenario).')
 param deploySampleStorage bool = true
 
-@description('Deploy an Azure OpenAI (Microsoft Foundry) account + model deployment for agentic / reasoning GeoAI scenarios against the GeoCatalog.')
+@description('Deploy a Microsoft Foundry account + model deployment for agentic / reasoning GeoAI scenarios against the GeoCatalog.')
 param deployAiAgent bool = true
 
 @description('Enable automatic Entra ID sign-in wiring for the Explorer web app. When true, the provisioner creates (or reuses) a SPA app registration and sets ENTRA_CLIENT_ID/ENTRA_TENANT_ID. Auto-create requires the deployment identity to hold Microsoft Graph Application.ReadWrite.OwnedBy; otherwise supply entraSignInClientId.')
@@ -72,19 +72,19 @@ param refreshServicePrincipalObjectId string = ''
 @secure()
 param refreshServicePrincipalSecret string = ''
 
-@description('Name of the Azure OpenAI (Foundry) model deployment.')
+@description('Name of the Microsoft Foundry model deployment.')
 param openAiDeploymentName string = 'gpt-5-mini'
 
-@description('Azure OpenAI model name.')
+@description('Model name in Microsoft Foundry.')
 param openAiModelName string = 'gpt-5-mini'
 
-@description('Azure OpenAI model version.')
+@description('Model version in Microsoft Foundry.')
 param openAiModelVersion string = '2025-08-07'
 
-@description('Azure OpenAI deployment SKU.')
+@description('Microsoft Foundry model deployment SKU.')
 param openAiSkuName string = 'GlobalStandard'
 
-@description('Azure OpenAI deployment capacity, in thousands of tokens per minute (TPM).')
+@description('Microsoft Foundry model deployment capacity, in thousands of tokens per minute (TPM).')
 param openAiCapacity int = 10
 
 @description('Deploy the Microsoft Aurora weather foundation model on a GPU-backed Foundry managed-compute endpoint. Requires GPU (A100) quota, an Azure Marketplace subscription, and acceptance of the model terms.')
@@ -102,7 +102,7 @@ param createAuroraModelDeployment bool = false
 @description('Deploy a scheduled Azure Container Apps Job that runs the Aurora forecast pipeline on the ECMWF cycle cadence (00/06/12/18 UTC), publishing weather-events.json to the model-outputs container so the map stays live without manual runs. The template also provisions a dedicated Azure Container Registry for the pipeline image. Requires the Aurora weather model (for the GPU endpoint) and sample storage.')
 param deployAuroraSchedule bool = false
 
-@description('Optional override for the Aurora pipeline container image, e.g. myregistry.azurecr.io/aurora-pipeline:latest. Leave blank to use the Azure Container Registry this template provisions (build into it once with `az acr build`).')
+@description('Optional override for the Aurora pipeline container image, e.g. myregistry.azurecr.io/aurora-pipeline:latest. Leave blank to use the Azure Container Registry this template provisions (the template builds the image into it during deployment).')
 param auroraJobImage string = ''
 
 @description('Image tag for the Aurora pipeline image in the auto-provisioned registry. Ignored when auroraJobImage is set.')
@@ -118,7 +118,7 @@ param auroraJobCron string = '0 1,7,13,19 * * *'
 // This template stays the authoritative PCP backend; these params only add the seam:
 // a managed identity + storage read grant, and a ready-to-run OneGrid config as outputs.
 // ------------------------------------------------------------------------------------
-@description('Enable the OneGrid Fabric plane on top of this PCP backend: it provisions a Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join + composite-risk tables, and (when a connection id is supplied) a OneLake shortcut to the model-outputs container. Fabric is not an ARM resource type, so this runs as an in-template deploymentScript (Fabric REST) using the Fabric-plane identity. Requires deploySampleStorage and an existing Microsoft Fabric capacity.')
+@description('Enable the OneGrid Fabric plane on top of this PCP backend: it provisions a Fabric workspace, lakehouse, eventhouse/KQL database, the geo_point_in_polygon hazard join + composite-risk tables, and (when a connection id is supplied) a OneLake shortcut to the model-outputs container. Fabric is not an ARM resource type, so this runs as an in-template deploymentScript (Fabric REST) using the Fabric-plane identity. Requires deploySampleStorage and a Microsoft Fabric capacity: an existing one (fabricCapacityId) or a new one (createFabricCapacity).')
 param deployFabricPlane bool = false
 
 @description('Existing Microsoft Fabric capacity resource id or capacity GUID (F-SKU or Trial). Provide one to reuse an existing capacity. Ignored when createFabricCapacity is true (the template provisions a new one instead).')
@@ -143,7 +143,7 @@ param fabricConnectionId string = ''
 @description('Instead of pasting an existing Fabric connection id, have the in-template provisioner create the storage connection for you using the Fabric workspace identity (secret-free): it provisions a workspace identity, grants it Storage Blob Data Reader on the sample storage account, creates an ADLS Gen2 connection bound to that identity, and builds the OneLake shortcut. Ignored when fabricConnectionId is supplied. Requires the Fabric tenant setting for service principals/workspace identities.')
 param createFabricConnection bool = false
 
-@description('Also stand up the OneGrid web application: the AI Foundry account (reused from the AI agent above when present) and the chat/report Container App, deployed into THIS resource group. Requires the OneGrid Fabric plane. The in-template provisioner runs OneGrid deploy.ps1 for the foundry/dataagent/chatagent phases; because this creates resources and role assignments, the Fabric-plane identity is granted Owner on this resource group.')
+@description('Also stand up the OneGrid web application: the Microsoft Foundry account (reused from the AI agent above when present) and the chat/report App Service web app, deployed into THIS resource group. Requires the OneGrid Fabric plane. The in-template provisioner runs OneGrid deploy.ps1 for the foundry/dataagent/chatagent phases; because this creates resources and role assignments, the Fabric-plane identity is granted Owner on this resource group.')
 param deployOneGridApp bool = false
 
 @description('App Service plan pricing tier for the OneGrid chat/report web app. B1 (Basic) is the low-cost default; pick a Premium v3 tier (P0v3/P1v3/P2v3/P3v3) for production-grade CPU/memory, autoscale, and better cold-start. Only applies when the OneGrid web app is deployed.')
@@ -228,7 +228,7 @@ var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 // ability to redefine, delete, or reconfigure the job.
 var containerAppsJobsOperatorRoleId = 'b9a307c4-5aa3-4b52-ba60-2b17c136cd7b'
 
-// Azure OpenAI (Foundry) agent.
+// Microsoft Foundry agent.
 var openAiName = toLower('pcpro-oai-${uniqueString(resourceGroup().id)}')
 // Cognitive Services OpenAI User — key-less inference access.
 var cognitiveServicesOpenAiUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
@@ -287,7 +287,7 @@ var auroraJobRegistryServer = empty(auroraJobImage) ? '${auroraAcrName}.azurecr.
 // container the OneLake shortcut targets), so it only engages when that is present.
 var deployFabricPlaneEffective = deployFabricPlane && deploySampleStorage
 var fabricPlaneIdentityName = '${namePrefix}-fabricplane-identity'
-// The OneGrid web app (Foundry + Container App) rides on top of the Fabric plane.
+// The OneGrid web app (Foundry + App Service) rides on top of the Fabric plane.
 var deployOneGridAppEffective = deployFabricPlaneEffective && deployOneGridApp
 // The chat/report web app (Azure App Service, Linux/Node) is a first-class ARM resource so
 // ARM owns its lifecycle and its managed identity exists before the provisioner runs its
@@ -322,7 +322,7 @@ var ownerRoleId = '8e3af657-a8ff-443c-a75c-2fe8c4bcb635'
 //
 //  * APP plane (runs ALWAYS when the web app is selected; NO dependency on the Fabric
 //    capacity): stands up Foundry + the chat/report web app and wires the app-native
-//    services (GeoCatalog, Azure OpenAI, storage, Aurora endpoint, report API). The
+//    services (GeoCatalog, Foundry, storage, Aurora endpoint, report API). The
 //    chatagent phase omits KUSTO_*/PBI_*/DATA_AGENT_* when no Fabric state is present, so
 //    it never blanks the Fabric settings the fabric plane writes later.
 //  * FABRIC plane (depends on the Fabric capacity; skipped cleanly if the capacity failed):
@@ -551,7 +551,7 @@ resource fabricPlaneBlobContributorRole 'Microsoft.Authorization/roleAssignments
 }
 
 // When the OneGrid web app is included, the provisioner also creates the Foundry account
-// and the chat/report Container App IN THIS RESOURCE GROUP and assigns data-plane roles to
+// IN THIS RESOURCE GROUP, publishes the chat/report web app and assigns data-plane roles to
 // the app's identity. That requires resource-creation AND role-assignment rights, so the
 // Fabric-plane identity is granted Owner scoped to this resource group only.
 resource fabricPlaneRgOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (deployOneGridAppEffective) {
@@ -569,7 +569,7 @@ resource fabricPlaneRgOwner 'Microsoft.Authorization/roleAssignments@2022-04-01'
 // deployment instead of being silently swallowed by a script phase), and the app's identity
 // exists minutes before the provisioner issues Fabric/Kusto/PBI grants \u2014 which avoids the
 // "All provided principals must be existing" propagation errors. The provisioner's chatagent
-// phase then only pushes code (Oryx build) and patches the Fabric-derived app settings it
+// phase then only publishes the prebuilt package and patches the Fabric-derived app settings it
 // computes at run time.
 resource chatAgentPlan 'Microsoft.Web/serverfarms@2023-12-01' = if (deployOneGridAppEffective) {
   name: chatAgentPlanName
@@ -662,8 +662,8 @@ resource chatAgentAuroraJobOperator 'Microsoft.Authorization/roleAssignments@202
 }
 
 // In-template provisioning of the whole OneGrid solution. Fabric workspaces/lakehouses/
-// eventhouses/KQL, the AI Foundry account, and the chat/report Container App are not ARM
-// resource types, so we run OneGrid's own orchestrator (deploy.ps1) headless as a
+// eventhouses/KQL are not ARM resource types, and the Foundry account and web app need
+// settings derived from them, so we run OneGrid's own orchestrator (deploy.ps1) headless as a
 // deploymentScript (Azure PowerShell image → pwsh; git + az CLI installed at runtime),
 // under the Fabric-plane identity.
 //
@@ -723,7 +723,7 @@ var provisionCommonEnv = [
 
 // --- APP plane -----------------------------------------------------------------------
 // Stands up Foundry + wires the chat/report web app's app-native services (GeoCatalog,
-// Azure OpenAI, storage, Aurora endpoint, report API). It has NO reference to the Fabric
+// Foundry, storage, Aurora endpoint, report API). It has NO reference to the Fabric
 // capacity, so it runs even when the capacity failed or was never requested - which is why
 // GeoCatalog/Foundry/storage/Aurora now light up independently of Fabric. FABRIC_CAPACITY_ID
 // is passed empty here on purpose (no symbolic capacity reference = no implicit dependency).
@@ -810,7 +810,7 @@ resource fabricPlaneScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = 
 }
 
 // ------------------------------------------------------------------------------------
-// Optional: Azure OpenAI (Microsoft Foundry) — agentic / reasoning GeoAI scenarios
+// Optional: Microsoft Foundry — agentic / reasoning GeoAI scenarios
 // ------------------------------------------------------------------------------------
 
 resource openAi 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (deployAiAgent) {
@@ -978,7 +978,7 @@ resource auroraJobIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@202
 }
 
 // Dedicated registry for the pipeline image so each deployment is self-contained (no
-// shared/external ACR). Build the image into it once with `az acr build`.
+// shared/external ACR). The auroraImageBuild deployment script builds the image into it.
 resource auroraAcr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = if (deployAuroraJob && empty(auroraJobImage)) {
   name: auroraAcrName
   location: location
@@ -1208,7 +1208,7 @@ output fabricPlaneIdentityPrincipalId string = deployFabricPlaneEffective ? fabr
 output fabricPlaneCapacityId string = deployFabricPlaneEffective ? (createFabricCapacityEffective ? fabricCapacity.id : fabricCapacityId) : 'not-deployed'
 @description('Result of the in-template Fabric provisioning: workspace/lakehouse/eventhouse ids, KQL apply status, and OneLake shortcut status.')
 output fabricPlaneProvisionResult object = deployFabricPlaneEffective ? fabricPlaneScript.properties.outputs : {}
-@description('Result of the in-template app-plane provisioning (Foundry + chat/report web app wiring for GeoCatalog/OpenAI/storage/Aurora). Runs independently of the Fabric capacity.')
+@description('Result of the in-template app-plane provisioning (Foundry + chat/report web app wiring for GeoCatalog/Foundry/storage/Aurora). Runs independently of the Fabric capacity.')
 output appPlaneProvisionResult object = deployAppProvision ? appProvisionScript.properties.outputs : {}
 @description('Ready-to-run OneGrid config fragment (reuseExistingFoundry + fabric + pcp). Merge into OneGrid config.json; still set pcp.connectionId to a Fabric cloud connection for the OneLake shortcut.')
 output fabricPlaneConfig object = deployFabricPlaneEffective ? {
@@ -1236,9 +1236,9 @@ output fabricPlaneCommand string = deployFabricPlaneEffective ? (empty(fabricCon
 // OneGrid solution outputs (the full-in-button path). These reflect exactly which OneGrid
 // deploy.ps1 phases ran and, when the web app was included, where to reach it.
 // ------------------------------------------------------------------------------------
-@description('Whether the OneGrid web app (AI Foundry + chat/report Container App) was provisioned in this resource group.')
+@description('Whether the OneGrid web app (Microsoft Foundry + chat/report App Service web app) was provisioned in this resource group.')
 output oneGridAppEnabled bool = deployOneGridAppEffective
 @description('OneGrid deploy.ps1 phases the in-template provisioner ran (mapped from the selected components).')
 output oneGridPhases string = deployFabricPlaneEffective ? ogPhasesCsv : 'not-deployed'
-@description('Public URL of the OneGrid chat/report web app (the ARM-declared App Service). Serves once the provisioner finishes the first Oryx build + code deploy.')
+@description('Public URL of the OneGrid chat/report web app (the ARM-declared App Service). It runs the prebuilt release package from the start; chat and reports work once the provisioner adds the Fabric-derived app settings.')
 output oneGridAppUrl string = deployOneGridAppEffective ? 'https://${chatAgentSite.properties.defaultHostName}' : 'not-deployed'
