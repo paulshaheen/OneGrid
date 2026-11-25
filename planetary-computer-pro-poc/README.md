@@ -75,12 +75,11 @@ outputs to storage, and invoke the GeoAI models **without keys or SAS**. The opt
 account and user-assigned identity support the managed-identity ingestion path for your own
 data.
 
-This mirrors the Planetary Computer Pro reference architecture: public + private data flow
-into the GeoCatalog (the enterprise STAC catalog), which then feeds downstream apps and GeoAI
-models, using this POC's concrete components (every box is an Azure resource this template
-provisions in your subscription; the AI agent and Aurora are optional):
-
-[![Logical architecture for the Planetary Computer Pro POC: public and private data ingest into a GeoCatalog inside your Azure subscription, which feeds the optional Microsoft Foundry GeoAI models (the AI agent and Aurora) and the web app.](deploy/azure/media/logical-architecture.png)](deploy/azure/media/logical-architecture.png)
+This mirrors the Planetary Computer Pro reference architecture: data flows into the
+GeoCatalog (the enterprise STAC catalog), which then feeds downstream apps and GeoAI models.
+In this POC, the web app signs you in with Microsoft Entra ID and reaches each service with
+its managed identity. Every service box is an Azure resource this template provisions in your
+subscription; the AI agent and Aurora are optional:
 
 ```mermaid
 flowchart LR
