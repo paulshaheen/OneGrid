@@ -1,0 +1,59 @@
+# PSRule for Azure options for the OneGrid deployment template.
+# Used by the `psrule` job in .github/workflows/validate-infra.yml (microsoft/ps-rule action).
+# Docs: https://azure.github.io/PSRule.Rules.Azure/
+#
+# Run locally (PowerShell 7, from the repository root; needs Bicep on PATH or Azure CLI Bicep):
+#   Install-Module PSRule -RequiredVersion 2.9.0 -Scope CurrentUser
+#   Install-Module PSRule.Rules.Azure -RequiredVersion 1.47.0 -Scope CurrentUser
+#   $env:PSRULE_AZURE_BICEP_USE_AZURE_CLI = 'true'
+#   Assert-PSRule -Module PSRule.Rules.Azure -Option ./ps-rule.yaml -InputPath planetary-computer-pro-poc/deploy/azure/ -Format File
+#
+# Blocking vs. non-blocking: CI currently runs PSRule in report-only mode (the step has
+# continue-on-error: true and the outcome is written to the job summary). To make it blocking,
+# remove continue-on-error from the "PSRule for Azure" step in validate-infra.yml once the
+# findings below are either fixed or suppressed with a justification.
+
+# Fail fast if CI or a local run picks up module versions older than the ones this
+# configuration was written against.
+requires:
+  PSRule: '@pre >=2.9.0'
+  PSRule.Rules.Azure: '@pre >=1.47.0'
+
+include:
+  module:
+    - PSRule.Rules.Azure
+
+input:
+  # Only expand the template (with its defaults), the full-solution test harness, and the
+  # shipped .bicepparam scenarios. Everything else in the repository is ignored.
+  pathIgnore:
+    - '*'
+    - '!planetary-computer-pro-poc/deploy/azure/main.bicep'
+    - '!planetary-computer-pro-poc/deploy/azure/tools/psrule/*.tests.bicep'
+    - '!planetary-computer-pro-poc/deploy/azure/parameters/*.bicepparam'
+
+configuration:
+  # Expand .bicep and .bicepparam files into resources (requires the Bicep CLI).
+  AZURE_BICEP_FILE_EXPANSION: true
+  AZURE_BICEP_PARAMS_FILE_EXPANSION: true
+  # main.bicep restores the Microsoft Graph extension from MCR on first build.
+  AZURE_BICEP_FILE_EXPANSION_TIMEOUT: 30
+  AZURE_BICEP_CHECK_TOOL: true
+
+execution:
+  # Files PSRule has no rules for are not an error.
+  unprocessedObject: Ignore
+
+output:
+  culture:
+    - en-US
+
+# Suppress a rule only with a written reason, for example:
+# suppression:
+#   Azure.Storage.SoftDelete:
+#     - pcpro...          # resource name; reason: sample-data account, recreated on redeploy
+#
+# Or exclude a rule for the whole template:
+# rule:
+#   exclude:
+#     - Azure.Template.UseDescriptions   # reason: ...

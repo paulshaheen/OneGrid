@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "westeurope"
+    },
+    "deployGeoCatalog": {
+      "value": true
+    },
+    "deploySampleStorage": {
+      "value": true
+    },
+    "deployAiAgent": {
+      "value": true
+    },
+    "deployAuroraModel": {
+      "value": false
+    },
+    "deployAuroraSchedule": {
+      "value": false
+    },
+    "deployFabricPlane": {
+      "value": true
+    },
+    "deployOneGridApp": {
+      "value": true
+    },
+    "deployOneGridData": {
+      "value": true
+    },
+    "createFabricCapacity": {
+      "value": true
+    },
+    "createFabricConnection": {
+      "value": true
+    }
+  }
+}

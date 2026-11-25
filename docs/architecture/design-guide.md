@@ -97,6 +97,7 @@ the next table.
 | F | Management | Send OneGrid signals to the central Log Analytics workspace and route [freshness, failure, and security alerts](traffic-and-security.md#logging-and-monitoring) to named owners. |
 | G | Governance | Apply Azure Policy, role assignments, and budgets to every OneGrid subscription, and keep any [policy exception](enterprise-landing-zone.md#monitoring-and-policy) scoped, owned, and time-bound. |
 | H | Platform automation and DevOps | Promote versioned infrastructure, application, and Fabric configuration through the [template, provisioner, and release workflow](../implementations.md#build-promote-and-restore) instead of portal-only changes. |
+| C, F | Business continuity and disaster recovery | Set [recovery objectives per journey](multiregion.md#recovery-objectives-by-journey), repeat the OneGrid stamp in a recovery region with its own hub, and rehearse the [failover and failback procedures](multiregion.md#failover-and-failback). This area isn't lettered separately: it spans C (a stamp per region) and F (recovery monitoring and operations). |
 
 The same eight areas, with OneGrid's decision and required outcome for each, are in
 [Landing zone design decisions](enterprise-landing-zone.md#landing-zone-design-decisions).
@@ -247,14 +248,20 @@ lists the provisioner's phase order.
 | Option | How it deploys | Use it for |
 | --- | --- | --- |
 | Azure portal | The **Deploy to Azure** button opens the ARM template with its portal form, where you select components, the Fabric capacity, models, and app modules | First deployments and evaluations |
-| Azure CLI or PowerShell | `az deployment group` validates, previews (what-if), and deploys `azuredeploy.json`, compiled from `main.bicep`, with a parameter file you keep outside the repository | Repeatable and pipeline-driven deployments |
+| Azure CLI or PowerShell | `az deployment group` or `New-AzResourceGroupDeployment` validates, previews (what-if), and deploys `azuredeploy.json`, compiled from `main.bicep`, with a parameter file you keep outside the repository | Repeatable and pipeline-driven deployments |
 | GitHub Copilot runbook | An agent collects the same choices as the portal form, shows the plan, and deploys the same template from the command line after you confirm | Guided command-line deployments |
 | Deploy wizard | A localhost web UI runs the provisioner (`deploy.ps1`) directly against an existing Fabric capacity, with prerequisite checks, live progress, and teardown | Evaluations of the Fabric workspace, Microsoft Foundry, and web app |
 
 The deploy wizard doesn't run the ARM template, so it doesn't create GeoCatalog, Aurora, or
-the forecast job. See the [deployment procedure](../deployment-and-data-guide.md#deploy-resources-and-provision-the-solution),
-the [Copilot runbook](../../DEPLOY-WITH-COPILOT.md), and the
-[deploy wizard](../../planetary-computer-pro-poc/infra/deploy-ui/README.md).
+the forecast job. [Deploy OneGrid](../deploy/README.md) compares the options and the
+scenarios that the shipped
+[parameter files](../../planetary-computer-pro-poc/deploy/azure/parameters/README.md) cover.
+Follow [Deploy from the Azure portal](../deploy/deploy-portal.md),
+[Deploy from the command line](../deploy/deploy-cli.md), the
+[Copilot runbook](../../DEPLOY-WITH-COPILOT.md), or the
+[deploy wizard](../../planetary-computer-pro-poc/infra/deploy-ui/README.md). The
+[parameter reference](../deploy/reference/parameters.md) documents every template parameter
+and the portal step that sets it.
 
 #### Greenfield and brownfield deployments
 
@@ -345,21 +352,28 @@ split and the tags in your own IaC.
 1. **Prepare the prerequisites.** Confirm Azure rights to create resources and role
    assignments, a supported region, registered resource providers, Fabric tenant settings
    and capacity rights, the sign-in and refresh identities, and, for Aurora, model terms and
-   A100 quota. See [Prerequisites](../deployment-and-data-guide.md#prerequisites).
+   A100 quota. Work through the [prerequisite checklists](../deploy/getting-started.md#prerequisites),
+   and [validate them](../deploy/getting-started.md#validate-prerequisites) with
+   `Test-OneGridPrerequisites.ps1`.
 2. **Deploy or confirm the platform landing zone.** For an enterprise deployment, confirm
    the management groups, policy, hub network, DNS, central monitoring, and identity
    guardrails, and approve the
    [integration contract](enterprise-landing-zone.md#implement-the-enterprise-deployment)
    with the platform team.
 3. **Deploy OneGrid.** Select a [deployment option](#deployment-options) and the
-   [components](../deployment-and-data-guide.md#choose-components) for your scenario,
-   validate and deploy, and then watch both deployment scripts. For an enterprise
+   [components](../deploy/getting-started.md#choose-components) for your scenario, starting
+   from a [parameter file](../../planetary-computer-pro-poc/deploy/azure/parameters/README.md)
+   for a command-line deployment. Validate and deploy from the
+   [portal](../deploy/deploy-portal.md) or the [command line](../deploy/deploy-cli.md), and
+   then watch both deployment scripts. Use [Troubleshooting](../deploy/troubleshooting.md)
+   and [Known issues](../deploy/known-issues.md) when a step fails. For an enterprise
    deployment, apply network integration, diagnostic settings, and governance
    configuration through reviewed IaC.
-4. **Accept the deployment.** Run the
-   [acceptance checks](../deployment-and-data-guide.md#acceptance-checks) and the
-   [network acceptance procedure](../operations-runbook.md#validate-network-and-traffic-flows),
-   record the results, and hand the environment to [Day 2 operations](../operations.md).
+4. **Accept the deployment.** Run `Test-OneGridDeployment.ps1`, the automated
+   [acceptance checks](../deployment-and-data-guide.md#acceptance-checks), complete the
+   manual checks, and run the
+   [network acceptance procedure](../operations-runbook.md#validate-network-and-traffic-flows).
+   Record the results, and hand the environment to [Day 2 operations](../operations.md).
 
 ### Deployment scenarios
 
@@ -368,7 +382,7 @@ split and the tags in your own IaC.
 | Baseline | The starting point: one region, the template and provisioner as delivered, and authenticated public service endpoints | [Baseline architecture](baseline.md) |
 | Enterprise landing zone | Workload VNet peered to the hub, Application Gateway WAF, private endpoints, hub DNS resolution, firewall-controlled egress, central monitoring, and policy | [OneGrid in an enterprise landing zone](enterprise-landing-zone.md) |
 | Regulated workload | OT publication boundary, data classification, model and tool approval, permitted and denied access tests, and retained audit evidence | [Regulated workload architecture](regulated-workload.md) |
-| Multiregion recovery | A recovery-region stamp behind Azure Front Door Premium, storage copies, Fabric item recovery with source replay, and a single forecast publisher | [Multiregion architecture](multiregion.md) |
+| Multiregion recovery | A recovery-region stamp behind Azure Front Door Premium, storage copies, Fabric item recovery with source replay, and a single forecast publisher; per-journey recovery objectives, a lettered landing-zone BCDR view, and a numbered failover sequence | [Multiregion architecture](multiregion.md) |
 
 ### Known gap: live-ingestion Eventstream
 

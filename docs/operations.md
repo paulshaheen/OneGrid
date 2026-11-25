@@ -1,7 +1,7 @@
 ---
 title: Day 2 operations for OneGrid
 description: Operate OneGrid application, Fabric ingestion and models, geospatial services, AI inference, and Aurora forecast publication.
-ms.date: 11/23/2026
+ms.date: 11/24/2026
 ms.topic: conceptual
 ---
 
@@ -50,6 +50,7 @@ Assign an incident owner even when investigation crosses service boundaries.
 | AI answers | Model errors/throttling, tool success, grounded-answer evaluations, token cost | Restore correct model/tools and prevent unauthorized grounding |
 | Weather | Input cycle, job result, GPU inference, output age/schema, detected events | Repair the failing stage and label stale/unavailable output |
 | Governance | Identity/role changes, secret/certificate expiry, activity/audit evidence | Remediate access drift and retain the review trail |
+| Regional recovery readiness | Replication lag and last sync, connector checkpoint age, recovery-region quota, certificate expiry in both regions, stamp drift, recovery app private-path probe | Restore readiness before the next drill; escalate when an objective can't be met |
 
 Centralize approved diagnostics and redact credentials, tokens, restricted prompts, and
 sensitive asset details. Test alert delivery and escalation, not only dashboards.
@@ -82,14 +83,31 @@ packages, and connector checkpoints. Exercise restore and measure achieved RTO/R
 regional failure, coordinate [multiregion recovery](architecture/multiregion.md) with
 application routing and single-publisher ownership.
 
+### Business continuity and disaster recovery
+
+Regional recovery is an operating responsibility, not only a design. Agree each journey's
+RTO, RPO, and maximum data age with its owner, using the
+[starting estimates](architecture/multiregion.md#recovery-objectives-by-journey) as a
+baseline. Then:
+
+- Watch the [BCDR monitoring](architecture/traffic-and-security.md#bcdr-monitoring) readiness
+  signals continuously, and declare failover against the agreed activation thresholds.
+- Deploy every release to both regional stamps and run the
+  [drift check](operations-runbook.md#check-stamp-configuration-drift) on a schedule.
+- Run [BCDR drills](operations-runbook.md#bcdr-drills): tabletop, full nonproduction failover
+  and failback, and partial production tests through a test route with the recovery
+  publisher disabled. Record achieved RTO and RPO for each journey.
+- Fail over with the [Fail over](architecture/multiregion.md#fail-over) procedure, and return
+  with the [Fail back](operations-runbook.md#fail-back) procedure in an approved window.
+
 ## Operational cadence
 
 | Frequency | Work |
 | --- | --- |
 | Continuous | Journey probes, error/latency, source/refresh/forecast freshness, job failure, capacity, budgets |
 | Each release | Compatibility, access, grounded-answer evaluation, artifact identity, rollout/rollback checks |
-| Policy-defined review | Access/privileges, identity expiry, policy exceptions, retention, capacity/quota, costs |
-| Recovery exercise | Data/item restore, rebinding, replay, model readiness, degraded mode, regional cutover if configured |
+| Policy-defined review | Access/privileges, identity expiry, policy exceptions, retention, capacity/quota, costs, recovery-region quota and stamp drift |
+| Recovery exercise | Data/item restore, rebinding, replay, model readiness, degraded mode, regional cutover if configured; [BCDR drills](operations-runbook.md#bcdr-drills) with achieved RTO/RPO |
 | After an incident | Timeline, cause, data impact, recovery evidence, owned corrective actions |
 
 ## Operational procedures

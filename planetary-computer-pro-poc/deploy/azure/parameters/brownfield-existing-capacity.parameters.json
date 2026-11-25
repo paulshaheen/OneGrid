@@ -1,0 +1,71 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "westeurope"
+    },
+    "deployGeoCatalog": {
+      "value": true
+    },
+    "deploySampleStorage": {
+      "value": true
+    },
+    "deployAiAgent": {
+      "value": true
+    },
+    "deployAuroraModel": {
+      "value": false
+    },
+    "deployAuroraSchedule": {
+      "value": false
+    },
+    "deployFabricPlane": {
+      "value": true
+    },
+    "deployOneGridApp": {
+      "value": true
+    },
+    "deployOneGridData": {
+      "value": true
+    },
+    "createFabricCapacity": {
+      "value": false
+    },
+    "fabricCapacityId": {
+      "value": "<your-fabric-capacity-resource-id>"
+    },
+    "fabricWorkspaceName": {
+      "value": "OneGrid"
+    },
+    "createFabricConnection": {
+      "value": true
+    },
+    "deployUnifiedModel": {
+      "value": true
+    },
+    "enableEntraSignIn": {
+      "value": true
+    },
+    "entraSignInClientId": {
+      "value": "<your-sign-in-app-client-id>"
+    },
+    "grantProvisionerGraphPermission": {
+      "value": false
+    },
+    "refreshServicePrincipalClientId": {
+      "value": "<your-refresh-sp-client-id>"
+    },
+    "refreshServicePrincipalObjectId": {
+      "value": "<your-refresh-sp-object-id>"
+    },
+    "refreshServicePrincipalSecret": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/<your-subscription-id>/resourceGroups/<your-key-vault-resource-group>/providers/Microsoft.KeyVault/vaults/<your-key-vault-name>"
+        },
+        "secretName": "<your-refresh-sp-secret-name>"
+      }
+    }
+  }
+}

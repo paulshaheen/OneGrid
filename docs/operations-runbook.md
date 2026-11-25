@@ -1,7 +1,7 @@
 ---
 title: OneGrid operational runbook
-description: Diagnose OneGrid deployments and dependencies, restore data and model flows, manage releases, and decommission environments.
-ms.date: 11/23/2026
+description: Diagnose OneGrid deployments and dependencies, restore data and model flows, manage releases, run BCDR drills, fail back after regional recovery, and decommission environments.
+ms.date: 11/24/2026
 ms.topic: how-to
 ---
 
@@ -154,6 +154,109 @@ Avoid rerunning all provisioning phases blindly during triage.
 - Review governance roles, shared runtime identity boundaries, exports, and Data Agent access.
 - Distinguish generated/seeded measurements from observed operational data.
 
+## BCDR drills
+
+Drills prove that the [multiregion recovery](architecture/multiregion.md) design meets its
+objectives. Run them on the policy-defined schedule and after any change to the regional
+template, Fabric items, connectors, or Front Door configuration. Each drill uses the
+[Fail over](architecture/multiregion.md#fail-over) steps and gates; start read-only and change
+only what the drill's scope allows.
+
+| Drill | Scope | Production impact | Exit criteria |
+| --- | --- | --- | --- |
+| Tabletop | Walk through declare, fence, recover, rebind, gate, cut over, observe, reconcile, and fail back with every owner | None | Each step has an owner, a tested command or runbook, and a decision threshold |
+| Full nonproduction failover | Fail a complete nonproduction environment over to its recovery region, then fail back | None | Every cutover gate passes in both directions; achieved RTO and RPO recorded per journey |
+| Partial production test | Exercise the production recovery stamp through a test route, with the recovery publisher disabled | None to users; replication and the primary publisher keep running | Recovery app passes the origin, application, data, and inference gates on the test route |
+
+### Run a partial production test
+
+1. Confirm the primary is healthy and the recovery forecast job and recovery origin are
+   disabled. Leave replication running; the recovery Blob containers stay read-only, so
+   features that write to them, such as uploads, are expected to fail in the test.
+2. Give testers a test route to the recovery origin, for example a separate Front Door
+   endpoint or route with its own origin group that contains only the recovery origin and is
+   restricted to the test group. Don't enable the recovery origin in the production origin group.
+3. Apply the recovery configuration, bind the recovery Fabric items, and refresh the recovery
+   Import model from the recovered or copied data.
+4. Run the origin access, application, data, and inference gates through the test route.
+   Test Aurora by scoring without publishing; the publication ownership gate is out of scope
+   because the recovery publisher stays disabled.
+5. Remove the test route, record results, and return the recovery stamp to standby.
+
+### Check stamp configuration drift
+
+Compare the two regional apps without printing setting values. Run this from the connected
+administration host; it lists only setting names that differ:
+
+```powershell
+$primary  = @{ ResourceGroup = '<primary-resource-group>';  App = '<primary-app-name>' }
+$recovery = @{ ResourceGroup = '<recovery-resource-group>'; App = '<recovery-app-name>' }
+
+function Get-AppSettingMap($site) {
+  $map = @{}
+  az webapp config appsettings list -g $site.ResourceGroup -n $site.App -o json |
+    ConvertFrom-Json | ForEach-Object { $map[$_.name] = $_.value }
+  $map
+}
+
+$p = Get-AppSettingMap $primary
+$r = Get-AppSettingMap $recovery
+
+# Settings that exist in only one region
+Compare-Object @($p.Keys) @($r.Keys) | Select-Object InputObject, SideIndicator
+
+# Settings that must match in both regions
+'ENTRA_CLIENT_ID','ENTRA_TENANT_ID','UPLOAD_CONTAINER_NAME','REPORT_PORT','WEBSITES_PORT',
+'REPORT_API_URL','REPORT_API_ENABLED','WEBSITE_NODE_DEFAULT_VERSION','ONEGRID_MODULES' |
+  Where-Object { $p[$_] -ne $r[$_] }
+
+# Regional settings where the recovery app still points at a primary value
+'KUSTO_CLUSTER','PBI_WORKSPACE','PBI_DATASET','DATA_AGENT_ID','AZURE_AI_ENDPOINT',
+'FOUNDRY_ENDPOINT','GEOCATALOG_URI','UPLOAD_CONTAINER_URL','SAMPLE_CONTAINER_URL','AURORA_ENDPOINT' |
+  Where-Object { $p[$_] -and $p[$_] -eq $r[$_] }
+```
+
+Also compare each forecast job's environment variable names and image, both regions'
+template parameter files, Front Door origin state, and the connector's staged recovery
+`Fabric:FabricNamespaceFqdn`. Treat any difference that isn't in the
+[per-region configuration](architecture/multiregion.md#per-region-configuration) table as drift.
+
+### Keep the standby ready
+
+- Deploy every release (package, settings, template, image, Fabric item definitions) to both
+  stamps, and record the version in each.
+- Rotate the refresh service-principal secret and connector certificates in both regions,
+  and renew certificates on both origins before expiry.
+- Confirm recovery-region Microsoft Foundry and GPU quota, and that the approved model and
+  version are still available there.
+- Keep the recovery registry image current, by replication or by rebuild.
+- Stage connector configuration for the recovery Eventstream endpoint without activating it.
+- Confirm that replication is healthy and that the recovery package URL is readable.
+
+### Record results
+
+For each drill, record the UTC start and end, scope, environment and release, each journey's
+achieved RTO, RPO, and data age against its objective, each gate result, deviations from the
+procedure, and owned remediation with a due date. Treat a drill that didn't reach a gate as a
+failed drill for that gate.
+
+## Fail back
+
+Fail back is a planned change; schedule it in an approved window after the incident is
+closed. Follow the [Fail back](architecture/multiregion.md#fail-back) procedure and verify:
+
+| Check | Pass condition |
+| --- | --- |
+| Primary health | Azure Service Health reports the primary region healthy; the primary stamp matches the template with its job and origin disabled |
+| Reverse copy | Pending replication from the recovery to the primary account is zero; Lakehouse, Eventhouse, and GeoCatalog changes since cutover are in the primary |
+| Recovery publisher fenced | The recovery forecast job is stopped and connectors aren't publishing to the recovery Eventstream; checkpoints are recorded |
+| Primary rebound | Primary configuration applied, connectors repointed and replayed once, Import model refreshed |
+| Gates on the primary | Every cutover acceptance check passes against the primary region |
+| Origins swapped | Primary origin enabled and recovery origin disabled; direct public-origin access still denied |
+| Re-protected | Replication from the primary to the recovery region restored; recovery stamp back in standby |
+
+Record achieved fail-back time and any data reconciled, and update the drill record.
+
 ## Backup, restore, and decommissioning
 
 **Protect:** source data, Fabric item definitions, SQL/model connections, permission/configuration
@@ -163,7 +266,8 @@ and connector checkpoints. Keep credentials in the approved secret system.
 **Restore:** recover the intended items and data, reapply bindings/grants, refresh Import,
 reconnect sources, and verify DAX/KQL, data counts, latest observations, imagery, and model
 output. Record achieved RTO/RPO. Coordinate regional recovery using the
-[multiregion procedure](architecture/multiregion.md#recovery-procedure).
+[multiregion failover procedure](architecture/multiregion.md#fail-over), and exercise it
+through [BCDR drills](#bcdr-drills).
 
 **Decommission:** obtain data-owner approval and satisfy retention. Inventory Azure resources,
 Fabric workspaces/items, capacities, Entra registrations, connections, credentials, connector

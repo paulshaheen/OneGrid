@@ -1,0 +1,96 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "westeurope"
+    },
+    "exemptStorageFromPolicy": {
+      "value": false
+    },
+    "deployGeoCatalog": {
+      "value": true
+    },
+    "deploySampleStorage": {
+      "value": true
+    },
+    "deployAiAgent": {
+      "value": true
+    },
+    "openAiDeploymentName": {
+      "value": "gpt-5-mini"
+    },
+    "deployAuroraModel": {
+      "value": true
+    },
+    "auroraInstanceType": {
+      "value": "Standard_NC24ads_A100_v4"
+    },
+    "createAuroraModelDeployment": {
+      "value": true
+    },
+    "deployAuroraSchedule": {
+      "value": true
+    },
+    "auroraJobCron": {
+      "value": "0 1,7,13,19 * * *"
+    },
+    "deployFabricPlane": {
+      "value": true
+    },
+    "createFabricCapacity": {
+      "value": true
+    },
+    "fabricCapacitySku": {
+      "value": "F2"
+    },
+    "fabricCapacityAdmin": {
+      "value": "<your-capacity-admin-upn>"
+    },
+    "fabricWorkspaceName": {
+      "value": "OneGrid"
+    },
+    "createFabricConnection": {
+      "value": true
+    },
+    "deployUnifiedModel": {
+      "value": true
+    },
+    "deployOneGridApp": {
+      "value": true
+    },
+    "chatAgentAppServiceSku": {
+      "value": "B1"
+    },
+    "oneGridModules": {
+      "value": [
+        "exec",
+        "weather",
+        "twin",
+        "infra",
+        "sap",
+        "esu",
+        "onerig",
+        "copilot"
+      ]
+    },
+    "deployOneGridData": {
+      "value": true
+    },
+    "enableEntraSignIn": {
+      "value": true
+    },
+    "grantProvisionerGraphPermission": {
+      "value": true
+    },
+    "oneGridAppPackageUrl": {
+      "value": "https://github.com/paulshaheen/OneGrid/releases/download/app-latest/onegrid-app.zip"
+    },
+    "oneGridRepoUrl": {
+      "value": "https://github.com/paulshaheen/OneGrid.git"
+    },
+    "oneGridRef": {
+      "value": "main"
+    }
+  }
+}

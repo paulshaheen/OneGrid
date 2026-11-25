@@ -23,6 +23,10 @@
 
  Requires: az CLI, logged in (az login) as a user/SP with Reader on the sub and,
  for -RequestGpuQuota, Quota Request Operator.
+
+ For the full read-only readiness check (permissions, providers, regions, Fabric
+ capacity, Azure OpenAI and Azure ML quota, App Service, policy and Graph), run
+ Test-OneGridPrerequisites.ps1 in this folder. Unlike this script it changes nothing.
 ================================================================================
 #>
 [CmdletBinding()]

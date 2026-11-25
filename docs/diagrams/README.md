@@ -3,7 +3,7 @@
 These diagrams describe the OneGrid solution and its enterprise, regulated, and recovery
 implementations. They use official Azure, Microsoft Entra, and Microsoft Fabric icons.
 
-Open the [sheet gallery](onegrid-reference-gallery.html) to browse all twelve sheets in light
+Open the [sheet gallery](onegrid-reference-gallery.html) to browse all thirteen sheets in light
 and dark. GitHub doesn't render HTML pages, so download the gallery with its adjacent images
 for local browsing; the SVG and PNG links below work on their own.
 
@@ -38,7 +38,8 @@ what it does, what the template deploys, and how resources are organized and nam
 | Identity and authorization | [SVG](onegrid-reference-identity.svg) / [PNG](onegrid-reference-identity.png) | [SVG](onegrid-reference-identity-dark.svg) / [PNG](onegrid-reference-identity-dark.png) | [identity.py](sheets/identity.py) |
 | Logging and monitoring | [SVG](onegrid-reference-monitoring.svg) / [PNG](onegrid-reference-monitoring.png) | [SVG](onegrid-reference-monitoring-dark.svg) / [PNG](onegrid-reference-monitoring-dark.png) | [monitoring.py](sheets/monitoring.py) |
 | Regulated workload | [SVG](onegrid-reference-regulated.svg) / [PNG](onegrid-reference-regulated.png) | [SVG](onegrid-reference-regulated-dark.svg) / [PNG](onegrid-reference-regulated-dark.png) | [regulated.py](sheets/regulated.py) |
-| Multiregion recovery | [SVG](onegrid-reference-multiregion.svg) / [PNG](onegrid-reference-multiregion.png) | [SVG](onegrid-reference-multiregion-dark.svg) / [PNG](onegrid-reference-multiregion-dark.png) | [multiregion.py](sheets/multiregion.py) |
+| Multiregion recovery (BCDR, letters A–J) | [SVG](onegrid-reference-multiregion.svg) / [PNG](onegrid-reference-multiregion.png) | [SVG](onegrid-reference-multiregion-dark.svg) / [PNG](onegrid-reference-multiregion-dark.png) | [multiregion.py](sheets/multiregion.py) |
+| Failover sequence | [SVG](onegrid-reference-multiregion-failover.svg) / [PNG](onegrid-reference-multiregion-failover.png) | [SVG](onegrid-reference-multiregion-failover-dark.svg) / [PNG](onegrid-reference-multiregion-failover-dark.png) | [multiregion_failover.py](sheets/multiregion_failover.py) |
 
 To show the right theme automatically in Markdown, wrap the PNGs in a `<picture>` element
 with a `(prefers-color-scheme: dark)` source, as the [README](../../README.md) does.

@@ -57,13 +57,13 @@
 <text x="414.52" y="1392" font-size="12.5" fill="#A6B4BF">Optional, gated, binding or diagnostic path</text>
 <circle cx="700.44" cy="1388" r="9" fill="#62AEF2"/>
 <text x="700.44" y="1392" font-size="11" fill="#0F161C" font-weight="700" text-anchor="middle">A</text>
-<text x="721.44" y="1392" font-size="12.5" fill="#A6B4BF">Design area; letters match the design guide</text>
-<rect x="1006.24" y="1380" width="22" height="16" rx="3" stroke-width="1.3" fill="none" stroke="#748797" stroke-dasharray="4 3"/>
-<text x="1038.24" y="1392" font-size="12.5" fill="#A6B4BF">Optional component or add-on</text>
-<rect x="1242.57" y="1380" width="22" height="16" rx="3" stroke-width="1.3" fill="none" stroke="#62AEF2" stroke-dasharray="1.5 3" stroke-linecap="round"/>
-<text x="1274.57" y="1392" font-size="12.5" fill="#A6B4BF">Platform, tenant or region</text>
-<rect x="1454.2" y="1380" width="22" height="16" rx="3" stroke-width="1.3" fill="#122334" stroke="#62AEF2"/>
-<text x="1486.2" y="1392" font-size="12.5" fill="#A6B4BF">Subscription</text>
+<text x="721.44" y="1392" font-size="12.5" fill="#A6B4BF">Design area; letters match the article</text>
+<rect x="969.32" y="1380" width="22" height="16" rx="3" stroke-width="1.3" fill="none" stroke="#748797" stroke-dasharray="4 3"/>
+<text x="1001.32" y="1392" font-size="12.5" fill="#A6B4BF">Optional component or add-on</text>
+<rect x="1205.65" y="1380" width="22" height="16" rx="3" stroke-width="1.3" fill="none" stroke="#62AEF2" stroke-dasharray="1.5 3" stroke-linecap="round"/>
+<text x="1237.65" y="1392" font-size="12.5" fill="#A6B4BF">Platform, tenant or region</text>
+<rect x="1417.28" y="1380" width="22" height="16" rx="3" stroke-width="1.3" fill="#122334" stroke="#62AEF2"/>
+<text x="1449.28" y="1392" font-size="12.5" fill="#A6B4BF">Subscription</text>
 <rect x="40" y="1406" width="22" height="16" rx="3" stroke-width="1.3" fill="none" stroke="#5D768C"/>
 <text x="72" y="1418" font-size="12.5" fill="#A6B4BF">Network, resource group or trust boundary</text>
 <rect x="40" y="498" width="480" height="288" rx="6" fill="#122334" stroke="#62AEF2" stroke-width="1.2"/>

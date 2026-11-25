@@ -208,6 +208,11 @@ repo. Example for the default choices:
 For an existing capacity, set `createFabricCapacity` to `false` and add
 `"fabricCapacityId": { "value": "<id>" }`.
 
+The repository's scenario files in
+[`planetary-computer-pro-poc/deploy/azure/parameters`](planetary-computer-pro-poc/deploy/azure/parameters/README.md)
+show complete examples, including the brownfield form that passes the refresh secret as a Key
+Vault reference. Use them as a reference; still write the user's file to the temp folder.
+
 Show the user a short plan: subscription, resource group, region, components, modules,
 capacity, and the costs to expect (Fabric capacity and App Service bill while running; the
 GeoCatalog, Azure OpenAI and storage bill by use). Ask for a "yes" to continue.
@@ -283,6 +288,11 @@ Delete the temporary parameters file.
 ---
 
 ## Troubleshooting
+
+This table covers the failures this runbook hits most often. For every documented symptom,
+grouped by phase from preflight through the deployment scripts, the app, data refresh, and the
+forecast job, use [Troubleshoot a OneGrid deployment](docs/deploy/troubleshooting.md). Check
+[Known issues](docs/deploy/known-issues.md) for current limitations.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |

@@ -9,7 +9,8 @@ ms.topic: reference
 
 Part of the [OneGrid landing zone design guide](architecture/design-guide.md).
 
-[Solution overview](../README.md) | [Deployment procedure](deployment-and-data-guide.md)
+[Solution overview](../README.md) | [Deploy OneGrid](deploy/README.md) |
+[Deploy and configure OneGrid](deployment-and-data-guide.md)
 
 The implementation has three coordinated layers: Azure resources declared in ARM/Bicep,
 Fabric items and connections created through the provisioner, and the packaged application.
@@ -25,6 +26,9 @@ This reference maps the logical diagram to those artifacts.
 | [Bicep source](../planetary-computer-pro-poc/deploy/azure/main.bicep) | Azure resource definitions, conditions, role assignments, outputs |
 | [Compiled ARM](../planetary-computer-pro-poc/deploy/azure/azuredeploy.json) | Deployment payload |
 | [Portal form](../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json) | Component, model, app, capacity, and module choices |
+| [Parameter files](../planetary-computer-pro-poc/deploy/azure/parameters/README.md) | Baseline, full, brownfield, and weather scenarios as ARM JSON and `.bicepparam` files |
+| [Deploy OneGrid](deploy/README.md) | Deployment reading path, options, scenarios, prerequisites, portal and command-line procedures, troubleshooting, known issues, and cost |
+| [Parameter reference](deploy/reference/parameters.md) and [generator](deploy/build_reference.py) | Every template parameter with its default, allowed values, and portal step, generated from `main.bicep` and the portal form; `--check` fails when the page is stale, and [`test_reference.py`](deploy/test_reference.py) validates the parameter files |
 | [In-template wrapper](../planetary-computer-pro-poc/deploy/azure/scripts/onegrid-solution-provision.ps1) | Compose provisioner config from deployed resources and run selected phases |
 | [Provisioner](../planetary-computer-pro-poc/infra/deploy.ps1) | Fabric items, data/model binding, identity/configuration, app wiring |
 | [Configuration shape](../planetary-computer-pro-poc/infra/config.sample.json) | Environment and governance settings |
@@ -131,6 +135,8 @@ the upload, and configures managed-identity mounting. Record which package and c
 the host actually uses. Retain immutable known-good artifacts for promotion/rollback;
 publishing a source release alone does not establish a running tenant's version.
 
-Keep Bicep, compiled ARM, and portal choices synchronized when changing infrastructure.
+Keep Bicep, compiled ARM, and portal choices synchronized when changing infrastructure, and
+regenerate the [parameter reference](deploy/reference/parameters.md) with
+`python docs/deploy/build_reference.py`.
 Validate application, schema/model, bindings, permissions, and source compatibility as one
 release. Use the [operations procedures](operations-runbook.md) for rollback and recovery.

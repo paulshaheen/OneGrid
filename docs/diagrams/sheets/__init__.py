@@ -7,8 +7,8 @@ deployment view (what the template creates), resource naming, then the detailed 
 ORDER = (
     "landing_zone", "baseline", "deployment", "naming",
     "fabric", "enterprise", "dns", "weather",
-    "identity", "monitoring", "regulated", "multiregion",
+    "identity", "monitoring", "regulated", "multiregion", "multiregion_failover",
 )
 
 # Sheets that use letters (design areas) or no markers instead of numbered workflow steps.
-UNNUMBERED = ("landing_zone", "naming")
+UNNUMBERED = ("landing_zone", "naming", "multiregion")

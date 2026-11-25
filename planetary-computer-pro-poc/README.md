@@ -167,8 +167,9 @@ az provider register --namespace Microsoft.Orbital
 Register-AzResourceProvider -ProviderNamespace Microsoft.Orbital
 ```
 
-> **Preview regions:** GeoCatalog is available in **East US, North Central US, West Europe,
-> Canada Central, UK South**, and US Gov Virginia. Deploy into one of these regions.
+> **Supported regions:** the template allows **East US, North Central US, West Europe,
+> Canada Central, and UK South**, the commercial regions where GeoCatalog is available. Deploy
+> into one of these regions. See [Get started](../docs/deploy/getting-started.md#prerequisites).
 
 ### OneGrid Fabric plane prerequisites (optional component)
 
@@ -177,9 +178,9 @@ eventhouse/KQL database, the `geo_point_in_polygon` hazard join, and (when a con
 supplied) a OneLake shortcut to the `model-outputs` container. Fabric workspaces and items are
 **not** ARM resource types, so this runs in-template as a
 `Microsoft.Resources/deploymentScripts` resource that calls the Fabric REST API using a
-user-assigned managed identity (`pcpro-fabricplane-identity`). This is the same pattern the
-template already uses for the Entra app registration (via the Microsoft Graph Bicep extension)
-— control-plane objects ARM can't create natively.
+user-assigned managed identity (`pcpro-fabricplane-identity`). The same scripts create the
+Entra sign-in app registration and the Import refresh service principal when the deployment
+identity holds Microsoft Graph permission — control-plane objects ARM can't create natively.
 
 Because it crosses into the Fabric and Entra control planes, a few prerequisites **cannot be
 set by the ARM template** and must exist before you deploy this component:
@@ -192,16 +193,20 @@ set by the ARM template** and must exist before you deploy this component:
 | 4 | Deploy into a region where **Azure Container Instances** is available | The deployment script runs in an ACI | You (pick a supported region) |
 | 5 | (For the OneLake shortcut only) an existing **Fabric cloud connection** to the storage account, supplied as `fabricConnectionId` | Connections are not ARM-creatable; without it the plane still deploys but **skips the shortcut** | Fabric workspace admin (create the connection first) |
 
-You also need an **existing Microsoft Fabric capacity** (F-SKU or trial) and must enable
-`deploySampleStorage` — the Fabric plane shortcuts to the sample storage account's
-`model-outputs` container. Supply the capacity id (bare GUID or full
-`/subscriptions/.../capacities/<name>` resource id), workspace name, and optional connection id
-in the wizard's **Fabric plane** step.
+You also need a **Microsoft Fabric capacity**: supply an existing one (F-SKU or trial), or set
+`createFabricCapacity` to have the template create an F-SKU capacity in the resource group
+(billed hourly until paused or deleted). Enable `deploySampleStorage` too — the Fabric plane
+shortcuts to the sample storage account's `model-outputs` container. Supply the capacity id
+(bare GUID or full `/subscriptions/.../capacities/<name>` resource id), workspace name, and
+optional connection id in the portal form's **Fabric plane** step.
 
-> Prerequisites #1 and #2 are the same *class* of tenant/RBAC requirement the template already
-> relies on for its Entra app registration (which needs **Application Administrator /
-> `Application.ReadWrite.All`**). No ARM template can grant itself these directory-scoped
-> permissions — the first real deployment is the validation pass.
+> Prerequisites #1 and #2 are the same *class* of tenant/RBAC requirement as the Entra sign-in
+> app registration. To let the setup scripts create that registration and the Import refresh
+> service principal, set `grantProvisionerGraphPermission`: it grants the deployment identity
+> Microsoft Graph **`Application.ReadWrite.OwnedBy`**, which requires a person who can grant
+> Graph application permissions (Privileged Role Administrator or Global Administrator).
+> No ARM template can grant itself directory-scoped permissions without that consent — the
+> first real deployment is the validation pass.
 
 ## Deploy to Azure
 
@@ -213,7 +218,8 @@ app shows, pick the App Service plan SKU, and select **Review + create**.
 The **App modules** step controls which OneGrid capabilities appear in the web app. Core pages
 (Overview, Asset Explorer, Maintenance, Alerts, Ontology, Thresholds, Governance, Cyber
 Readiness, Deployment) are always included. The selection is written to the web app's
-`ONEGRID_MODULES` app setting, so it can be changed later without redeploying:
+`ONEGRID_MODULES` app setting. You can change that setting later without redeploying, but the
+next deployment resets it to the template's `oneGridModules` value, so change the parameter too:
 
 | Module id | Adds |
 | --- | --- |
@@ -232,25 +238,24 @@ Leave `ONEGRID_MODULES` unset to show every module; set it to `none` for core pa
 
 [Visualize](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2Fpaulshaheen%2FOneGrid%2Fmain%2Fplanetary-computer-pro-poc%2Fdeploy%2Fazure%2Fazuredeploy.json)
 
-> The GeoCatalog is the long pole; a typical deployment completes in about **10–20 minutes**
-> (the deployment status may show "Created" before the GeoCatalog is fully ready). The App
-> Service is created empty — publish the application code afterwards (see below).
+> A full deployment commonly takes **30 to 90 minutes**; the Fabric plane and the data seed take
+> the longest (the deployment status may show "Created" before the GeoCatalog is fully ready).
+> [Deploy from the Azure portal](../docs/deploy/deploy-portal.md) walks through every tab, and
+> [Validate the deployment](../docs/deploy/deploy-cli.md#validate-the-deployment) runs the
+> acceptance checks.
 
-## Publish the web app code
+## How the web app is published
 
-The template creates the **App Service** (Linux, Node) configured to build and start the app,
-but it does **not** contain your application bits. Publish the `webapp/` folder once the
-infrastructure is deployed. Oryx runs `npm install` + `npm run build` and the site starts with
-`node server.mjs`.
+You don't publish application code by hand. The template's app-plane deployment script
+downloads the prebuilt, self-contained package from `oneGridAppPackageUrl` (by default the
+`onegrid-app.zip` asset of the GitHub release that the "Release OneGrid App" workflow publishes),
+re-hosts it in the deployment's private `onegrid-app-package` container, and points the App
+Service at it with `WEBSITE_RUN_FROM_PACKAGE` and the web app's managed identity. No
+server-side build runs.
 
-```bash
-# from the repo root
-cd webapp
-az webapp up --name <webAppName> --resource-group pcpro-poc-rg --runtime "NODE:22-lts"
-```
-
-`<webAppName>` and the site URL are in the `webAppName` / `webAppUrl` deployment outputs. You
-can also wire CI/CD (GitHub Actions or Azure DevOps) to deploy `webapp/` on push.
+The site URL is in the `oneGridAppUrl` deployment output. To roll out a new build, publish a new
+package and redeploy; see [Redeploy](../docs/deploy/deploy-cli.md#redeploy) and the
+[known issue about the mutable `app-latest` package](../docs/deploy/known-issues.md).
 
 ## Deploy from the command line (optional)
 
@@ -322,7 +327,7 @@ az role assignment create \
 
 ## Use the web app
 
-Open the `webAppUrl` from the deployment outputs in a browser. Sign in with your Microsoft
+Open the `oneGridAppUrl` from the deployment outputs in a browser. Sign in with your Microsoft
 Entra identity (when `entraTenantId` / `entraClientId` are configured), then use the app to:
 
 1. **Browse** your GeoCatalog's STAC collections and items.
@@ -366,7 +371,7 @@ SAS. The container URL is surfaced to the app as `UPLOAD_CONTAINER_URL` /
 ## Use your own data (managed-identity ingestion)
 
 When you deploy the sample storage component, the template also creates a user-assigned managed
-identity (`pcpro-ingest-identity`) with **Storage Blob Data Reader** on the sample container,
+identity (`pcpro-ingest-identity`) with **Storage Blob Data Reader** on the sample storage account,
 and **associates it with the GeoCatalog** for you, so the identity is ready for the
 managed-identity ingestion path the official APIs use. To ingest your own assets:
 
@@ -374,7 +379,7 @@ managed-identity ingestion path the official APIs use. To ingest your own assets
    and build STAC items for them.
 2. Register the container as a **managed-identity ingestion source** using the deployment
    outputs `sampleContainerUrl` and `ingestIdentityObjectId`. The identity is already assigned
-   to the GeoCatalog and already holds Storage Blob Data Reader on the container, so no extra
+   to the GeoCatalog and already holds Storage Blob Data Reader on the sample storage account, so no extra
    role setup is needed. See
    [Set up an ingestion source using managed identity](https://learn.microsoft.com/azure/planetary-computer/set-up-ingestion-credentials-managed-identity).
 3. Post your STAC items to the GeoCatalog Items API.
@@ -508,7 +513,7 @@ against the active forecast.
   HTTPS. There is no workstation VM, no RDP/SSH, and no VNet/Bastion to operate.
 - The web app uses a **system-assigned managed identity** for every Azure data-plane call
   (GeoCatalog, storage, Foundry). The sample-data ingestion path uses a **user-assigned managed
-  identity** scoped to **Storage Blob Data Reader** on the sample container only.
+  identity** scoped to **Storage Blob Data Reader** on the sample storage account only.
 - User sign-in is **Microsoft Entra ID (MSAL)**; the `entraTenantId` / `entraClientId` app
   settings are public identifiers (not secrets). The Entra app is a single-tenant SPA that
   requests only `openid`/`profile`/`email` (delegated, no admin consent). It is registered at

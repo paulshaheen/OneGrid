@@ -1,0 +1,486 @@
+name: Validate infrastructure
+
+# Validation for the OneGrid deployment template (main.bicep -> azuredeploy.json), its portal
+# form (createUiDefinition.json), the provisioning/validation scripts, and the generated docs and
+# diagrams.
+#
+#   Job            Blocking  What it proves
+#   bicep          yes       main.bicep lints and builds; committed azuredeploy.json matches a fresh
+#                            build; the PSRule harness and any .bicepparam files build; parameter
+#                            files only use real parameters, types and allowed values
+#   ui-definition  yes       every portal-form output maps to a template parameter, references
+#                            resolve, types/allowed values agree (tools/check_ui_definition.py)
+#   powershell     yes       deployment scripts parse under PowerShell 7 and have no
+#                            Error-severity PSScriptAnalyzer findings; teardown.sh passes shellcheck
+#   docs           yes       diagrams and the generated deployment reference are current; tests pass
+#   arm-ttk        no        ARM-TTK results, reported in the job summary (known false positives)
+#   psrule         no        PSRule for Azure (WAF) results, reported in the job summary
+#   what-if        manual    workflow_dispatch only: az deployment group what-if against an existing
+#                            resource group with a chosen parameter file. Never deploys.
+#
+# Required status checks: this workflow is path-filtered, so it does not run on PRs that touch
+# none of the paths below. If you make its jobs required checks, remove the path filters (or add
+# a no-op fallback workflow) so unrelated PRs are not left waiting.
+
+on:
+  pull_request:
+    paths:
+      - 'planetary-computer-pro-poc/deploy/**'
+      - 'planetary-computer-pro-poc/infra/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'ps-rule.yaml'
+      - 'PSScriptAnalyzerSettings.psd1'
+      - '.github/workflows/validate-infra.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'planetary-computer-pro-poc/deploy/**'
+      - 'planetary-computer-pro-poc/infra/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'ps-rule.yaml'
+      - 'PSScriptAnalyzerSettings.psd1'
+      - '.github/workflows/validate-infra.yml'
+  workflow_dispatch:
+    inputs:
+      what_if_parameter_file:
+        description: 'What-if: repository path of a .json or .bicepparam parameter file (leave empty to skip what-if)'
+        type: string
+        default: ''
+      what_if_resource_group:
+        description: 'What-if: existing resource group to preview against'
+        type: string
+        default: ''
+
+# Every job declares the least it needs; the default token gets nothing.
+permissions: {}
+
+concurrency:
+  group: validate-infra-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DEPLOY_DIR: planetary-computer-pro-poc/deploy/azure
+  PYTHON_VERSION: '3.12'
+  AZURE_CORE_NO_COLOR: 'true'
+  AZURE_CORE_COLLECT_TELEMETRY: 'false'
+
+jobs:
+  bicep:
+    name: Bicep lint, build and drift check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Build with the Bicep version recorded in the committed azuredeploy.json
+      # (metadata._generator.version) so the drift check compares like with like. To move to a
+      # newer Bicep, rebuild azuredeploy.json locally with it; CI follows automatically.
+      - name: Install Bicep (version that built azuredeploy.json)
+        run: |
+          set -euo pipefail
+          version="$(python "$DEPLOY_DIR/tools/compare_arm.py" --committed "$DEPLOY_DIR/azuredeploy.json" --print-version)"
+          short="$(echo "$version" | cut -d. -f1-3)"
+          az config set bicep.use_binary_from_path=false bicep.check_version=false --only-show-errors
+          if az bicep install --version "v${short}" --only-show-errors; then
+            echo "Installed Bicep v${short} (recorded in azuredeploy.json)."
+          else
+            echo "::warning title=Bicep version::Bicep v${short} could not be installed; using the latest release instead."
+            az bicep upgrade --only-show-errors || az bicep install --only-show-errors
+          fi
+          az bicep version
+
+      - name: Lint main.bicep
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: az bicep lint --file main.bicep
+
+      - name: Build main.bicep and compare with azuredeploy.json
+        run: |
+          set -euo pipefail
+          az bicep build --file "$DEPLOY_DIR/main.bicep" --outfile "$RUNNER_TEMP/azuredeploy.built.json"
+          python "$DEPLOY_DIR/tools/compare_arm.py" \
+            --committed "$DEPLOY_DIR/azuredeploy.json" \
+            --built "$RUNNER_TEMP/azuredeploy.built.json"
+
+      # The harness expands main.bicep with every component on for PSRule; building it here
+      # catches renamed or removed parameters before PSRule coverage silently shrinks.
+      - name: Build the PSRule test harness
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for f in "$DEPLOY_DIR"/tools/psrule/*.tests.bicep; do
+            az bicep build --file "$f" --stdout > /dev/null
+            echo "built $f"
+          done
+
+      - name: Build .bicepparam files and check parameter files
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          params_dir="$DEPLOY_DIR/parameters"
+          out="$RUNNER_TEMP/params"
+          mkdir -p "$out"
+          files=()
+          for f in "$params_dir"/*.bicepparam; do
+            name="$(basename "$f" .bicepparam)"
+            az bicep build-params --file "$f" --outfile "$out/$name.bicepparam.json"
+            files+=("$out/$name.bicepparam.json")
+          done
+          for f in "$params_dir"/*.json; do
+            files+=("$f")
+          done
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No parameter files in $params_dir; nothing to check."
+            exit 0
+          fi
+          python "$DEPLOY_DIR/tools/check_parameter_files.py" --template "$DEPLOY_DIR/azuredeploy.json" "${files[@]}"
+
+  ui-definition:
+    name: Portal form alignment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check createUiDefinition.json against azuredeploy.json
+        run: python "$DEPLOY_DIR/tools/check_ui_definition.py" --json "$RUNNER_TEMP/ui-definition-findings.json"
+
+      - name: Unit tests for the template tools
+        run: python -m unittest discover -s "$DEPLOY_DIR/tools" -p "test_*.py" -v
+
+  powershell:
+    name: PowerShell parse and PSScriptAnalyzer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install PSScriptAnalyzer 1.25.0
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+
+      # Fails on parse errors and Error-severity findings only; warnings become annotations.
+      # Rules excluded as noise are listed with reasons in PSScriptAnalyzerSettings.psd1.
+      - name: Analyze deployment scripts
+        shell: pwsh
+        run: ./planetary-computer-pro-poc/deploy/azure/tools/Invoke-InfraScriptAnalysis.ps1
+
+      - name: Check teardown.sh
+        run: |
+          set -euo pipefail
+          bash -n "$DEPLOY_DIR/teardown.sh"
+          shellcheck --severity=warning "$DEPLOY_DIR/teardown.sh"
+
+  docs:
+    name: Docs and diagrams
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Diagrams are current
+        run: python docs/diagrams/build_diagrams.py --check
+
+      - name: Diagram tests
+        run: python -m unittest discover -s docs/diagrams -p "test_*.py" -v
+
+      - name: Deployment reference is current
+        run: |
+          if [ -f docs/deploy/build_reference.py ]; then
+            python docs/deploy/build_reference.py --check
+          else
+            echo "::notice title=Deployment reference::docs/deploy/build_reference.py does not exist yet; skipped."
+          fi
+
+      - name: Deployment reference tests
+        run: |
+          if [ -d docs/deploy ] && compgen -G "docs/deploy/test_*.py" > /dev/null; then
+            python -m unittest discover -s docs/deploy -p "test_*.py" -v
+          else
+            echo "::notice title=Deployment reference tests::no docs/deploy/test_*.py yet; skipped."
+          fi
+
+  # ARM-TTK is report-only: it is aimed at Marketplace templates and has known false positives
+  # here. It does not fully support languageVersion 2.0 templates with symbolic resource names
+  # (which Bicep emits because main.bicep uses the Microsoft Graph extension), and rules such as
+  # Location-Should-Not-Be-Hardcoded (location is restricted to the GeoCatalog regions),
+  # DeploymentTemplate-Must-Not-Contain-Hardcoded-Uri (package/repo URLs are parameter defaults),
+  # apiVersions-Should-Be-Recent and Template-Should-Not-Contain-Blanks flag deliberate choices.
+  # Review new failures in the job summary; the step never fails the workflow.
+  arm-ttk:
+    name: ARM-TTK (report only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ARM_TTK_VERSION: '20260213'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download ARM-TTK ${{ env.ARM_TTK_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/arm-ttk.zip" \
+            "https://github.com/Azure/arm-ttk/releases/download/${ARM_TTK_VERSION}/arm-ttk.zip"
+          sha256sum "$RUNNER_TEMP/arm-ttk.zip"
+          unzip -q -o "$RUNNER_TEMP/arm-ttk.zip" -d "$RUNNER_TEMP/arm-ttk"
+
+      - name: Run ARM-TTK
+        id: ttk
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $module = Get-ChildItem -Path "$env:RUNNER_TEMP/arm-ttk" -Recurse -Filter 'arm-ttk.psd1' | Select-Object -First 1
+          Import-Module $module.FullName -Force
+          $results = @(Test-AzTemplate -TemplatePath "$env:DEPLOY_DIR")
+          $failed = @($results | Where-Object { -not $_.Passed })
+          $rows = foreach ($r in $results) {
+            [pscustomobject]@{
+              Test   = $r.Name
+              Group  = $r.Group
+              File   = $(if ($r.File.Name) { $r.File.Name } else { [string]$r.File })
+              Passed = [bool]$r.Passed
+              Errors = (@($r.Errors) | ForEach-Object { "$_" }) -join ' | '
+            }
+          }
+          $rows | ConvertTo-Json -Depth 4 | Set-Content -Path "$env:RUNNER_TEMP/arm-ttk-results.json"
+          $md = @("### ARM-TTK $env:ARM_TTK_VERSION (report only)", '', "$($results.Count) tests, $($failed.Count) failed.", '')
+          if ($failed.Count) {
+            $md += '| Test | File | First error |'
+            $md += '| --- | --- | --- |'
+            foreach ($r in ($rows | Where-Object { -not $_.Passed })) {
+              $first = ($r.Errors -split ' \| ')[0]
+              if ($first.Length -gt 200) { $first = $first.Substring(0, 200) + '...' }
+              $md += "| $($r.Test) | $($r.File) | $($first.Replace('|', '\|')) |"
+              Write-Output "::warning title=ARM-TTK $($r.Test)::$($r.File): $first"
+            }
+          }
+          $md -join "`n" | Add-Content -Path $env:GITHUB_STEP_SUMMARY
+          if ($failed.Count) { exit 1 }
+
+      - name: Report ARM-TTK outcome
+        if: always()
+        env:
+          OUTCOME: ${{ steps.ttk.outcome }}
+        run: |
+          if [ "$OUTCOME" != "success" ]; then
+            echo "::warning title=ARM-TTK (report only)::ARM-TTK reported failures ($OUTCOME). See the job summary; this job does not block merges."
+          fi
+
+      - name: Upload ARM-TTK results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: arm-ttk-results
+          path: ${{ runner.temp }}/arm-ttk-results.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # PSRule for Azure checks the expanded resources against the Azure Well-Architected rules.
+  # Report-only for now: the step has continue-on-error and the outcome is written to the job
+  # summary. To make it blocking, delete `continue-on-error: true` from the "PSRule for Azure"
+  # step once current findings are fixed or suppressed with reasons in ps-rule.yaml.
+  psrule:
+    name: PSRule for Azure (report only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bicep for expansion
+        run: |
+          set -euo pipefail
+          az config set bicep.use_binary_from_path=false bicep.check_version=false --only-show-errors
+          az bicep install --only-show-errors
+          az bicep version
+
+      # Pre-install pinned module versions; the action only installs modules that are missing.
+      - name: Install pinned PSRule modules
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSRule -RequiredVersion 2.9.0 -Scope CurrentUser -Force
+          Install-Module -Name PSRule.Rules.Azure -RequiredVersion 1.47.0 -Scope CurrentUser -Force
+
+      - name: PSRule for Azure
+        id: psrule
+        continue-on-error: true
+        uses: microsoft/ps-rule@46451b8f5258c41beb5ae69ed7190ccbba84112c # v2.9.0
+        env:
+          PSRULE_AZURE_BICEP_USE_AZURE_CLI: 'true'
+        with:
+          version: '2.9.0'
+          inputType: repository
+          inputPath: planetary-computer-pro-poc/deploy/azure/
+          modules: PSRule.Rules.Azure
+          option: ps-rule.yaml
+          outcome: Processed
+          outputFormat: Sarif
+          outputPath: reports/ps-rule-results.sarif
+          summary: true
+
+      - name: Report PSRule outcome
+        if: always()
+        env:
+          OUTCOME: ${{ steps.psrule.outcome }}
+        run: |
+          {
+            echo "### PSRule for Azure (report only)"
+            echo
+            echo "Outcome: **${OUTCOME}**. Findings are listed above; this job does not block merges."
+            echo "To make it blocking, remove continue-on-error from the PSRule step (see ps-rule.yaml)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$OUTCOME" != "success" ]; then
+            echo "::warning title=PSRule for Azure (report only)::PSRule reported failing rules or errors ($OUTCOME). See the job summary."
+          fi
+
+      - name: Upload PSRule results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ps-rule-results
+          path: reports/ps-rule-results.sarif
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Manual what-if preview against a real subscription. Never runs `az deployment group create`.
+  #
+  # One-time setup:
+  #   1. Create an Entra app registration (or user-assigned managed identity) for this repository
+  #      and add a federated credential: issuer https://token.actions.githubusercontent.com,
+  #      subject repo:<owner>/<repo>:environment:infra-what-if, audience api://AzureADTokenExchange.
+  #   2. On the target resource group grant it read access plus the deployment preview actions
+  #      (Microsoft.Resources/deployments/validate/action and .../whatIf/action) via a custom role;
+  #      Contributor also works but is broader than what-if needs. A parameter file with
+  #      grantProvisionerGraphPermission=true also needs Microsoft Graph permissions for the
+  #      Graph extension resources.
+  #   3. Set repository or environment variables (or secrets) AZURE_CLIENT_ID, AZURE_TENANT_ID and
+  #      AZURE_SUBSCRIPTION_ID. Optionally add required reviewers to the infra-what-if environment.
+  #   4. Commit the parameter file without secrets (secure parameters default to empty).
+  # The template's deploymentToken defaults to utcNow(), so what-if always shows the Aurora key
+  # vault name and deployment-script forceUpdateTag as changing; that is expected.
+  what-if:
+    name: What-if preview (manual)
+    if: github.event_name == 'workflow_dispatch' && inputs.what_if_parameter_file != ''
+    needs: [bicep]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: infra-what-if
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Inputs reach the shell only through environment variables and are validated before use.
+      - name: Validate inputs
+        env:
+          PARAMETER_FILE: ${{ inputs.what_if_parameter_file }}
+          RESOURCE_GROUP: ${{ inputs.what_if_resource_group }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$PARAMETER_FILE" =~ ^[A-Za-z0-9._/-]+\.(json|bicepparam)$ ]] || [[ "$PARAMETER_FILE" == *..* ]] || [[ "$PARAMETER_FILE" == /* ]]; then
+            echo "::error title=what_if_parameter_file::Use a relative repository path to a .json or .bicepparam file."
+            exit 1
+          fi
+          if [ ! -f "$PARAMETER_FILE" ]; then
+            echo "::error title=what_if_parameter_file::$PARAMETER_FILE does not exist in this commit."
+            exit 1
+          fi
+          if [[ ! "$RESOURCE_GROUP" =~ ^[-A-Za-z0-9._()]{1,90}$ ]]; then
+            echo "::error title=what_if_resource_group::Give an existing resource group name (1-90 letters, digits, - _ . ( ))."
+            exit 1
+          fi
+          echo "PARAMETER_FILE=$PARAMETER_FILE" >> "$GITHUB_ENV"
+          echo "RESOURCE_GROUP=$RESOURCE_GROUP" >> "$GITHUB_ENV"
+
+      - name: Azure login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: What-if (preview only)
+        run: |
+          set -euo pipefail
+          if ! az group show --name "$RESOURCE_GROUP" --only-show-errors > /dev/null; then
+            echo "::error title=Resource group::$RESOURCE_GROUP was not found. What-if previews an existing resource group; this workflow never creates one."
+            exit 1
+          fi
+          args=(--resource-group "$RESOURCE_GROUP" --name "whatif-${GITHUB_RUN_ID}" --exclude-change-types NoChange Ignore --only-show-errors)
+          if [[ "$PARAMETER_FILE" == *.bicepparam ]]; then
+            args+=(--parameters "$PARAMETER_FILE")
+          else
+            args+=(--template-file "$DEPLOY_DIR/azuredeploy.json" --parameters "@$PARAMETER_FILE")
+          fi
+          az deployment group what-if "${args[@]}" | tee "$RUNNER_TEMP/what-if.txt"
+          {
+            echo "### What-if: \`$PARAMETER_FILE\` on \`$RESOURCE_GROUP\`"
+            echo
+            echo '```text'
+            head -c 60000 "$RUNNER_TEMP/what-if.txt"
+            echo
+            echo '```'
+            echo
+            echo "Attach this output (artifact what-if-output) to the pull request for template changes."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload what-if output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: what-if-output
+          path: ${{ runner.temp }}/what-if.txt
+          if-no-files-found: ignore
+          retention-days: 30

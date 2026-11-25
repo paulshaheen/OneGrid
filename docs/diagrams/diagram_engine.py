@@ -118,6 +118,7 @@ class Group:
     icon: str | None = None
     dashed: bool = False
     accent: bool = False         # scale-unit boundary drawn in the accent colour
+    passive: bool = False        # recovery or standby subscription, drawn greyed
 
 
 @dataclass
@@ -177,6 +178,7 @@ class Sheet:
     style: str = "cards"         # cards | learn (icon-first, Azure Architecture Center grammar)
     steps: list = field(default_factory=list)
     footnote: str = ""
+    unit_label: str = "Scale unit (deployment stamp)"   # legend text for accent (red dashed) boxes
 
     # ----- building -------------------------------------------------------
     def _add_group(self, group):
@@ -191,9 +193,11 @@ class Sheet:
         """An outlined service, network or trust boundary. accent=True marks a scale unit."""
         return self._add_group(Group(id, x, y, w, h, title, note, "boundary", icon, dashed or accent, accent))
 
-    def subscription(self, id, x, y, w, h, title, note=""):
-        """A filled subscription container with the subscription (key) icon, as in landing zone drawings."""
-        return self._add_group(Group(id, x, y, w, h, title, note, "subscription", "subscriptions"))
+    def subscription(self, id, x, y, w, h, title, note="", passive=False):
+        """A filled subscription container with the subscription (key) icon, as in landing zone drawings.
+        passive=True greys it out: a recovery or standby copy, as in Microsoft's BCDR drawings."""
+        return self._add_group(Group(id, x, y, w, h, title, note, "subscription", "subscriptions",
+                                     passive=passive))
 
     def strip(self, prefix, x, y, items, gap=84):
         """A row of small icons with one-line names, e.g. the governance controls on a subscription."""
@@ -519,7 +523,7 @@ class Sheet:
         if any(isinstance(n, int) for n, _, _ in self.steps):
             items.append(("step", "step", "Workflow step; numbers match the article"))
         if any(isinstance(n, str) for n, _, _ in self.steps):
-            items.append(("step", "area", "Design area; letters match the design guide"))
+            items.append(("step", "area", "Design area; letters match the article"))
         if any(c.optional for c in self.cards):
             items.append(("box", "optional", "Optional component or add-on"))
         styles = {g.style for g in self.groups}
@@ -527,12 +531,14 @@ class Sheet:
             items.append(("box", "stage", "Stage"))
         if "zone" in styles:
             items.append(("box", "zone", "Platform, tenant or region"))
-        if "subscription" in styles:
+        if any(g.style == "subscription" and not g.passive for g in self.groups):
             items.append(("box", "subscription", "Subscription"))
+        if any(g.style == "subscription" and g.passive for g in self.groups):
+            items.append(("box", "passive", "Recovery or standby subscription"))
         if any(g.style == "boundary" and not g.accent for g in self.groups):
             items.append(("box", "boundary", "Network, resource group or trust boundary"))
         if any(g.accent for g in self.groups):
-            items.append(("box", "unit", "Scale unit (deployment stamp)"))
+            items.append(("box", "unit", self.unit_label))
         placed, x, y = [], 40, self.height + 26
         for kind, key, label in items:
             w = (44 if kind == "arrow" else 32) + text_width(label, 12.5)
@@ -571,6 +577,7 @@ class Sheet:
                     "stage": f'fill="{t["stage_fill"]}" stroke="{t["blue"]}" stroke-dasharray="4 3"',
                     "zone": f'fill="none" stroke="{t["blue"]}" stroke-dasharray="1.5 3" stroke-linecap="round"',
                     "subscription": f'fill="{t["sub_fill"]}" stroke="{t["blue"]}"',
+                    "passive": f'fill="{t["stage_fill"]}" stroke="{t["boundary"]}" stroke-dasharray="4 3"',
                     "boundary": f'fill="none" stroke="{t["boundary"]}"',
                     "unit": f'fill="none" stroke="{t["unit"]}" stroke-dasharray="6 3"',
                 }[key]
@@ -701,6 +708,9 @@ class Sheet:
             if g.style == "zone":
                 out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="6" fill="none" '
                            f'stroke="{t["blue"]}" stroke-width="1.5" stroke-dasharray="1.5 4" stroke-linecap="round"/>')
+            elif g.passive:
+                out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="6" fill="{t["stage_fill"]}" '
+                           f'stroke="{t["boundary"]}" stroke-width="1.2" stroke-dasharray="6 4"/>')
             else:
                 out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="6" fill="{t["sub_fill"]}" '
                            f'stroke="{t["blue"]}" stroke-width="1.2"/>')
@@ -983,6 +993,8 @@ def drawio_document(sheets, theme_name="light"):
                 continue
             if g.style == "zone":
                 look = f"fillColor=none;strokeColor={t['blue']};dashed=1;dashPattern=1 4;"
+            elif g.style == "subscription" and g.passive:
+                look = f"fillColor={t['stage_fill']};strokeColor={t['boundary']};dashed=1;dashPattern=6 4;"
             elif g.style == "subscription":
                 look = f"fillColor={t['sub_fill']};strokeColor={t['blue']};"
             elif g.style == "band":

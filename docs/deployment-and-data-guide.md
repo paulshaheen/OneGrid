@@ -1,7 +1,7 @@
 ---
 title: Deploy and configure OneGrid
-description: Deploy OneGrid Azure resources and Fabric items, configure identities and models, load assets and imagery, and verify operational and weather intelligence.
-ms.date: 11/23/2026
+description: Configure a deployed OneGrid environment, load asset registers, imagery, telemetry, history, and weather, and verify the result with the acceptance checks.
+ms.date: 11/24/2026
 ms.topic: how-to
 ---
 
@@ -9,72 +9,44 @@ ms.topic: how-to
 
 Part of the [OneGrid landing zone design guide](architecture/design-guide.md).
 
-[Solution overview](../README.md) | [Implementation reference](implementations.md)
+[Solution overview](../README.md) | [Deploy OneGrid](deploy/README.md) |
+[Implementation reference](implementations.md)
 
 Deploy OneGrid into the selected subscription and Fabric tenant, then configure its sources,
 models, sign-in, and operational schedules. The deployment has two parts: ARM creates the
 Azure resources; deployment scripts run the Fabric/application provisioner.
 
+The deployment procedure is in [Deploy OneGrid](deploy/README.md). This article covers what
+follows it: configuring governance, loading and connecting data, and accepting the
+environment.
+
 ## Prerequisites
 
-| Area | Requirement |
-| --- | --- |
-| Azure | Subscription/resource group access to create the selected resources and role assignments |
-| Region | One of `eastus`, `northcentralus`, `westeurope`, `canadacentral`, `uksouth`; validate every selected service/SKU and quota |
-| Providers | Register the providers used by selected components, including Orbital, Storage, ManagedIdentity, Web, CognitiveServices, Resources, ContainerInstance, and Fabric |
-| Fabric | Approved tenant settings for provisioning identities; rights to use the capacity and administer the workspace |
-| Sign-in | Existing SPA app registration with `https://<app-host>/auth/callback`, or approved directory permission for creation |
-| Import refresh | Existing refresh service principal and secret, or approved Graph permission for creation |
-| Aurora | Model asset, accepted model terms, A100 quota, Azure ML/Key Vault/Insights providers |
-| Forecast job | Aurora and storage, Container Apps/registry/log providers, permitted source and image access |
-| Enterprise environment | Approved network, DNS, policy, identity, diagnostics, cost, and recovery configuration |
-
-Fabric/Entra permissions are separate from Azure RBAC. Establish them before starting the
-cross-plane deployment. The guided [Copilot runbook](../DEPLOY-WITH-COPILOT.md) provides
-permission, provider, quota, approval, and progress-check commands.
+The [getting started checklists](deploy/getting-started.md#prerequisites) list the Azure,
+region, resource provider, Microsoft Fabric, Microsoft Entra, Aurora, and storage policy
+requirements. Fabric and Entra permissions are separate from Azure RBAC, so establish them
+before you start the cross-plane deployment, and
+[validate the prerequisites](deploy/getting-started.md#validate-prerequisites) with
+`Test-OneGridPrerequisites.ps1`.
 
 ## Choose components
 
-The compiled ARM defaults and a full-solution selection differ. Set component choices
-explicitly for command-line deployments.
-
-| Parameter | ARM default | Full-solution use |
-| --- | --- | --- |
-| `deploySampleStorage` | `true` | Asset, package, output, and transfer containers |
-| `deployFabricPlane` | `false` | Set `true` for the Fabric workspace/data plane |
-| `deployOneGridApp` | `false` | Set `true` for the unified application |
-| `deployAiAgent` | `true` | Declare the Microsoft Foundry account and model deployment that the app reuses |
-| `deployGeoCatalog` | `true` | Include STAC, imagery, and catalog-backed asset workflows |
-| `createFabricCapacity` | `false` | Set `true` to create capacity, otherwise supply `fabricCapacityId` |
-| `fabricCapacitySku` | `F2` | Size a new capacity for expected load |
-| `createFabricConnection` | `false` | Set `true` for workspace-identity connection/shortcut creation, or supply `fabricConnectionId` |
-| `deployOneGridData` | `false` | Seed the historical data bundle when required |
-| `deployUnifiedModel` | `true` | Generate shared `og.*` tables and bind/refresh `OneGridModelImport` |
-| `deployAuroraModel` | `false` | Include Azure ML workspace and online endpoint |
-| `createAuroraModelDeployment` | `false` | Deploy the published model, or supply `auroraModelAssetId` |
-| `deployAuroraSchedule` | `false` | Include forecast orchestration and scheduled publication |
-| `enableEntraSignIn` | `true` | Configure sign-in using an existing or newly created registration |
-
-The full app requires the Fabric plane and sample storage. The forecast job requires Aurora
-and sample storage. The model deployment also requires quota and accepted terms. Review
-outputs and provisioning results for the selected combination.
-
-Use `oneGridModules` to select `exec`, `weather`, `twin`, `infra`, `sap`, `esu`, `onerig`,
-and `copilot`. An empty list keeps core pages only.
+[Choose components](deploy/getting-started.md#choose-components) lists each component, its
+parameter, and its dependencies. The compiled ARM defaults and the portal's default selection
+differ, so set component choices explicitly for command-line deployments; the
+[parameter reference](deploy/reference/parameters.md#portal-defaults-that-differ-from-the-template)
+lists the differences, and the
+[parameter files](../planetary-computer-pro-poc/deploy/azure/parameters/README.md) set every
+switch.
 
 ## Configure identity and environment
 
-1. Select the target subscription, region, resource group, workspace, and capacity.
-2. Configure `entraSignInClientId` for a pre-created sign-in registration, or approve
-   creation through the provisioner.
-3. Configure `refreshServicePrincipalClientId`, `refreshServicePrincipalObjectId`, and
-   secure `refreshServicePrincipalSecret`, or approve
-   `grantProvisionerGraphPermission` for identity creation.
-4. Keep secret-bearing parameter/configuration files outside source control. Use the
-   approved secret-provider integration and avoid printing resolved parameter values.
-5. Keep `exemptStorageFromPolicy=false` unless the platform owner has approved a scoped,
-   documented policy exception. Validate deployment-script storage access against policy.
-6. Select a package/version and `oneGridRef` appropriate for the release.
+Plan the sign-in registration, the Import refresh identity, the storage policy exemption, and
+the network model with [Get started](deploy/getting-started.md#plan-the-deployment). Keep
+secret-bearing parameter and configuration files outside source control, pass the refresh
+secret from Azure Key Vault, and avoid printing resolved parameter values. Select a package
+version and `oneGridRef` appropriate for the release; see
+[mutable source defaults](deploy/known-issues.md#mutable-source-defaults).
 
 For customer governance, configure the provisioner's `governance` block separately: group
 IDs, inventory/demo mode, role creation choices, and app permissions. The ARM wrapper
@@ -82,63 +54,26 @@ initializes governance disabled.
 
 ### Establish enterprise network prerequisites
 
-For an enterprise environment, approve the
-[traffic-flow matrix](architecture/enterprise-landing-zone.md#traffic-flow-matrix)
-before restricting endpoints. Prepare gateway/private-endpoint/integration subnets,
-connected deployment runners, private DNS, and the required bootstrap and runtime rules.
-
-Use tenant-level Fabric Private Link for the combined OneGrid workspace and retain the
-Eventstream artifact's `ProcessedIngestion` mode. Plan the forecast job's VNet-integrated
-workload profiles environment at creation time when controlled egress is required.
-Select Premium rather than the auto-created Basic registry for a private registry path.
-
-Apply these enterprise changes through reviewed platform/workload IaC. Validate private
-paths, package bootstrap, queries, source access, and image delivery before disabling
-the corresponding public paths. Record results with the
+The enterprise network prerequisites are in
+[Choose the network model](deploy/getting-started.md#choose-the-network-model). Approve the
+[traffic-flow matrix](architecture/enterprise-landing-zone.md#traffic-flow-matrix) before
+restricting endpoints, apply the changes through reviewed platform and workload IaC, and
+record the results with the
 [network acceptance procedure](operations-runbook.md#validate-network-and-traffic-flows).
 
 ## Deploy resources and provision the solution
 
-Use the portal button in the [solution overview](../README.md#deploy-this-solution), or
-prepare a complete ARM parameter file outside the repository. Include selected components,
-capacity, sign-in, refresh identity, and any weather choices. The design guide compares all
-[deployment options](architecture/design-guide.md#deployment-options), including the GitHub
-Copilot runbook and the deploy wizard.
-
-The following PowerShell sequence validates and deploys a prepared parameter file:
-
-```powershell
-$resourceGroup = 'onegrid-rg'
-$location = 'westeurope'
-$parametersFile = 'C:\deployment\onegrid.parameters.json'
-$templateFile = '.\planetary-computer-pro-poc\deploy\azure\azuredeploy.json'
-
-az group create --name $resourceGroup --location $location
-az deployment group validate --resource-group $resourceGroup --template-file $templateFile --parameters "@$parametersFile"
-az deployment group what-if --resource-group $resourceGroup --template-file $templateFile --parameters "@$parametersFile"
-az deployment group create --resource-group $resourceGroup --name onegrid --template-file $templateFile --parameters "@$parametersFile"
-```
-
-Approve resource and cost changes before running the deployment. Ensure `$location` matches
-the parameter file. The full deployment commonly takes 30-90 minutes; data seeding,
-Fabric readiness, and optional model/image work can extend the duration.
+Deploy with the [Azure portal](deploy/deploy-portal.md), the
+[Azure CLI or Azure PowerShell](deploy/deploy-cli.md), the
+[Copilot runbook](../DEPLOY-WITH-COPILOT.md), or the
+[deploy wizard](../planetary-computer-pro-poc/infra/deploy-ui/README.md).
+[Deploy OneGrid](deploy/README.md#deployment-options) compares them. The command-line guide
+covers validation, what-if, monitoring, the deployment-script logs, outputs, redeployment,
+and teardown; [Troubleshooting](deploy/troubleshooting.md) lists the failures by phase.
 
 The template's app and Fabric scripts invoke selected provisioner phases in the defined
 phase order. The wrapper composes configuration from the deployed resources, including
 storage, model endpoint, catalog URI, workspace/capacity, and refresh identity.
-
-### Monitor provisioning
-
-```powershell
-az deployment group show --resource-group $resourceGroup --name onegrid --query properties.provisioningState -o tsv
-az deployment-scripts show-log --resource-group $resourceGroup --name pcpro-onegrid-provision-app
-az deployment-scripts show-log --resource-group $resourceGroup --name pcpro-onegrid-provision-fabric
-az deployment group show --resource-group $resourceGroup --name onegrid --query properties.outputs -o json
-```
-
-Restrict deployment-log access and redact sensitive material before sharing. Investigate
-app and Fabric results independently. Record skipped components, phase errors, IDs, and
-connection/refresh outcomes.
 
 ### Application delivery
 
@@ -218,6 +153,18 @@ empty event result when none are detected.
 
 ## Acceptance checks
 
+[`Test-OneGridDeployment.ps1`](../planetary-computer-pro-poc/deploy/azure/scripts/Test-OneGridDeployment.ps1)
+automates this table. Run it with the resource group and deployment name, and keep its JSON
+evidence file:
+
+```powershell
+./planetary-computer-pro-poc/deploy/azure/scripts/Test-OneGridDeployment.ps1 -ResourceGroupName <rg> -DeploymentName <name> -OutputPath ./onegrid-evidence.json
+```
+
+The script tags each result with the row it supports, records disabled components as `N/A`,
+and records the parts of a row that need a person, such as an authorized user journey or a
+grounded chat answer, as `MANUAL`. Complete those checks yourself.
+
 | Check | Expected evidence |
 | --- | --- |
 | Provisioning | ARM state and app/Fabric phase results; selected resource IDs |
@@ -240,6 +187,8 @@ deployment ID, source/package/model versions, data mode, and time.
 
 Use the [operations guide](operations.md) for maintenance and
 [runbook](operations-runbook.md) for incident, rollback, restore, and decommissioning.
-Resource-group deletion and Fabric/directory cleanup are separate lifecycle operations.
+Resource-group deletion and Fabric/directory cleanup are separate lifecycle operations;
+[Tear down](deploy/deploy-cli.md#tear-down) lists the objects that remain after the resource
+group is deleted.
 Confirm retention and shared-resource ownership before removing data, capacities, identities,
 connections, or registrations.

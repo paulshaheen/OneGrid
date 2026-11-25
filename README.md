@@ -200,15 +200,17 @@ scenarios relate to the landing zone.
   directory permission to create them.
 - For Aurora: the model asset and accepted terms, plus A100 GPU quota.
 
-The [deployment guide](docs/deployment-and-data-guide.md#prerequisites) lists the regions,
-resource providers, and every requirement.
+[Get started](docs/deploy/getting-started.md#prerequisites) lists the regions, resource
+providers, and every requirement as checklists, and
+[validates them](docs/deploy/getting-started.md#validate-prerequisites) with
+`Test-OneGridPrerequisites.ps1`.
 
 ### Deployment options
 
 | Option | Use it for |
 | --- | --- |
-| **Deploy to Azure** (portal) | Select components in the portal form and deploy the ARM template; the steps follow |
-| Azure CLI or PowerShell | Validate, preview, and deploy the ARM template with a parameter file; see [Deploy and configure OneGrid](docs/deployment-and-data-guide.md#deploy-resources-and-provision-the-solution) |
+| **Deploy to Azure** (portal) | Select components in the portal form and deploy the ARM template; the steps follow, and [Deploy from the Azure portal](docs/deploy/deploy-portal.md) walks through every tab |
+| Azure CLI or PowerShell | Validate, preview, and deploy the ARM template with a [parameter file](planetary-computer-pro-poc/deploy/azure/parameters/README.md); see [Deploy from the command line](docs/deploy/deploy-cli.md) |
 | GitHub Copilot | Let an agent deploy the same template from the command line with the [Copilot deployment runbook](DEPLOY-WITH-COPILOT.md) |
 | Deploy wizard | Run the provisioner from a localhost web UI against an existing Fabric capacity; it doesn't create GeoCatalog, Aurora, or the forecast job. See [deploy-ui](planetary-computer-pro-poc/infra/deploy-ui/README.md) |
 
@@ -230,9 +232,36 @@ The deployment accepts `eastus`, `northcentralus`, `westeurope`, `canadacentral`
 Check selected-service availability and quota in the chosen region. The portal selects
 solution components; command-line deployments must set the component parameters explicitly.
 
-For the complete procedure, parameters, identity setup, data formats, and verification,
-see [Deploy and configure OneGrid](docs/deployment-and-data-guide.md). The
-[Copilot deployment runbook](DEPLOY-WITH-COPILOT.md) provides the guided execution workflow.
+### Reading path
+
+[Deploy OneGrid](docs/deploy/README.md) takes you from planning to a validated environment:
+
+1. [Get started](docs/deploy/getting-started.md): prerequisite checklists, the validation
+   script, component and network decisions, and what each component deploys.
+2. Deploy from the [Azure portal](docs/deploy/deploy-portal.md) or the
+   [command line](docs/deploy/deploy-cli.md). The
+   [Copilot deployment runbook](DEPLOY-WITH-COPILOT.md) provides the guided execution workflow.
+3. Validate with `Test-OneGridDeployment.ps1`, the automated
+   [acceptance checks](docs/deployment-and-data-guide.md#acceptance-checks).
+4. [Load and connect data](docs/deployment-and-data-guide.md#load-and-connect-data): asset
+   registers, imagery, telemetry, and weather.
+
+Keep [Troubleshooting](docs/deploy/troubleshooting.md), [Known issues](docs/deploy/known-issues.md),
+the [cost estimate](docs/deploy/cost-estimate.md), and the
+[parameter reference](docs/deploy/reference/parameters.md) at hand.
+
+### Parameter files
+
+Command-line deployments start from a scenario file in
+[`planetary-computer-pro-poc/deploy/azure/parameters`](planetary-computer-pro-poc/deploy/azure/parameters/README.md),
+each in JSON and `.bicepparam` form:
+
+| File | Scenario |
+| --- | --- |
+| `baseline-required` | The portal form's default components, on a new F2 Fabric capacity |
+| `baseline-full` | Every component, including the Aurora GPU deployment and the forecast job |
+| `brownfield-existing-capacity` | The baseline components on an existing capacity, sign-in registration, and refresh service principal |
+| `weather-aurora` | The Aurora endpoint, GPU deployment, and forecast job, with their storage |
 
 ## Add-ons
 
@@ -283,10 +312,11 @@ Use the [Day 2 operations guide](docs/operations.md) and
 | [Enterprise landing zone](docs/architecture/enterprise-landing-zone.md) | Integrate with platform identity, networking, DNS, policy, and monitoring |
 | [Fabric data and analytics](docs/architecture/fabric.md) | Configure ingestion, the asset model, semantic queries, and data governance |
 | [Regulated workload](docs/architecture/regulated-workload.md) | Apply data boundaries, model oversight, and audit evidence |
-| [Multiregion architecture](docs/architecture/multiregion.md) | Design coordinated regional recovery |
+| [Multiregion architecture](docs/architecture/multiregion.md) | Set recovery objectives, design regional recovery, fail over and fail back |
 | [Traffic, identity, security, and monitoring](docs/architecture/traffic-and-security.md) | Read the technical sheets' ports, roles, signals, and weather run |
 | [Diagram guide](docs/diagrams/README.md), [gallery](docs/diagrams/onegrid-reference-gallery.html), and [draw.io file](docs/diagrams/onegrid-architecture.drawio) | Browse, rebuild, or adapt the architecture sheets |
-| [Deploy and configure OneGrid](docs/deployment-and-data-guide.md) | Deploy, load data, and run acceptance checks |
+| [Deploy OneGrid](docs/deploy/README.md) | Plan, deploy, validate, and troubleshoot a deployment, and estimate its cost |
+| [Deploy and configure OneGrid](docs/deployment-and-data-guide.md) | Load data and run acceptance checks |
 | [Implementation reference](docs/implementations.md) | Map the architecture to resources, phases, and settings |
 | [Day 2 operations](docs/operations.md) and [runbook](docs/operations-runbook.md) | Monitor, release, recover, and decommission |
 
@@ -306,3 +336,4 @@ for local browsing.
 | **Weather orchestration** | Scheduled or on-demand CPU job preparation, Aurora GPU inference, Blob payload exchange, and published storm events; weather prediction is separate from asset-health scoring | [Weather run](docs/architecture/traffic-and-security.md#weather-run)<br>[Light](docs/diagrams/onegrid-reference-weather.png) / [Dark](docs/diagrams/onegrid-reference-weather-dark.png) |
 | **Identity and authorization** | User sign-in and separate application, ingestion, forecast, refresh, workspace, and deployment credentials; scoped data grants are distinct from network access | [Identity and authorization](docs/architecture/traffic-and-security.md#identity-and-authorization)<br>[Light](docs/diagrams/onegrid-reference-identity.png) / [Dark](docs/diagrams/onegrid-reference-identity-dark.png) |
 | **Logging and monitoring** | Baseline telemetry versus enterprise additions, signal collection, log destinations, freshness checks, and actionable alerts; monitoring is out of band | [Logging and monitoring](docs/architecture/traffic-and-security.md#logging-and-monitoring)<br>[Light](docs/diagrams/onegrid-reference-monitoring.png) / [Dark](docs/diagrams/onegrid-reference-monitoring-dark.png) |
+| **Failover sequence** | Declare, fence, recover, rebind, gate, cut over, observe, and reconcile, with the two-publisher failure mode that fencing prevents | [Fail over](docs/architecture/multiregion.md#fail-over)<br>[Light](docs/diagrams/onegrid-reference-multiregion-failover.png) / [Dark](docs/diagrams/onegrid-reference-multiregion-failover-dark.png) |

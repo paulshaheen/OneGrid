@@ -31,7 +31,8 @@ Example addresses are design allocations, not an inventory obtained from an Azur
 | Identity | [PNG](../diagrams/onegrid-reference-identity.png) | [PNG](../diagrams/onegrid-reference-identity-dark.png) | User, runtime, refresh, workspace, ingestion, and deployment identities |
 | Monitoring | [PNG](../diagrams/onegrid-reference-monitoring.png) | [PNG](../diagrams/onegrid-reference-monitoring-dark.png) | Baseline-wired signals versus diagnostics and alerting to implement |
 | Regulated | [PNG](../diagrams/onegrid-reference-regulated.png) | [PNG](../diagrams/onegrid-reference-regulated-dark.png) | OT publication boundary, actual authorization paths, and retained evidence |
-| Multiregion | [PNG](../diagrams/onegrid-reference-multiregion.png) | [PNG](../diagrams/onegrid-reference-multiregion-dark.png) | Protected regional origins, dependency-specific recovery, and publisher fencing |
+| Multiregion | [PNG](../diagrams/onegrid-reference-multiregion.png) | [PNG](../diagrams/onegrid-reference-multiregion-dark.png) | Landing-zone BCDR view: regional hubs, standby stamp, Fabric capacity per region, recovery paths, and design areas A–J |
+| Failover sequence | [PNG](../diagrams/onegrid-reference-multiregion-failover.png) | [PNG](../diagrams/onegrid-reference-multiregion-failover-dark.png) | Numbered failover stages, cutover gates, and the two-writer failure mode that fencing prevents |
 
 The gallery links SVGs and PNGs for every sheet. Each sheet is defined in
 [docs/diagrams/sheets](../diagrams/sheets/) and written as static SVG by the standard-library
@@ -282,6 +283,46 @@ Avoid secrets/tokens and unapproved sensitive payloads in logs. Specify retentio
 archive/immutability where required, alert routing, named ownership and a tested runbook.
 Do not insert monitoring as an inline hop in the user or inference path.
 
+### BCDR monitoring
+
+Regional recovery needs two kinds of monitoring: signals that tell the incident owner when
+to declare failover, and readiness signals that show the recovery region can take over. The
+[multiregion design](multiregion.md) defines the objectives; these signals prove them.
+
+**Activation thresholds.** Declare failover when the expected time to recover in the primary
+region is longer than a journey's RTO minus the measured failover duration from the last
+drill. The following thresholds are starting estimates to agree with each owner:
+
+| Condition | Starting threshold | Action |
+| --- | --- | --- |
+| Azure Service Health incident for App Service, Storage, Azure Machine Learning, or Fabric in the primary region | Any confirmed regional incident | Page the incident owner; start the failover clock and prepare |
+| Published-host journey probes fail from more than one location | 15 minutes | Evaluate failover for UI and sign-in |
+| Primary data older than a journey's maximum accepted age (latest KQL event, Import refresh, `weather-events.json` `analysisTimeIso` and `generatedAtIso`) | The journey's maximum data age | Evaluate failover for that journey |
+| Primary Fabric capacity unavailable, or read-only after a Microsoft failover | Any occurrence | Evaluate failover for DAX and KQL journeys |
+
+**Readiness signals.** Alert on these continuously, in both regions:
+
+| Signal | Source | Alert when |
+| --- | --- | --- |
+| Replication lag and last sync | Object replication metrics (operations and bytes pending, by time bucket) and per-blob replication status; for geo-redundant accounts, the account's last sync time | Pending work older than the storage RPO, or a failed replication status |
+| OneLake geo-replication | OneLake geo-replication status for each workspace in the capacity settings | Status isn't enabled for a protected workspace |
+| Connector checkpoint age | Connector heartbeats (`queue_depth`, `queue_bytes`), relational forwarder watermarks, and the newest `PiEvents` row | Queue depth grows, heartbeats stop, or the checkpoint is older than the live-events RPO |
+| Recovery-region quota | Scheduled check of Microsoft Foundry model quota and Azure Machine Learning GPU quota in the recovery subscription | Available quota is below what the recovery deployments need |
+| Certificate and secret expiry | Front Door custom-domain certificate, connector client certificates, and the refresh service-principal secret in both regions | 30 days before expiry |
+| Stamp configuration drift | The scheduled [drift check](../operations-runbook.md#check-stamp-configuration-drift) | Any difference that isn't in the per-region configuration table |
+| Recovery app private path | A probe from the recovery hub, such as a connected test host or a Network Watcher connection monitor, that resolves the recovery app's private endpoint and requests `/api/health` over HTTPS | DNS, private endpoint, or app start fails |
+
+The private-path probe proves DNS, the private endpoint, and that the standby app starts. It
+doesn't prove data or model readiness; the cutover gates do.
+
+**Workspace per region or shared.** A Log Analytics workspace in each region keeps each
+region's evidence and alerts available when the other region fails, at the cost of duplicate
+ingestion and cross-workspace queries. A shared workspace gives one view, but if it's in the
+primary region, its alerts and evidence can fail with the region they're meant to report on.
+Whichever you choose, keep the alert rules and action groups that detect a primary-region
+failure, and the failover evidence, outside the failed region, and test alert delivery from
+both regions.
+
 ## Forecast interpretation
 
 <a href="../diagrams/onegrid-reference-weather.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-weather-dark.png"><img alt="OneGrid weather orchestration. Container Registry, a job trigger, NOAA GFS, Hugging Face static fields and NHC feed a four-step Container Apps job (start, prepare, detect and submit, track and publish) that exchanges data through the aurora-channel Blob container, calls the Aurora endpoint in Azure Machine Learning, publishes to model-outputs for the OneGrid web app, and sends logs to Log Analytics, in nine numbered steps." src="../diagrams/onegrid-reference-weather.png"></picture></a>
@@ -358,22 +399,26 @@ business calculation, not automatically supplied by atmospheric forecasts.
 
 ## Regional recovery
 
-The recovery sheet chooses Front Door Premium managed Private Link origins. These
+The recovery sheets choose Front Door Premium managed Private Link origins. These
 connections belong to Front Door's managed path, not to an invented customer gateway
-subnet. Approve both regional origins and verify public-origin denial.
+subnet. Approve both regional origins, keep them in one origin group with the recovery
+origin disabled until the cutover gate passes, and verify public-origin denial.
 
-Prepare regional dependencies and use this release sequence:
+Prepare regional dependencies and use this release sequence. The numbers in parentheses are
+the [Fail over](multiregion.md#fail-over) steps on the failover sequence sheet:
 
-1. Fence the primary ingestion/forecast publishers.
-2. Recover data by each item's supported mechanism; retain/replay source checkpoints.
-3. Restore permissions/connections and apply actual regional item IDs and endpoints.
-4. Refresh Import and test KQL/DAX, inference, GeoCatalog, Blob, authorization and freshness.
-5. Enable the accepted recovery origin and confirm exactly one forecast publisher.
+1. Fence the primary ingestion/forecast publishers (2).
+2. Recover data by each item's supported mechanism; retain/replay source checkpoints (3, 4).
+3. Restore permissions/connections and apply actual regional item IDs and endpoints (5).
+4. Refresh Import and test KQL/DAX, inference, GeoCatalog, Blob, authorization and freshness (5–7).
+5. Enable the accepted recovery origin and confirm exactly one forecast publisher (6–8).
 
 Baseline sample storage is LRS, not automatic cross-region protection. Copies, retained
 versions/backups, Fabric recovery and catalog reconstruction require explicit implementation.
-For a public-origin alternative, combine `AzureFrontDoor.Backend` with the matching
-profile's `X-Azure-FDID`; the shared tag alone is insufficient.
+With Blob object replication, the recovery containers reject writes until you remove their
+replication rule, so the recovery job can't publish until step 3. For a public-origin
+alternative, combine `AzureFrontDoor.Backend` with the matching profile's `X-Azure-FDID`;
+the shared tag alone is insufficient.
 
 ## Source review and drawing method
 
@@ -411,3 +456,7 @@ builders are not imported as OneGrid facts.
 | [Azure Monitor Private Link](https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-security) and [network design](https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-design) | AMPLS/private DNS is separate from merely creating Log Analytics |
 | [Container Apps logs](https://learn.microsoft.com/azure/container-apps/log-monitoring) and [managed-endpoint monitoring](https://learn.microsoft.com/azure/machine-learning/how-to-monitor-online-endpoints?view=azureml-api-2) | Explicit baseline signal wiring versus additional collection/instrumentation |
 | [Front Door origin security](https://learn.microsoft.com/azure/frontdoor/origin-security) | Managed private origins, or combined service-tag/profile-ID restrictions |
+| [Multiregion BCDR for Azure Virtual Desktop](https://learn.microsoft.com/azure/architecture/example-scenario/azure-virtual-desktop/azure-virtual-desktop-multi-region-bcdr) | Landing-zone BCDR drawing grammar, recovery-model comparison, lettered design areas, failover/failback and drills |
+| [Reliability in Microsoft Fabric](https://learn.microsoft.com/fabric/security/reliability-fabric) and [experience-specific recovery](https://learn.microsoft.com/fabric/security/experience-specific-guidance) | OneLake-only capacity DR setting, read-only failover behavior, per-item recovery, separate KQL approach |
+| [Blob object replication](https://learn.microsoft.com/azure/storage/blobs/object-replication-overview) | Asynchronous copy prerequisites, read-only destination containers, replication metrics |
+| [Reliability in Azure Key Vault](https://learn.microsoft.com/azure/reliability/reliability-key-vault) | Read-only Microsoft-managed failover; a separate vault per regional stamp |
