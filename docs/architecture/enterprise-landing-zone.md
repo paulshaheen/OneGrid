@@ -19,35 +19,55 @@ organization's network, governance, and environment-delivery configuration.
 
 ## Architecture
 
-[![Detailed OneGrid enterprise blueprint with separate delegated subnets, per-service private endpoint NICs, independent job networking, DNS endpoints, firewall routes, and service-hosted compute. Example CIDRs are design allocations.](../diagrams/onegrid-reference-enterprise.png)](../diagrams/onegrid-reference-enterprise.svg)
+<a href="../diagrams/onegrid-reference-enterprise.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-enterprise-dark.png"><img alt="OneGrid enterprise network: a hub VNet with DNS resolver endpoints and Azure Firewall, a peered workload VNet with ingress, app integration, job environment, and private endpoint subnets, the service-hosted targets, and approved public endpoints behind the firewall. Example CIDRs are design allocations." src="../diagrams/onegrid-reference-enterprise.png"></picture></a>
 
 [Download SVG](../diagrams/onegrid-reference-enterprise.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
-[DNS detail](../diagrams/onegrid-reference-dns.png) |
+[Diagram source](../diagrams/sheets/enterprise.py) |
+[DNS detail](#name-resolution-flow) |
 [Traffic and security contracts](traffic-and-security.md)
 
-This implementation adds Application Gateway WAF, private endpoints, network integration,
-DNS, and platform egress configuration to the OneGrid deployment. Each dependency has its
-own service connection and access policy; the endpoint group represents separate NICs.
+The hub VNet holds the DNS Private Resolver inbound and outbound endpoints and Azure
+Firewall. The peered workload VNet holds the Application Gateway ingress subnet, the
+delegated app integration and job environment subnets, and a private endpoint subnet with
+a separate private endpoint for each service, drawn level with the service-hosted target it
+fronts. Approved public endpoints sit behind the firewall. This implementation adds the
+gateway, private endpoints, network integration, DNS, and platform egress configuration;
+the baseline OneGrid deployment doesn't create these VNets, private endpoints, gateway, or
+firewall. Each dependency has its own service connection and access policy.
 
 ### Workflow
 
-1. The browser resolves the published application host and opens an HTTPS connection to
-   Application Gateway. WAF evaluates the request before forwarding it.
-2. The gateway resolves the App Service origin to its private endpoint and establishes
-   a new HTTPS connection. The backend host, certificate, and probe identify the same app.
+1. The browser resolves the published application host and opens an HTTPS connection
+   (TCP 443) to Application Gateway in the ingress subnet. WAF evaluates the request
+   before forwarding it.
+2. The gateway resolves the App Service origin to its private endpoint (`sites`) and
+   establishes a new HTTPS connection. The backend host, certificate, and probe identify
+   the same app.
 3. App Service handles the UI, REST API, and WebSocket session. Entra sign-in establishes
    the user identity; runtime data calls use the separately authorized workload identity.
-4. App Service sends dependency requests through its delegated integration subnet.
-   Private destinations use their private endpoints; approved public destinations use
-   the platform egress path.
-5. Fabric executes KQL, DAX, and configured Data Agent requests. Refresh, notebooks, and
-   shortcuts use their own source connections rather than the application's subnet.
-6. The forecast job uses its own Container Apps environment to retrieve NOAA inputs,
-   invoke Aurora, exchange Blob payloads, and publish weather output. An app-initiated
-   run starts through Azure Resource Manager, not the scoring endpoint.
-7. Browser basemap and glyph requests leave the user's network directly. Central
-   diagnostics collect out-of-band signals from the enabled services.
+   Outbound calls leave through the delegated app integration subnet; App Service compute
+   stays outside the VNet.
+4. The workload VNet uses the hub resolver's inbound endpoint (example `10.10.1.4`) as its
+   DNS server. Private service hostnames resolve to private endpoint addresses, as
+   described in the [name resolution flow](#name-resolution-flow).
+5. App Service reaches Azure OpenAI, Fabric, and Blob Storage through their private
+   endpoints over TCP 443. Fabric executes KQL, DAX, and configured Data Agent requests;
+   refresh, notebooks, and shortcuts use their own source connections rather than the
+   application's subnet.
+6. The forecast job runs in its own Container Apps environment subnet. It invokes Aurora
+   through the Azure ML workspace private endpoint, exchanges Blob payloads through the
+   Blob private endpoint, and pulls its image through the Container Registry private
+   endpoint.
+7. App and job traffic to public destinations follows each subnet's `0.0.0.0/0` UDR to
+   Azure Firewall (example next hop `10.10.0.4`), which allows only the approved
+   endpoints: GeoCatalog, Azure Resource Manager, Microsoft Entra ID, and the job's NOAA
+   GFS, NHC, and Hugging Face inputs. An app-initiated job run starts through Azure
+   Resource Manager, not the scoring endpoint.
+8. Browser basemap and glyph requests leave the user's network directly for the map
+   providers; they don't traverse the VNets.
+
+Central diagnostics collect out-of-band signals from the enabled services; see
+[Monitoring and policy](#monitoring-and-policy).
 
 ### Components and ownership
 
@@ -118,6 +138,28 @@ Allocate supported App Service integration, private endpoint, ingress, and manag
 subnets through the platform address plan. Configure supported private service connections
 and resource access rules for storage, Azure OpenAI, Azure ML, and Key Vault.
 
+The drawings use this example plan. The ranges are design allocations, not discovered
+Azure addresses; replace them with the platform's allocations.
+
+| VNet or subnet | Example range | Delegation and purpose |
+| --- | --- | --- |
+| Hub VNet | `10.10.0.0/16` | Platform-owned DNS, peering, and egress |
+| `AzureFirewallSubnet` | `10.10.0.0/26` | Azure Firewall; example private IP and UDR next hop `10.10.0.4` |
+| DNS inbound | `10.10.1.0/28` | `Microsoft.Network/dnsResolvers`; inbound endpoint with static IP `10.10.1.4` |
+| DNS outbound | `10.10.1.16/28` | `Microsoft.Network/dnsResolvers`; separate subnet, no client-facing inbound IP |
+| Workload VNet | `10.20.0.0/16` | Custom DNS server `10.10.1.4` |
+| Ingress | `10.20.0.0/24` | Dedicated Application Gateway subnet |
+| Private endpoints | `10.20.1.0/24` | One private endpoint per target: App Service `sites`, Blob `blob`, Azure OpenAI `account`, Fabric `tenant`, Azure ML `amlworkspace`, Container Registry `registry` |
+| App integration | `10.20.2.0/26` | `Microsoft.Web/serverFarms`; outbound only |
+| Job environment | `10.20.4.0/23` | `Microsoft.App/environments`; workload profiles environment |
+
+Peer the workload VNet with the hub explicitly and confirm the return paths; peering isn't
+transitive. Hybrid clients reach the hub through the approved ExpressRoute or VPN
+connection. Review NSGs and route tables separately so that they permit the DNS and
+application paths. A private endpoint is a network interface with a private address in
+the workload VNet; the services stay service-hosted, and a private endpoint isn't a VM
+that hosts them.
+
 Use the App Service private endpoint for inbound application access. Use a separate,
 delegated integration subnet for outbound connections; VNet integration doesn't provide
 inbound access or move App Service compute into that subnet. Delegate the integration
@@ -144,19 +186,22 @@ rebound Eventhouse mapping. Don't change to direct ingestion as part of network 
 Assess the tenant-wide impact of Fabric settings with the platform and Fabric owners.
 
 For private Aurora inference, the job reaches the managed endpoint through the Azure ML
-workspace private endpoint. Azure ML deployment outbound access is controlled through its
-managed network. Configure the Container Apps environment's own network and DNS paths for
+workspace private endpoint. Azure ML deployment outbound access to its backing resources
+and the Blob transfer channel is controlled through its managed network. Configure the Container Apps environment's own network and DNS paths for
 NOAA downloads, registry pulls, inference, and the Blob transfer channel.
 
 Choose a VNet-integrated **workload profiles environment** for a forecast job that requires
 UDRs and firewall-controlled egress. Allocate its dedicated subnet when the environment
 is created; an Azure-managed network can't later be changed into a customer VNet.
-The app's integration subnet is not a substitute for this environment network.
+The app's integration subnet is not a substitute for this environment network. The job
+has no inbound HTTP application endpoint; it needs only outbound paths, and it calls the
+`AADToken`-authenticated scoring endpoint with its own managed identity.
 
 For a private registry path, select Azure Container Registry **Premium** and validate the
 registry and image-data endpoints. The template's automatically created registry uses
 Basic; include the SKU/network change in enterprise IaC before restricting image access.
-Validate build-time image publication separately from runtime image pulls.
+Validate build-time image publication separately from runtime image pulls. Grant the job
+identity `AcrPull`, and scope the image-build identity and its runner path separately.
 
 ### Ingress
 
@@ -179,7 +224,61 @@ network and application boundaries.
 ### DNS and egress
 
 Use centrally owned private DNS zones, links, and forwarding. Test name resolution from
-App Service, deployment runners, operator workstations, and hybrid networks.
+Application Gateway, App Service, the forecast job, deployment runners, operator
+workstations, and hybrid networks.
+
+#### Name resolution flow
+
+<a href="../diagrams/onegrid-reference-dns.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-dns-dark.png"><img alt="OneGrid DNS and private endpoints: workload and corporate clients query the hub resolver inbound endpoint; private service names resolve from the private DNS zones linked to the hub, and customer domains match the forwarding ruleset and leave through the outbound endpoint to corporate DNS. Example CIDRs and IPs are design allocations." src="../diagrams/onegrid-reference-dns.png"></picture></a>
+
+[Download SVG](../diagrams/onegrid-reference-dns.svg) |
+[Diagram source](../diagrams/sheets/dns.py)
+
+1. App Service, through its integration subnet, and the forecast job send queries for
+   original service hostnames to the resolver inbound endpoint (`10.10.1.4`), the workload
+   VNet's custom DNS server, on UDP/TCP 53 over the hub peering. The job's DNS path is its
+   own; it isn't inherited from App Service.
+2. Corporate clients query corporate DNS, which conditionally forwards the Azure service
+   (`privatelink`) namespaces to the same inbound endpoint over the approved ExpressRoute or
+   VPN connection.
+3. The resolver answers through Azure DNS from the private DNS zones linked to the hub VNet
+   and returns the private endpoint's address. Azure DNS is a platform service, not a DNS VM
+   in the hub, and peering doesn't proxy DNS.
+4. The client connects to the private endpoint over TCP 443 (encrypted TDS on TCP 1433 for
+   SQL clients) by using the original hostname, so TLS still validates the service name.
+5. Queries for customer namespaces match a rule in the forwarding ruleset that's linked to
+   the hub VNet.
+6. The outbound endpoint forwards the matched queries to corporate DNS on UDP/TCP 53.
+
+Delegate both resolver subnets to `Microsoft.Network/dnsResolvers` and keep them separate;
+the outbound endpoint has no client-facing inbound IP. Accept DNS queries only from
+approved clients. Associate the ruleset with the outbound endpoint and forward only
+approved customer domains. Don't add a rule that sends the private zones back to the
+inbound endpoint, and don't let corporate DNS forward those namespaces back into a loop.
+A ruleset's virtual network link isn't a network route: it can resolve without peering,
+but DNS and application traffic to the resolved addresses still needs a reachable path.
+Public names, such as GeoCatalog, NOAA, Entra, Azure Resource Manager, and the browser map
+hosts, keep resolving publicly.
+
+Keep the original service hostname in requests and let private DNS resolve it to the
+approved endpoint. Don't replace SDK endpoints with private IP addresses. Private DNS and
+private endpoints don't grant data-plane access, such as `Cognitive Services OpenAI User`
+or `AcrPull`, and they don't disable a service's public network access.
+
+| DNS boundary | Configuration | Validation point |
+| --- | --- | --- |
+| App Service origin | Link `privatelink.azurewebsites.net` and register the app record; add the SCM record when used | Gateway backend, probe, and connected deployment runner |
+| Blob Storage | Link `privatelink.blob.core.windows.net`; add other storage subresources only when used, such as `privatelink.dfs.core.windows.net` for an ADLS source path | App package bootstrap, imagery access, job channel/output, and each service-source connection; test Blob and DFS separately when a source uses both |
+| Azure OpenAI | Link `privatelink.openai.azure.com` for the deployed account endpoint | Actual App Service model client |
+| Azure ML workspace/scoring | Use the workspace private endpoint's supplied records under `privatelink.api.azureml.ms`, including inference resolution; add the notebook zone only when used | Container Apps job network and model administration path |
+| Container Registry | Link `privatelink.azurecr.io`, including the registry and service-generated image-data records | Job image pull and the connected build runner |
+| Fabric | Use the tenant private endpoint's DNS configuration and actual KQL, Power BI, and API connection targets | App runtime, connected operators/runners, and the selected Fabric experiences |
+| Hybrid clients | Forward relevant private zones through the platform resolver; preserve public resolution for approved external sources | Corporate browser, connector host, and administrative network |
+
+After resolution passes from every real caller, test HTTPS or TDS, valid TLS/SNI,
+authorized data access, and denial of the direct public origin.
+
+#### Egress
 
 Maintain an endpoint matrix for:
 
@@ -190,6 +289,12 @@ Maintain an endpoint matrix for:
 - Container image pulls, source/package distribution, and diagnostic ingestion.
 - Browser-loaded basemap tiles and glyphs: the configured Azure Maps path, selected Esri
   layers, and `demotiles.maplibre.org`.
+
+Typical approved public hosts include `management.azure.com`, `login.microsoftonline.com`
+and the other required Entra endpoints, the GeoCatalog API, the NOAA GFS S3 bucket,
+`nhc.noaa.gov`, and Hugging Face with its actual download/CDN hosts. A connected
+build/bootstrap runner also needs GitHub release/source hosts, image-build dependencies,
+and the service control planes.
 
 Separate bootstrap, build-time, and runtime access. Change public endpoint access only after
 the corresponding private/runtime/deployment paths have been validated.
@@ -205,23 +310,11 @@ package mounting, token acquisition, diagnostics, and dependency access through 
 An authenticated, nonanonymous Blob container is an authorization boundary; private network
 access additionally requires the corresponding endpoint, DNS, and routing configuration.
 
-Keep the original service hostname in requests and let private DNS resolve it to the
-approved endpoint. Don't replace SDK endpoints with private IP addresses.
-
-| DNS boundary | Configuration | Validation point |
-| --- | --- | --- |
-| App Service origin | Link `privatelink.azurewebsites.net` and register the app record; add the SCM record when used | Gateway backend, probe, and connected deployment runner |
-| Blob Storage | Link `privatelink.blob.core.windows.net`; add other storage subresources only when used | App package bootstrap, imagery access, job channel/output, and each service-source connection |
-| Azure OpenAI | Link `privatelink.openai.azure.com` for the deployed account endpoint | Actual App Service model client |
-| Azure ML workspace/scoring | Use the workspace private endpoint's supplied DNS records, including inference resolution | Container Apps job network and model administration path |
-| Fabric | Use the tenant private endpoint's DNS configuration and actual KQL, Power BI, and API connection targets | App runtime, connected operators/runners, and the selected Fabric experiences |
-| Hybrid clients | Forward relevant private zones through the platform resolver; preserve public resolution for approved external sources | Corporate browser, connector host, and administrative network |
-
-A `0.0.0.0/0` route to Azure Firewall controls default egress; it doesn't override a
-private endpoint's more-specific route. The diagram therefore separates direct private
-endpoint access from inspected public egress. If policy requires private endpoint traffic
-inspection, configure the endpoint subnet's network policies and specific routes, then
-validate the actual next hop and return path.
+A `0.0.0.0/0` route to Azure Firewall controls default egress; it doesn't override the
+more-specific `/32` route that each private endpoint adds. The diagram therefore separates
+direct private endpoint access from inspected public egress. If policy requires private
+endpoint traffic inspection, configure the endpoint subnet's network policies and specific
+routes, then validate the actual next hop and symmetric return path.
 
 ### Traffic-flow matrix
 
@@ -337,6 +430,11 @@ Stage and validate private access before enforcing denial during the initial mig
 
 Include platform DNS, identity, network, shared Fabric capacity, and model
 quota in dependency analysis and recovery exercises.
+
+Regional DNS recovery is a configured design, not an automatic side effect. Provide
+independently reachable resolver endpoints and zone links in each region; cross-region
+ruleset virtual network links aren't supported. Don't copy a DNS failover lab's synthetic
+domains, upstream VMs, test addresses, or NVA route assumptions into OneGrid.
 
 ### Security
 

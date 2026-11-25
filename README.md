@@ -13,16 +13,19 @@ and executive experiences.
 
 ## Architecture
 
-[![Detailed OneGrid baseline with end-to-end data, request, identity and control paths, actual service boundaries, ports, Fabric refresh, geospatial ingestion and forecast publication.](docs/diagrams/onegrid-reference-baseline.png)](docs/diagrams/onegrid-reference-baseline.svg)
+<a href="docs/diagrams/onegrid-reference-baseline.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/onegrid-reference-baseline-dark.png"><img alt="OneGrid logical architecture. Data sources flow through ingest, store, process and serve stages in Microsoft Fabric (Eventhouse, Lakehouse, notebooks, ontology, semantic model) and Azure (Blob Storage, Aurora on Azure Machine Learning, GeoCatalog) into the OneGrid web app, with numbered workflow steps and a platform row." src="docs/diagrams/onegrid-reference-baseline.png"></picture></a>
 
 [Download SVG](docs/diagrams/onegrid-reference-baseline.svg) |
-[Editable draw.io diagrams](docs/diagrams/onegrid-reference-architecture.drawio) |
-[Nine-sheet light/dark gallery](docs/diagrams/onegrid-reference-gallery.html) |
+[All nine sheets, light and dark](docs/diagrams/onegrid-reference-gallery.html) |
+[Diagram guide](docs/diagrams/README.md) |
 [Routing, identity, security and monitoring](docs/architecture/traffic-and-security.md)
 
-The technical set also covers Fabric, enterprise subnets/private endpoints, DNS, weather
-orchestration, identity scopes, logging/monitoring, regulated controls, and regional recovery.
-Enterprise additions and illustrative IP allocations are labeled separately from baseline IaC.
+This is the logical view. Sources move through ingest, store, process, and serve stages in
+Microsoft Fabric and Azure to the OneGrid web app; numbered steps match the
+[Workflow](#workflow) below. Ports, roles, subnets, and recovery detail are on the eight
+technical sheets: Fabric, enterprise networking, DNS, weather orchestration, identity,
+monitoring, regulated workload, and multiregion recovery. Enterprise additions and
+illustrative IP allocations are labeled separately from baseline IaC.
 
 The architecture separates six responsibilities:
 

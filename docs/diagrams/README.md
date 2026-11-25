@@ -3,125 +3,88 @@
 These diagrams describe the OneGrid solution and its enterprise, regulated, and recovery
 implementations. They use official Azure, Microsoft Entra, and Microsoft Fabric icons.
 
-## Detailed reference architecture
+Open the [sheet gallery](onegrid-reference-gallery.html) to browse all nine sheets in light
+and dark. GitHub doesn't render HTML pages, so download the gallery with its adjacent images
+for local browsing; the SVG and PNG links below work on their own.
 
-Start with the [nine-sheet technical gallery](onegrid-reference-gallery.html) and
-[routing, identity, security, monitoring, and recovery contracts](../architecture/traffic-and-security.md).
-These detailed drawings show the baseline, Fabric, enterprise networking, DNS, weather,
-identity, monitoring, regulated workload, and multiregion recovery.
+## Sheets
 
-Both light and dark SVGs **and** PNGs are exported by actual draw.io Desktop from native
-editable [light](onegrid-reference-architecture.drawio) and
-[dark](onegrid-reference-architecture-dark.drawio) documents. The light versions follow
-the clean subnet/endpoint/reference-drawing style of the supplied examples. Example IP
-allocations are explicitly labeled; enterprise additions are distinguished from baseline IaC.
+The sheets follow the Azure Architecture Center drawing conventions: each service is its
+official icon with a short name, services are grouped into stages and platform or network
+zones, and numbered steps follow the main flow. The numbers match the Workflow or dataflow
+list in the article that embeds the sheet, which is where ports, roles, item names, and
+caveats are explained. The drawings stay readable because that detail lives in the text.
 
-```powershell
-python .\docs\diagrams\build_reference_architecture.py
-python .\docs\diagrams\build_reference_architecture.py --check
-python .\docs\diagrams\build_reference_architecture.py --render --drawio $drawio
-python .\docs\diagrams\build_reference_architecture.py --render --drawio $drawio --check
-```
+The baseline is the logical view: data sources move through ingest, store, process, and
+serve stages in Microsoft Fabric and Azure to the OneGrid web app. The other eight sheets
+use the same grammar for one concern each. Network sheets draw VNets and subnets as boxes
+with their example address ranges, which are design allocations, not live Azure inventory.
+Enterprise additions are labeled separately from what the baseline template creates.
 
-Set `$drawio` to the actual desktop executable as shown below. The reference builder generates
-the nine-page native documents and gallery without third-party Python packages. Image export
-uses the native CLI for both formats (`--export --format svg/png --page-index --size page`);
-SVG export embeds icons. No hosted renderer receives the solution content.
+| Sheet | Light | Dark | Source |
+| --- | --- | --- | --- |
+| Baseline (logical view) | [SVG](onegrid-reference-baseline.svg) / [PNG](onegrid-reference-baseline.png) | [SVG](onegrid-reference-baseline-dark.svg) / [PNG](onegrid-reference-baseline-dark.png) | [baseline.py](sheets/baseline.py) |
+| Fabric | [SVG](onegrid-reference-fabric.svg) / [PNG](onegrid-reference-fabric.png) | [SVG](onegrid-reference-fabric-dark.svg) / [PNG](onegrid-reference-fabric-dark.png) | [fabric.py](sheets/fabric.py) |
+| Enterprise networking | [SVG](onegrid-reference-enterprise.svg) / [PNG](onegrid-reference-enterprise.png) | [SVG](onegrid-reference-enterprise-dark.svg) / [PNG](onegrid-reference-enterprise-dark.png) | [enterprise.py](sheets/enterprise.py) |
+| DNS and private endpoints | [SVG](onegrid-reference-dns.svg) / [PNG](onegrid-reference-dns.png) | [SVG](onegrid-reference-dns-dark.svg) / [PNG](onegrid-reference-dns-dark.png) | [dns.py](sheets/dns.py) |
+| Weather orchestration | [SVG](onegrid-reference-weather.svg) / [PNG](onegrid-reference-weather.png) | [SVG](onegrid-reference-weather-dark.svg) / [PNG](onegrid-reference-weather-dark.png) | [weather.py](sheets/weather.py) |
+| Identity and authorization | [SVG](onegrid-reference-identity.svg) / [PNG](onegrid-reference-identity.png) | [SVG](onegrid-reference-identity-dark.svg) / [PNG](onegrid-reference-identity-dark.png) | [identity.py](sheets/identity.py) |
+| Logging and monitoring | [SVG](onegrid-reference-monitoring.svg) / [PNG](onegrid-reference-monitoring.png) | [SVG](onegrid-reference-monitoring-dark.svg) / [PNG](onegrid-reference-monitoring-dark.png) | [monitoring.py](sheets/monitoring.py) |
+| Regulated workload | [SVG](onegrid-reference-regulated.svg) / [PNG](onegrid-reference-regulated.png) | [SVG](onegrid-reference-regulated-dark.svg) / [PNG](onegrid-reference-regulated-dark.png) | [regulated.py](sheets/regulated.py) |
+| Multiregion recovery | [SVG](onegrid-reference-multiregion.svg) / [PNG](onegrid-reference-multiregion.png) | [SVG](onegrid-reference-multiregion-dark.svg) / [PNG](onegrid-reference-multiregion-dark.png) | [multiregion.py](sheets/multiregion.py) |
 
-## Overview views (retained)
-
-| View | Scalable image | PNG preview |
-| --- | --- | --- |
-| Baseline and logical architecture | [SVG](onegrid-logical-architecture.svg) | [PNG](../onegrid-logical-architecture.png) |
-| Fabric data and analytics | [SVG](onegrid-fabric.svg) | [PNG](onegrid-fabric.png) |
-| Enterprise landing zone | [SVG](onegrid-enterprise-landing-zone.svg) | [PNG](onegrid-enterprise-landing-zone.png) |
-| Regulated workload | [SVG](onegrid-regulated-workload.svg) | [PNG](onegrid-regulated-workload.png) |
-| Multiregion recovery | [SVG](onegrid-multiregion.svg) | [PNG](onegrid-multiregion.png) |
-
-### Dark, grid-backed views
-
-Open the [dark architecture gallery](onegrid-dark-gallery.html) to compare all five views.
-These versions use a dark drafting grid, official service icons, outlined service cards with
-full component descriptions, and the same verified boundaries and traffic relationships as
-the light diagrams. The light publication diagrams above are preserved.
-
-| View | Scalable image | PNG preview |
-| --- | --- | --- |
-| Baseline and logical architecture | [SVG](onegrid-logical-architecture-dark.svg) | [PNG](onegrid-logical-architecture-dark.png) |
-| Fabric data and analytics | [SVG](onegrid-fabric-dark.svg) | [PNG](onegrid-fabric-dark.png) |
-| Enterprise landing zone | [SVG](onegrid-enterprise-landing-zone-dark.svg) | [PNG](onegrid-enterprise-landing-zone-dark.png) |
-| Regulated workload | [SVG](onegrid-regulated-workload-dark.svg) | [PNG](onegrid-regulated-workload-dark.png) |
-| Multiregion recovery | [SVG](onegrid-multiregion-dark.svg) | [PNG](onegrid-multiregion-dark.png) |
-
-The [dark draw.io document](onegrid-architecture-dark.drawio) contains five editable pages.
-Connectors attach to the service-card boundaries in this version. The background grid is
-a locked image; services, icons, descriptions, boundaries, and connectors remain editable.
-Download the gallery and its adjacent images for local browsing; GitHub does not render HTML
-galleries as web pages. The SVG and PNG links work independently.
-
-Open [onegrid-architecture.drawio](onegrid-architecture.drawio) in diagrams.net or a compatible
-draw.io editor. It contains five named pages. Service groups, boundaries, text, icons, and connectors
-are separate editable objects. Services use icon-first notation, not boxed component cards.
-Boxes denote actual workspace, network, subnet, source, application, or recovery boundaries.
-Connectors bind to service groups at the icon perimeter, so endpoints follow the icons when
-you move a group. Keep publication changes in the builder and regenerate the artifacts.
+To show the right theme automatically in Markdown, wrap the PNGs in a `<picture>` element
+with a `(prefers-color-scheme: dark)` source, as the [README](../../README.md) does.
 
 ## Generate and validate
 
-Python 3.10 or later builds SVGs and the native draw.io document using the standard library:
+Python 3.10 or later builds every sheet with the standard library only:
 
 ```powershell
-python .\docs\diagrams\build_architecture_diagrams.py
-python .\docs\diagrams\build_architecture_diagrams.py --check
-python .\docs\diagrams\build_architecture_diagrams.py --dark
-python .\docs\diagrams\build_architecture_diagrams.py --dark --check
+python .\docs\diagrams\build_diagrams.py
+python .\docs\diagrams\build_diagrams.py --check
+python .\docs\diagrams\build_diagrams.py --png
+python .\docs\diagrams\build_diagrams.py --only weather fabric --png
 python -m unittest discover -s .\docs\diagrams -p "test_*.py"
 ```
 
-PNG publication output is rendered by the actual draw.io Desktop export engine. Install
-[draw.io Desktop](https://github.com/jgraph/drawio-desktop/releases) or use its portable
-distribution, then supply the executable path (version 27.0.2 or later):
+- [diagram_engine.py](diagram_engine.py) draws icon nodes, stage containers, platform and
+  network zones, cross-cutting bars, numbered steps, and orthogonal flows as static SVG, in
+  a light and a dark theme.
+- Each file in [sheets](sheets/) defines one sheet as data: its nodes, containers, flows,
+  and steps. Edit the sheet and rebuild; don't hand-edit generated SVG or PNG files.
+- Before writing anything, the builder checks official icon hashes and validates every
+  sheet: names too wide for their node, overlapping nodes, nodes outside their boundary,
+  diagonal segments, flow endpoints off their node, flows crossing unrelated nodes,
+  overlapping labels or step markers, and flows drawn on top of each other. A failed check
+  stops the build.
+- `--check` fails if any committed SVG or the gallery is out of date.
+- `--png` renders 2,400-pixel-wide PNGs with a local Microsoft Edge or Google Chrome in
+  headless mode (`--browser` selects the executable). Use Segoe UI on the publishing machine;
+  PNG text rasterization depends on installed fonts, while SVG output is deterministic.
 
-```powershell
-$drawio = 'C:\Program Files\draw.io\draw.io.exe'
-python .\docs\diagrams\build_architecture_diagrams.py --png --drawio $drawio
-python .\docs\diagrams\build_architecture_diagrams.py --png --drawio $drawio --check
-python .\docs\diagrams\build_architecture_diagrams.py --dark --png --drawio $drawio
-python .\docs\diagrams\build_architecture_diagrams.py --dark --png --drawio $drawio --check
-```
-
-Use Segoe UI on the publication machine. PNG text rasterization depends on installed fonts;
-SVG and draw.io generation is deterministic across machines. PNGs are 2,400 pixels wide.
-The baseline preview preserves its existing location for README links.
-
-The builder creates native `mxGraphModel` XML, the diagram model accepted by the
-[draw.io load API](https://www.drawio.com/docs/reference/embed-mode/). Publication PNGs use
-the desktop CLI's `--export`, `--page-index`, `--size page`, and `--format png` API, not a
-generic SVG screenshot. Export was verified with draw.io Desktop 32.7.4.
-SVG icons are embedded, so the SVG and draw.io files are self-contained. Rendering stays
+Icons are embedded once per SVG as data URIs, so every SVG is self-contained. Rendering stays
 local; no diagram content is submitted to a hosted renderer.
-
-Validation checks official-icon hashes, XML parsing, unique object IDs, parent containment,
-node overlap, icon-attached connector endpoints, orthogonal routes, and connectors crossing
-unrelated services. Unit tests cover the generated formats, key flow directions, private-network
-boundaries, query/refresh separation, and recovery gating.
 
 ## Read the flows
 
-| Line | Meaning |
+| Element | Meaning |
 | --- | --- |
-| Blue | Initiator of a query or API request; response traffic is omitted |
-| Green | Data movement or persisted/published output |
-| Dashed orange | Provisioning, configuration, or recovery control |
-| Dashed purple | Identity and authorization, not an inline data proxy |
-| Dashed gray | Diagnostic export outside the user request path |
-| Dashed blue | Configured shortcut access or gated standby traffic, as labeled by the view |
-| Dashed green | Explicitly configured copy/recovery workflow |
+| Solid arrow | Data movement or a call; the arrow points to the component that receives it, responses omitted |
+| Two-headed arrow | Two-way exchange, such as features out and scores back |
+| Dashed arrow | Optional, gated, binding, trigger, or evidence path, as the article describes |
+| Dotted arrow | Identity, token context, or grant; not an inline network proxy |
+| Numbered circle | Step in the article's Workflow or dataflow list |
+| Dashed grey box with a blue title | Stage, such as Ingest, Store, Process, or Serve |
+| Dotted box with an icon | Platform, tenant, or region, such as Microsoft Fabric or Azure |
+| Outlined box | Network or trust boundary, such as a VNet or subnet, with its example range |
+| Bottom bar | Shared platform services that apply to every flow |
 
-The logical view represents the complete enabled solution; ARM parameters select individual
-planes. The enterprise view adds networking owned by the enterprise implementation.
+Customer, OT, and third-party sources use plain line pictograms; Azure, Entra, and Fabric
+services use their official icons.
+
 App Service and Fabric remain service-hosted, outside the customer subnets. The multiregion
-view shows recovery targets and release gates rather than treating two web endpoints as
+sheet shows recovery targets and release gates rather than treating two web endpoints as
 complete workload failover.
 
 ## Flow verification
@@ -172,13 +135,17 @@ authorization, data freshness, and recovery behavior.
 
 ## Icon sources and terms
 
-The [asset manifest](assets/manifest.json) records the source archive, exact archive member,
-and SHA-256 for each unmodified icon. The Fabric archive URL is pinned to a source commit.
-Only the selected icon files are included.
+The [asset manifest](assets/manifest.json) records the source archive or package, the exact
+member path, and the SHA-256 for each unmodified icon. The Fabric archive URL is pinned to a
+source commit and the Fabric icon package to an exact version. Only the selected icon files
+are included. Customer, OT and third-party sources use plain line pictograms drawn by the
+engine, not product icons.
 
 - [Azure architecture icons and terms](https://learn.microsoft.com/azure/architecture/icons/)
 - [Microsoft Entra architecture icons and terms](https://learn.microsoft.com/entra/architecture/architecture-icons)
 - [Microsoft Fabric icons and terms](https://learn.microsoft.com/fabric/fundamentals/icons)
+- [Microsoft Fabric SVG icon package (`@fabric-msft/svg-icons`, MIT)](https://www.npmjs.com/package/@fabric-msft/svg-icons),
+  used for the KQL database, KQL queryset and ontology icons
 
 Microsoft permits these icons in architectural diagrams, training materials, and
 documentation. You can copy, distribute, and display them only for the permitted use unless

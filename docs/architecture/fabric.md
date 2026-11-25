@@ -16,17 +16,18 @@ paths to weather exposure and the digital twin.
 
 ## Architecture
 
-[![Detailed Fabric architecture separating connector authentication, processed ingestion, Lakehouse scoring, TDS refresh, DAX and KQL serving, native ontology, Data Agent grounding, and the optional authenticated source connection.](../diagrams/onegrid-reference-fabric.png)](../diagrams/onegrid-reference-fabric.svg)
+<a href="../diagrams/onegrid-reference-fabric.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-fabric-dark.png"><img alt="Fabric architecture: source connectors, business systems, weather outputs, and operators feed a Fabric workspace in ingest, store, process, and serve stages over OneLake (Eventstream, Eventhouse, update policy, Lakehouse, notebooks, ontology, SQL analytics endpoint, Import semantic model, and data agent), which the OneGrid web app queries." src="../diagrams/onegrid-reference-fabric.png"></picture></a>
 
 [Download SVG](../diagrams/onegrid-reference-fabric.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[Diagram source](../diagrams/sheets/fabric.py) |
 [Identity detail](../diagrams/onegrid-reference-identity.png) |
 [Traffic and security contracts](traffic-and-security.md)
 
-The Eventhouse boxes distinguish landing/curation from its query endpoint. The Lakehouse
-and SQL analytics endpoint are two surfaces of the same analytical data. Real-time and
+Numbered steps match the workflow below. Solid arrows show data or calls toward the service
+that receives them; dashed lines are optional, binding or evidence paths. The Lakehouse and
+SQL analytics endpoint are two surfaces of the same analytical data. Real-time and
 historical paths join through asset keys; each retains its own ingestion and freshness
-checks. Blue query arrows point from the caller to the service, with responses omitted.
+checks.
 
 ### Workflow
 
@@ -38,20 +39,25 @@ checks. Blue query arrows point from the caller to the service, with responses o
 4. The Import refresh connection reads the Lakehouse SQL analytics endpoint and
    materializes `OneGridModelImport` after processing completes.
 5. The application queries KQL and DAX independently. The Data Agent queries its
-   configured semantic-model datasource; the ontology is a separate relationship item.
+   configured semantic-model datasource; the ontology is a separate relationship item
+   bound to Lakehouse tables.
 6. Operators verify source event time, processing completion, model refresh time, and
-   query results before declaring the complete data product current.
+   query results, including through a connected SQL client over TDS, before declaring the
+   complete data product current.
 
 ## Ingest operational data
 
 The custom Eventstream source `PIForwarderEndpoint` accepts the canonical source-event
 shape. Connectors publish through an Event Hubs-compatible transport; the shared connector
 core provides durable buffering, acknowledgments, drain processing, and heartbeats.
+Each connector exchanges its client certificate for a Microsoft Entra token, and the outbox
+keeps events until they're acknowledged. The connection-string option is for testing only.
 
 Publish/rebind the supplied
 [`pi-events-stream` artifact](../../planetary-computer-pro-poc/infra/fabric/eventstream/pi-events-stream/)
 to the target Eventhouse before enabling source producers. Confirm destination, table
-mapping, and source connection in the deployed workspace.
+mapping, source connection, the actual broker namespace, and source authentication in the
+deployed workspace.
 
 | Connector | Source access | Continuity mechanism |
 | --- | --- | --- |
@@ -65,7 +71,9 @@ quality flags preserve source measurement quality.
 Eventhouse lands records in `PiEventsRaw`. The update policy produces `PiEvents` with
 typed/curated columns, including ingestion time. Configure connectors to write to the source
 endpoint rather than directly modifying the curated table. Monitor queue depth, latest
-event time, ingest latency, and source heartbeats.
+event time, ingest latency, and source heartbeats. Data access follows the KQL database,
+table, and function permissions. Eventhouse doesn't replicate telemetry to the Lakehouse;
+historical tables have their own load path.
 
 The connector implementation and configuration are in the
 [operational data-plane package](../../planetary-computer-pro-poc/infra/bolt-ons/data-plane/).
@@ -82,15 +90,22 @@ The connector implementation and configuration are in the
 | Presentation | Daily narrative, real-time report, KQL dashboards | Operator summaries and observations |
 | Orchestration | `Prediction_Pipeline` | Repeatable prediction processing |
 
-Use a controlled schedule for source loads, transformations, scoring, and model refresh.
-Historical bundles and synthetic seeds support evaluation; preserve their provenance when
-transitioning to customer sources.
+Historical sources include AIMM, iCare, GADS, asset registers, and CMMS work history,
+loaded through approved source reads or batch ingestion; check their freshness and quality
+separately from telemetry. Notebooks and `Prediction_Pipeline` run under the notebook run
+identity with their own source connections.
+
+Use a controlled schedule for source loads, transformations, scoring, and model refresh,
+and keep schedule, completion, and data-age evidence for each run. Historical bundles and
+synthetic seeds support evaluation; preserve their provenance when transitioning to
+customer sources.
 
 ## Build the unified asset model
 
 The `generate_onegrid_data` notebook builds `og.*` tables using the hierarchy
 `dim_site -> dim_unit -> dim_asset -> dim_tag`. Reliability and weather attach to the same
 keys. Validate parent-child joins and orphan records before publishing downstream models.
+Table names are case-sensitive; keep `WeatherForecast` exactly as named.
 
 | Domain | Tables |
 | --- | --- |
@@ -104,11 +119,26 @@ SQL endpoint metadata, deploys `OneGridModelImport`, binds its SQL connection, a
 the model. The generator's overwrite behavior should be confined to intended generated
 tables; use reviewed ingestion/transformation jobs for customer production data.
 
+Accept the data product in order: publish the source and confirm a raw and a curated row,
+verify SQL endpoint metadata, bind and refresh the Import model, then test real DAX, KQL,
+and Data Agent queries.
+
 ## Serve queries and relationships
+
+The app calls DAX, KQL, and the Data Agent over HTTPS on TCP 443 using the actual
+workspace, dataset, and agent IDs; each API needs its own permission. The app has no
+dependency on the SQL analytics endpoint.
 
 **DAX.** The app targets `OneGridModelImport` through `PBI_WORKSPACE` and `PBI_DATASET`.
 A dedicated service principal refreshes the SQL-backed Import connection. Schedule refresh
 after data processing; query-time app identity and refresh identity are different roles.
+`OneGridModelImport` is an Import model, not Direct Lake or streaming, so new data appears
+only after a refresh.
+
+The refresh connection is an encrypted Fabric connection to the Lakehouse SQL analytics
+endpoint, not to a separate Azure SQL Database. It uses TDS on TCP 1433 with the item's SQL
+hostname and actual database name, and the refresh identity needs SQL and table
+permissions. Synchronizing SQL endpoint metadata doesn't refresh the model.
 
 **KQL.** The app targets the Eventhouse query service and database through `KUSTO_CLUSTER`
 and `KUSTO_DATABASE`. Validate actual data in `PiEvents` and `PCIOutages`; model-backed
@@ -116,7 +146,9 @@ pages and telemetry-backed pages have separate freshness signals.
 
 **Digital Twin Builder.** `OneGridOntology` contextualizes plants, units, assets, sensors,
 work, advisories, outages, and predictions. The ontology complements the application
-knowledge graph and the asset hierarchy.
+knowledge graph and the asset hierarchy. Its entities are backed by Lakehouse tables
+through explicit table bindings and item permissions; no separate Azure Digital Twins
+instance is deployed.
 
 **Fabric Data Agent.** The provisioner configures/publishes `OneGridOntologyAgent` and wires
 its identifiers into the app. Test representative questions against its configured data
@@ -124,13 +156,20 @@ sources and effective identity permissions.
 
 Despite its name, `OneGridOntologyAgent` is grounded on a semantic-model datasource.
 `OneGridOntology` is a separate native Fabric item. Confirm the resolved semantic-model ID,
-selected tables, and published agent configuration after deployment.
+selected tables, and published agent configuration after deployment. Private connectivity
+for the agent follows the supported path of its data source.
 
 **Weather integration.** The `fabricplane` phase applies `HazardGeometry`, `AssetRegistry`,
 spatial joins, and composite-risk functions. The `pcp_model_outputs` shortcut connects Blob
 outputs when a storage connection is provided or created through workspace identity.
 The shortcut exposes files; validate the ingestion/transformation path that populates
 analytical hazard tables separately.
+
+The optional shortcut needs a real Fabric cloud connection ID and a source endpoint that
+Fabric can reach; granting a deployment identity Blob Reader isn't enough. Use the supplied
+Blob connection or the optional workspace-identity ADLS Gen2 connection, which needs a
+compatible storage endpoint and configuration. Blob or DFS network rules must admit Fabric
+independently of client Private Link, and the shortcut reads files over HTTPS on TCP 443.
 
 ## Govern identities and data access
 

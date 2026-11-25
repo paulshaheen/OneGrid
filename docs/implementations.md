@@ -17,7 +17,7 @@ This reference maps the logical diagram to those artifacts.
 
 | Artifact | Responsibility |
 | --- | --- |
-| [Logical architecture](onegrid-logical-architecture.png) | End-to-end data, geospatial, weather, AI, application, and control planes |
+| [Logical architecture](diagrams/onegrid-reference-baseline.png) | End-to-end data, geospatial, weather, AI, application, and control planes |
 | [Bicep source](../planetary-computer-pro-poc/deploy/azure/main.bicep) | Azure resource definitions, conditions, role assignments, outputs |
 | [Compiled ARM](../planetary-computer-pro-poc/deploy/azure/azuredeploy.json) | Deployment payload |
 | [Portal form](../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json) | Component, model, app, capacity, and module choices |

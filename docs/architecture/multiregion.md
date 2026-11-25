@@ -16,17 +16,22 @@ journey rather than assigning one untested objective to the whole workload.
 
 ## Architecture
 
-[![Detailed primary and recovery stamps with Front Door managed private origins, separate regional app and job networks, dependency-specific recovery, item rebinding, validation gates, and single-publisher fencing.](../diagrams/onegrid-reference-multiregion.png)](../diagrams/onegrid-reference-multiregion.svg)
+<a href="../diagrams/onegrid-reference-multiregion.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-multiregion-dark.png"><img alt="Azure Front Door Premium above mirrored primary and recovery regions. Each region has App Service, a workload virtual network with VNet integration, private endpoints and the forecast job, and regional services. A gated recovery origin and dashed storage-copy and Fabric-recovery paths connect the regions, with numbered cutover steps." src="../diagrams/onegrid-reference-multiregion.png"></picture></a>
 
 [Download SVG](../diagrams/onegrid-reference-multiregion.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[Diagram source](../diagrams/sheets/multiregion.py) |
 [All nine technical sheets](../diagrams/onegrid-reference-gallery.html) |
 [Traffic and security contracts](traffic-and-security.md)
 
-Azure Front Door represents the global ingress implementation. Enable the recovery origin
-only after dependency and data acceptance passes. Dashed green paths represent explicitly
-configured data-copy or item-recovery workflows. Select the recovery mechanism for each
-Fabric item and storage account, then replay, restore permissions, and rebind connections.
+Azure Front Door Premium sits above two mirrored regions that use the same components. The
+solid private origin serves the accepted primary App Service; the dashed gated origin to the
+recovery App Service stays disabled until dependency and data acceptance passes. In each
+region, App Service reaches its regional services through VNet integration and private
+endpoints in the workload virtual network, and the forecast job calls Aurora from the same
+network. The recovery job is dashed because it stays disabled until cutover. Dashed arrows
+between the regions are the configured storage copy and Fabric item recovery with source
+replay. Select the recovery mechanism for each Fabric item and storage account. Numbered
+markers match the workflow below.
 
 Configure each region through the OneGrid resource template and environment-specific
 settings. Maintain routing, replication, item recovery, fencing, and cutover automation
@@ -34,16 +39,22 @@ alongside the regional deployments in the workload delivery pipeline.
 
 ### Workflow
 
-1. Front Door sends normal user traffic to the accepted primary origin. App Service
-   queries its configured regional data, geospatial, storage, and model endpoints.
+1. Users reach the published host on Azure Front Door Premium over HTTPS (443). Front Door
+   sends normal traffic to the accepted primary origin over its managed Private Link path.
+   App Service queries its configured regional data, geospatial, storage, and model
+   endpoints through VNet integration and private endpoints.
 2. Source ingestion, semantic refresh, and forecast publication run under the primary
-   environment's ownership. Recovery copies and item definitions follow the chosen
-   dependency-specific protection mechanisms.
-3. During an incident, operators fence primary writers, recover dependencies, and apply
-   the recovery environment's actual IDs, connections, permissions, and DNS configuration.
-4. The recovery environment passes data-backed readiness checks, including access,
+   environment's ownership. Storage follows its configured copy policy, and Fabric item
+   definitions and source data follow the chosen dependency-specific protection mechanisms.
+3. During an incident, operators fence the primary writers, including the forecast
+   publisher, and record source and output checkpoints.
+4. Operators recover Fabric items and data, replay sources from checkpoints, and restore
+   storage content, catalog context, and model dependencies in the recovery region.
+5. Operators apply the recovery environment's actual IDs, connections, permissions, and DNS
+   configuration to the recovery app, rebind SQL connections, and refresh the Import model.
+6. The recovery environment passes data-backed readiness checks, including access,
    freshness, model inference, and sole forecast-publisher ownership.
-5. Operators enable recovery traffic only after these gates pass, observe the restored
+7. Operators enable the recovery origin only after these gates pass, observe the restored
    journeys, and reconcile state before an approved failback.
 
 ### Components
@@ -88,8 +99,10 @@ confirmed event and data-loss/duplicate window. Validate restored queries rather
 assuming data is current because a workspace exists.
 
 For storage, choose redundancy/copy policies based on residency, RPO, and retention.
-Retain versions or backups independently of replication, because deletion or corruption
-can also be replicated.
+The baseline sample storage is `Standard_LRS`, which keeps no copy in another region, so
+choose explicit protection, copy, and restore for each account that holds packages,
+imagery, or outputs. Retain versions or backups independently of replication, because
+deletion or corruption can also be replicated.
 
 Retain GeoCatalog source imagery, STAC metadata, render settings, and ingestion configuration.
 Exercise the service recovery or catalog reconstruction path with representative data.
@@ -98,6 +111,9 @@ Exercise the service recovery or catalog reconstruction path with representative
 
 Reserve recovery-region Azure OpenAI quota and validate model/version compatibility.
 Test endpoint/deployment switching with the application's actual identity and data tools.
+Azure OpenAI, Aurora, and GeoCatalog use region-specific endpoints and quota; don't assume
+any global model or catalog replication. Review keys, identities, and data-processing
+geography for each recovery deployment.
 
 Prepare Aurora GPU capacity according to RTO. A workspace and endpoint are not sufficient
 without a healthy model deployment and inference test. Preserve model asset/version,
@@ -115,8 +131,11 @@ Use an enterprise-approved global ingress/routing policy. Keep regional origin r
 certificates, callbacks, DNS, and dependency access equivalent. Do not route users to the
 recovery app until DAX/KQL, authorization, selected model features, and freshness tests pass.
 
-For Azure Front Door, restrict each origin to the approved Front Door path. When using
-Premium private origins, approve and validate each regional Private Link connection.
+Front Door Premium provides WAF, TLS, the custom host, and WebSocket support for the
+published host. Restrict each origin to the approved Front Door path. With Premium private
+origins, Front Door reaches each regional app over its own managed Private Link origin path,
+not through a gateway in a customer subnet; approve and validate each regional Private Link
+connection.
 Keep the recovery origin disabled until the release gate passes; a successful HTTP health
 probe alone doesn't establish data or model readiness.
 
@@ -135,6 +154,27 @@ Fabric refresh, shortcuts, and GeoCatalog; global web routing doesn't recover th
 Include shared identity, DNS, deployment runners, registries, secrets, and monitoring in
 failure analysis. Ensure the recovery environment does not still depend exclusively on
 the failed region for package loading or critical configuration.
+
+### Regional networks
+
+Give each region its own hub and workload network. App Service compute stays outside the
+workload subnet: regional VNet integration routes all app outbound traffic (`allTraffic`)
+through the app integration subnet to private endpoints for Blob storage, Azure OpenAI, and
+the tenant Fabric endpoint, under the regional hub's DNS and firewall policy. The forecast
+job runs in a dedicated subnet with its own identity, DNS, registry, and Blob channel access,
+and reaches Aurora through the Machine Learning workspace private endpoint and managed model
+outbound. Each region keeps an independent resolver, private DNS zone links, and approved
+egress and reverse paths.
+
+The example address plans are design allocations, not live inventory:
+
+| Network | Primary region | Recovery region |
+| --- | --- | --- |
+| Hub | 10.10.0.0/16 | 10.30.0.0/16 |
+| Workload | 10.20.0.0/16 | 10.40.0.0/16 |
+| Private endpoint subnet | 10.20.1.0/24 | 10.40.1.0/24 |
+| App integration subnet | 10.20.2.0/26 | 10.40.2.0/26 |
+| Forecast job subnet | 10.20.4.0/23 | 10.40.4.0/23 |
 
 ### Cutover acceptance
 

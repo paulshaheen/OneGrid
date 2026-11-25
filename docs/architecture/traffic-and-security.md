@@ -28,13 +28,11 @@ Example addresses are design allocations, not an inventory obtained from an Azur
 | Regulated | [PNG](../diagrams/onegrid-reference-regulated.png) | [PNG](../diagrams/onegrid-reference-regulated-dark.png) | OT publication boundary, actual authorization paths, and retained evidence |
 | Multiregion | [PNG](../diagrams/onegrid-reference-multiregion.png) | [PNG](../diagrams/onegrid-reference-multiregion-dark.png) | Protected regional origins, dependency-specific recovery, and publisher fencing |
 
-The gallery links SVGs and PNGs for every sheet. Both image formats are exported by the
-actual draw.io Desktop engine from the native nine-page
-[light](../diagrams/onegrid-reference-architecture.drawio) and
-[dark](../diagrams/onegrid-reference-architecture-dark.drawio) documents.
-The [builder](../diagrams/build_reference_architecture.py) uses the documented native
-`mxfile` / `mxGraphModel` / `mxCell` import format. It does not submit solution content to
-a hosted rendering service.
+The gallery links SVGs and PNGs for every sheet. Each sheet is defined in
+[docs/diagrams/sheets](../diagrams/sheets/) and written as static SVG by the standard-library
+[builder](../diagrams/build_diagrams.py), which validates text fit, routing and label
+placement first. PNGs are rendered locally by Edge or Chrome. No solution content is
+submitted to a hosted rendering service.
 
 ## What the resource template creates
 
@@ -144,30 +142,116 @@ prove the source-service mechanism before disabling a required public source pat
 
 ## Identity and authorization
 
-The identity sheet records separate principals, credentials, scopes, and access tests.
+<a href="../diagrams/onegrid-reference-identity.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-identity-dark.png"><img alt="OneGrid identity and authorization. Seven numbered principals on the left each present a credential through Microsoft Entra ID and reach their resources: the web app, GeoCatalog, Blob storage, Azure Machine Learning and Container Registry in the resource group, and Fabric items, the semantic model and a OneLake shortcut in Microsoft Fabric." src="../diagrams/onegrid-reference-identity.png"></picture></a>
 
-- **User:** Entra sign-in establishes a session. It does not automatically apply that user's
-  row permissions to every shared-identity DAX, KQL, agent, or Blob request.
-- **App identity:** baseline account-level Blob Data Contributor, catalog-level GeoCatalog
-  Administrator, and job-scoped Jobs Operator; provisioner-applied Fabric/model grants are
-  separate. Test actual scope and every application data/tool path.
-- **Job identity:** workspace-level AzureML Data Scientist, sample-account Blob Data
-  Contributor, and registry pull rights. Channel SAS authorization does not bypass firewalls.
-- **Ingestion identity:** associated with GeoCatalog; sample-account Blob Data Reader.
-- **Refresh service principal:** Fabric connection credential and SQL read permission; not
-  the app or the signed-in user. Rotate and test its credential and model binding.
-- **Optional workspace identity:** shortcut connection source access; separate from the
-  Azure Fabric-plane deployment identity. A supplied Blob connection is another supported
-  configured path.
-- **Provisioner:** baseline includes resource-group Owner and storage User Access
-  Administrator, with optional Graph permission. Treat this as privileged deployment
-  access rather than a runtime entitlement.
+[Download SVG](../diagrams/onegrid-reference-identity.svg) |
+[Diagram source](../diagrams/sheets/identity.py)
+
+The identity sheet records separate principals, the credential each presents, and what it
+can reach. Dotted lines are grants and token context, not network hops; network reachability
+never substitutes for data permission.
+
+### Identity flow
+
+1. **Signed-in user:** an Entra user or group signs in through the OIDC app registration and
+   callback, which establishes an application session. Conditional Access is enterprise
+   configuration. Sign-in does not automatically apply that user's row permissions to every
+   shared-identity DAX, KQL, Data Agent, or Blob request; test each tool and data path with
+   permitted and denied users.
+2. **App Service identity (system-assigned):** requests resource-specific Entra access tokens
+   over HTTPS 443 through the app's own network configuration. The template grants Storage
+   Blob Data Contributor on the sample account, GeoCatalog Administrator on the catalog, and
+   Jobs Operator scoped to the one forecast job. The provisioner applies the Fabric (KQL, DAX,
+   Data Agent), model and configured OpenAI grants separately; OpenAI also supports an
+   explicitly configured API-key path. Verify actual scope and every application data and
+   tool path.
+3. **GeoCatalog ingestion identity (user-assigned):** associated with the GeoCatalog resource;
+   its managed-identity ingestion source uses the container URL. The template grants Storage
+   Blob Data Reader on the sample storage account. It is separate from the app's catalog
+   administration role. Catalog public API controls and GeoCatalog-to-source storage network
+   access are separate checks.
+4. **Forecast job identity (user-assigned):** selected with `AZURE_CLIENT_ID` and used through
+   `DefaultAzureCredential` for an Azure ML token (audience `https://ml.azure.com`, endpoint
+   `authMode` AADToken), a Storage token, and the user-delegation SAS for the channel. The
+   template grants AzureML Data Scientist on the workspace and Storage Blob Data Contributor on
+   the sample account. An auto-created registry grants AcrPull to this identity; a supplied
+   registry needs its explicit pull grant. SAS and RBAC still require reachable network paths.
+5. **Import refresh service principal:** a dedicated refresh application whose client secret
+   is stored in a Fabric cloud connection; it is neither the signed-in user nor the App Service
+   identity. It reads the Lakehouse SQL analytics endpoint over encrypted TDS 1433 with exact
+   database, schema, and table grants. Bind the intended connection to `OneGridModelImport`,
+   refresh after source updates, and test credential rotation and data freshness.
+6. **Fabric workspace identity (optional):** a separate native workspace identity. The
+   optional `createConnection` path provisions it and an ADLS Gen2 cloud connection with
+   `WorkspaceIdentity` authentication; a supplied, valid Blob connection ID is the other
+   supported path. The shortcut needs a source storage reader grant, a real `connectionId`,
+   the correct Blob or DFS endpoint, and a permitted source network path. A Fabric-plane
+   deployment identity with Blob Reader does not automatically authenticate this shortcut,
+   and transforming the files into hazard tables is a separate job.
+7. **Deployment identity (user-assigned):** the privileged provisioning identity calls the ARM
+   and Fabric APIs through the approved build and operator path. Template grants include
+   resource-group Owner and storage User Access Administrator (scoped to the sample storage
+   account) for provisioning tasks, plus optional Microsoft Graph `Application.ReadWrite.OwnedBy`;
+   directory consent is an explicit decision. Treat this as deployment access, not a runtime
+   entitlement: keep credentials and administrative tooling out of runtime code, use approved
+   release and elevation controls, and remove unneeded standing grants after deployment.
+
+For every principal, record principal IDs and role scope, Fabric item and database grants,
+token audience, connection owner, credential rotation, and denied-access tests. Never infer
+access from matching display names, a successful sign-in, a private IP, or the existence of an
+identity resource.
 
 The regulated design requires implementation and permitted/denied evidence for each call
 path. The baseline wrapper disables optional governance configuration; a governance-intent
 record or UI inventory is not blanket enforcement.
 
 ## Logging and monitoring
+
+<a href="../diagrams/onegrid-reference-monitoring.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-monitoring-dark.png"><img alt="OneGrid logging and monitoring. Six signal sources send evidence through collection that the baseline wires (environment logging, Application Insights) or that you add (Fabric monitoring, diagnostic settings, scheduled checks) to Log Analytics, Application Insights, a SIEM or archive, and alert owners, in seven numbered steps." src="../diagrams/onegrid-reference-monitoring.png"></picture></a>
+
+[Download SVG](../diagrams/onegrid-reference-monitoring.svg) |
+[Diagram source](../diagrams/sheets/monitoring.py)
+
+Collection inside the solid **Baseline wired** boundary is deployed by the template; collection
+inside the dashed **Enterprise additions** boundary is yours to configure and test. Every link
+is out-of-band evidence; no monitoring service proxies user requests.
+
+### Collection flow
+
+1. **Forecast job:** the Container Apps environment's `appLogsConfiguration` (wired in Bicep)
+   sends the job's stdout and stderr to the configured Log Analytics workspace. The job logs the
+   cycle, source, step count, candidate count, track count, publish location, exceptions, status,
+   and duration. Configure retention and access, watch failure, timeout, and retry evidence, and
+   compare `generatedAtIso` with `analysisTimeIso`: a failed run can leave old output, so alert on
+   its age.
+2. **Aurora endpoint:** the Azure ML workspace references Application Insights. Creating that
+   resource is not complete telemetry coverage: select and enable managed-endpoint diagnostics,
+   metrics, and inference collection explicitly to see GPU deployment health, failed scoring and
+   throttling, latency, capacity, backing-resource access, and model version provenance. Validate
+   log content and privacy before retention.
+3. **Fabric (enterprise addition):** use Fabric's supported monitoring, admin, and run-history
+   interfaces for source acknowledgments and the newest `PiEvents` row, notebook and pipeline run
+   results, model refresh history, SQL and table freshness, and capacity health. Build any export
+   to central monitoring explicitly, with its own permissions, retries, and audit trail; client
+   Private Link does not export Fabric logs.
+4. **Web app, Azure resources, and Entra (enterprise addition):** configure supported App Service
+   logs or diagnostic settings plus actual application instrumentation (HTTP, console, request
+   failures, tool latency), and correlate each UI, API, or WebSocket request with its KQL, DAX, or
+   model call. Configure resource diagnostic settings (Blob, Key Vault, ACR, OpenAI, gateway),
+   subscription Activity Log export, and Entra sign-in and audit export independently, choosing
+   supported categories, destinations, retention, and region or tenant policy; no universal
+   switch covers all services. Do not log bearer tokens, sensitive prompts, or connection secrets.
+5. **Published data (enterprise addition):** scheduled checks run the actual caller's read or
+   query (`weather-events.json` timestamps and provenance, the latest KQL event, the Import
+   model's last successful refresh, exactly one active forecast publisher), check age, shape, and
+   authorization, retain the result, and alert the owner. Static health probes are not data or
+   model readiness tests.
+6. **Retention and security operations:** export to an approved central workspace, archive, or
+   SIEM for public-access changes, denied calls, role changes, privileged access review, and
+   incident ownership.
+7. **Alerts to owners:** agree freshness, RTO, and RPO thresholds and route each alert to a named
+   owner with a runbook and tested recovery. Test the alert by controlled failure, not by
+   dashboard presence.
 
 | Signal | Current wiring / required implementation | Acceptance |
 | --- | --- | --- |
@@ -180,15 +264,79 @@ record or UI inventory is not blanket enforcement.
 
 Platform metrics and Activity Log are generated automatically, but resource-log collection
 requires diagnostic settings. A destination existing does not mean every service is sending
-the desired evidence. Private monitoring requires a deliberate AMPLS design; networks
-sharing DNS should not independently override the same Azure Monitor zones with conflicting
-scopes. Select supported collection paths and test ingestion/query access.
+the desired evidence. Private monitoring requires a deliberate AMPLS design with supported
+Azure Monitor endpoints and private DNS for the chosen signals; a Log Analytics workspace
+alone is not private monitoring. Networks sharing DNS should not independently override the
+same Azure Monitor zones with conflicting scopes. Select supported collection paths and test
+ingestion/query access, agent and platform endpoints, redaction, alert delivery, and the
+administration path.
 
 Avoid secrets/tokens and unapproved sensitive payloads in logs. Specify retention, RBAC,
 archive/immutability where required, alert routing, named ownership and a tested runbook.
 Do not insert monitoring as an inline hop in the user or inference path.
 
 ## Forecast interpretation
+
+<a href="../diagrams/onegrid-reference-weather.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-weather-dark.png"><img alt="OneGrid weather orchestration. Container Registry, a job trigger, NOAA GFS, Hugging Face static fields and NHC feed a four-step Container Apps job (start, prepare, detect and submit, track and publish) that exchanges data through the aurora-channel Blob container, calls the Aurora endpoint in Azure Machine Learning, publishes to model-outputs for the OneGrid web app, and sends logs to Log Analytics, in nine numbered steps." src="../diagrams/onegrid-reference-weather.png"></picture></a>
+
+[Download SVG](../diagrams/onegrid-reference-weather.svg) |
+[Diagram source](../diagrams/sheets/weather.py)
+
+### Weather run
+
+1. The job's schedule (`0 1,7,13,19 * * *`: 01, 07, 13 and 19 UTC) or an optional app request
+   to the ARM job API starts one execution. The app needs Jobs Operator scoped to the job; the
+   job has no inbound HTTP listener. Before Python starts, the environment pulls the pipeline
+   image from Container Registry with the job's own identity (AcrPull); an enterprise private
+   registry requires Premium. The container (Python 3.11, CPU torch, 2 vCPU and 4 GiB) runs
+   `python -m aurora_pipeline.run`, selects its managed identity with `AZURE_CLIENT_ID`,
+   processes one cycle and exits. Replica timeout is 3600 seconds with a retry limit of 1.
+2. Prepare (`config.py`, `initial_conditions.py`) downloads two GFS f000 0.25-degree analyses
+   six hours apart from NOAA's public S3 bucket, choosing the earlier cycle for data latency
+   (a 13 UTC run uses the 00 and 06 UTC analyses), and the Aurora static fields (land mask,
+   elevation, soil) from the `microsoft/aurora` Hugging Face repository. Allow the actual
+   download and CDN hosts. It converts units and grid into two starting weather states:
+   temperature, wind, pressure, and humidity on 13 pressure levels. Customer imagery is not an
+   Aurora input.
+3. Detect (`tracking.py`, `nhc.py`) turns pressure minima with nearby strong winds into
+   candidate centres, matches them to the NHC active storm feed (names and positions, not Aurora
+   predictions), falls back to a tropical-latitude filter when NHC is unavailable, and creates
+   official `aurora.Tracker` seeds. With no storms and no regional export, the job skips the
+   endpoint and publishes an empty list.
+4. The job writes the starting conditions to the `aurora-channel` container with a short-lived
+   user-delegation SAS (job role: Storage Blob Data Contributor). The SAS authorizes Blob
+   operations but does not bypass a storage firewall, so both the job and the model deployment
+   need a reachable path.
+5. The job (`inference.py`) calls the Aurora managed online endpoint over HTTPS 443, through the
+   workspace private endpoint when private, with an Entra token: endpoint `authMode` AADToken,
+   token audience `https://ml.azure.com`, template grant AzureML Data Scientist on the workspace.
+   It requests `aurora-0.25-finetuned` for 20 six-hour steps.
+6. The model deployment (default GPU `Standard_NC24ads_A100_v4`) reads the starting state from
+   the channel and writes the predicted fields back for the job to download. Aurora predicts
+   atmospheric fields; it is not trained anew per execution. Workspace and endpoint existence is
+   not readiness: the deployment needs the model asset, accepted terms, GPU quota, and a healthy
+   deployment, and the model choice is separate from the CPU image. Workspace identity, endpoint
+   identity, ML backing storage, Key Vault, and Application Insights have distinct lifecycles and
+   permissions; validate artifact pulls and backing-resource roles. For private operation the
+   workspace private endpoint handles inbound and the managed network handles deployment
+   outbound: allow managed private endpoints or approved destinations for the Blob channel, ML
+   backing storage, Key Vault, and image artifacts. That policy is not the Container Apps
+   environment subnet or App Service VNet integration.
+7. Track and publish follows each seed through the returned fields (the starting position and
+   intensity come from the input analysis; forecast positions, winds, and pressure come from the
+   rollout), converts units, movement, and categories, and writes `weather-events.json`, with
+   analysis and generation timestamps and the horizon, to `model-outputs`. The file is
+   overwritten only after successful processing.
+8. The web app reads the published events with its own identity and checks analysis age,
+   generation age, and provenance; an optional configured Fabric connection can read them too.
+   App start requests go to ARM, never to the scoring endpoint.
+9. The environment sends the job's logs (cycle, source, step count, candidate count, track count,
+   publish location, and failures) to Log Analytics.
+
+The job runs in its own Container Apps workload profiles environment. In the enterprise
+example that is `10.20.4.0/23`, with its own DNS, routes, firewall rules, and identity, and
+the customer Blob account is a separate service boundary on HTTPS 443 that must be reachable
+from both the job and the managed model network.
 
 The [forecast implementation](../../planetary-computer-pro-poc/aurora/aurora_pipeline/run.py)
 selects the prior six-hour cycle for availability, combines two starting states, detects
@@ -225,21 +373,21 @@ profile's `X-Azure-FDID`; the shared tag alone is insufficient.
 Reviewed on November 24, 2026. This is source/design verification, not evidence that an Azure
 deployment or network acceptance test ran.
 
-The drawing approach was checked against the builders supplied in the request:
-
-- [Balunywa DNS architecture builder, pinned revision](https://github.com/Balunywa/dns-crossregion-failover-poc/blob/8a6435fbc7a4c37e8d33d10de525391ee0fbc7e6/docs/diagrams/build_architecture_diagrams.py):
-  nested region/service scopes, explicit endpoint details, orthogonal routes and explanatory notes.
-- [dmauser reference-architecture builder, pinned revision](https://github.com/dmauser/azure-dnsresolver-failover/blob/e37a41ef3f65be13b3387897ab23f86985281893/docs/diagrams/build_reference_architecture.py):
-  native parent-relative `mxCell` containers, subnet responsibility, source/target connectors
-  and separated route/zone information.
+The sheets follow the Azure Architecture Center drawing conventions, as used in reference
+architectures such as
+[Analytics end-to-end with Microsoft Fabric](https://learn.microsoft.com/azure/architecture/example-scenario/dataplate2e/data-platform-end-to-end):
+official [Azure architecture icons](https://learn.microsoft.com/azure/architecture/icons/)
+with product names beside them, stage and platform containers, numbered dataflow steps, and
+protocol, permission and caveat detail in the article text rather than on the drawing.
+Network sheets draw VNets and subnets as labeled boxes, in the style of Learn's hub-and-spoke
+references.
 
 OneGrid uses original layouts and its own implementation evidence. DNS-lab upstream VMs,
-synthetic domains, measured timings and NVA failover assumptions are not imported as
-OneGrid facts.
+synthetic domains, measured timings and NVA failover assumptions from earlier reference
+builders are not imported as OneGrid facts.
 
-| Microsoft / draw.io guidance | Applied architecture decision |
+| Microsoft guidance | Applied architecture decision |
 | --- | --- |
-| [Native draw.io file format](https://www.drawio.com/docs/reference/file-format/) and [embed/load interface](https://www.drawio.com/docs/reference/embed-mode/) | Native editable cells, groups, geometry and source/target connectors; local actual-engine image export |
 | [App Service private endpoints](https://learn.microsoft.com/azure/app-service/overview-private-endpoint) | Separate inbound PE and outbound integration; explicit public denial |
 | [App Service routing](https://learn.microsoft.com/azure/app-service/configure-vnet-integration-routing) | Application and configuration routing, including bootstrap |
 | [Application Gateway and App Service](https://learn.microsoft.com/azure/application-gateway/configure-web-app) | Preserve custom host, TLS/SNI, backend DNS and probe |

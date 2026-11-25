@@ -16,30 +16,47 @@ decisions refer to the same sites, units, equipment, and sensors.
 
 ## Architecture
 
-[![Detailed OneGrid baseline with actual service boundaries, runtime identities, protocols, Fabric refresh, geospatial ingestion, model inference, and publication paths.](../diagrams/onegrid-reference-baseline.png)](../diagrams/onegrid-reference-baseline.svg)
+<a href="../diagrams/onegrid-reference-baseline.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-baseline-dark.png"><img alt="OneGrid logical architecture. Data sources flow through ingest, store, process and serve stages in Microsoft Fabric (Eventhouse, Lakehouse, notebooks, ontology, semantic model) and Azure (Blob Storage, Aurora on Azure Machine Learning, GeoCatalog) into the OneGrid web app, with numbered workflow steps and a platform row." src="../diagrams/onegrid-reference-baseline.png"></picture></a>
 
 [Download SVG](../diagrams/onegrid-reference-baseline.svg) |
-[Editable draw.io diagrams](../diagrams/onegrid-reference-architecture.drawio) |
+[Diagram source](../diagrams/sheets/baseline.py) |
 [All nine technical sheets](../diagrams/onegrid-reference-gallery.html) |
 [Traffic and security contracts](traffic-and-security.md)
 
-The view shows the complete enabled solution. Deployment parameters select which planes
-are provisioned. Blue arrows identify the caller of a query or API; green arrows identify
-data movement. Responses are omitted. Identity, configuration, and diagnostics aren't
-intermediate data-processing hops.
+The diagram shows the complete enabled solution. Data sources on the left move through
+ingest, store, process, and serve stages: operational and business data in Microsoft Fabric,
+weather and geospatial data in Azure. Both reach the OneGrid web app on the right, and shared
+platform services sit in the bottom row. Deployment parameters select which planes are
+provisioned. Numbered steps match the workflow below. Arrows point toward the component that
+receives data or a call, with responses omitted; dashed lines are optional or binding paths.
+Protocols, roles, and network detail are on the [technical sheets](traffic-and-security.md).
 
 ### Workflow
 
-The solution has three processing paths that meet in the application:
-
-1. **Real-time path:** operational source -> connector -> Eventstream custom endpoint ->
-   `PiEventsRaw` -> update policy -> `PiEvents` -> KQL -> application.
-2. **Historical and predictive path:** asset/maintenance/history -> OneLake/Lakehouse ->
-   preparation and scoring notebooks -> reliability/weather tables -> Import semantic
-   model -> DAX -> application.
-3. **Geospatial and forecast path:** imagery -> GeoCatalog -> map layers; NOAA GFS ->
-   scheduled job -> Aurora endpoint -> normalized events in Blob Storage -> weather adapter
-   -> application. A OneLake shortcut connects model-output storage to Fabric when configured.
+1. **Acquire data.** Historian/PI and SCADA readings; AIMM, iCare, GADS, and CMMS asset and
+   work history; NOAA GFS analyses and NHC storm positions; Hugging Face static weather
+   fields; and customer COG/STAC imagery are the sources.
+2. **Process real-time telemetry.** The connector publishes to the Eventstream
+   `PIForwarderEndpoint` custom source. Eventhouse lands `PiEventsRaw`, an update policy
+   produces `PiEvents` and outage tables, and KQL functions serve current grid state.
+3. **Curate history and calculate health.** Approved loads land asset, maintenance, and
+   history data in the Lakehouse. Notebooks read features from it and persist scores and
+   narratives back to it.
+4. **Unify the asset context.** The conformed hierarchy
+   `dim_site -> dim_unit -> dim_asset -> dim_tag` binds the Digital Twin Builder ontology
+   to Lakehouse tables.
+5. **Serve business and operational queries.** The Import semantic model refreshes from the
+   Lakehouse SQL analytics endpoint after source changes and serves DAX; Eventhouse serves
+   KQL; the optional Data Agent is grounded on the semantic model.
+6. **Add geospatial context.** Customer imagery lands in a private Blob container. GeoCatalog
+   ingests it with its associated managed identity, and STAC search and tiles serve map layers.
+7. **Generate weather intelligence.** The scheduled forecast job downloads initial
+   conditions, exchanges large payloads with the Aurora endpoint through Blob storage, and
+   publishes `weather-events.json` to `model-outputs`. The app can also start a run through
+   Azure Resource Manager. When configured, a OneLake shortcut exposes model outputs to Fabric.
+8. **Present decisions and explanations.** Users sign in with Entra ID and use the OneGrid
+   web app. It queries KQL, DAX, Blob Storage, and GeoCatalog with its workload identity and
+   calls Azure OpenAI for the AI agent. Basemap tiles load directly in the browser.
 
 User authentication is separate from these data paths. A user signs in with Entra ID, and
 the application uses its workload identities to query its configured dependencies.
