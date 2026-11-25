@@ -153,34 +153,25 @@ Import model after its source data changes.
 
 ## Architecture configurations
 
-| Configuration | Design focus | OneGrid guidance |
+The table includes the four workload configurations and their supporting technical views.
+Each entry links to guidance and both diagram themes. Use the direct image links on GitHub;
+the [HTML gallery](docs/diagrams/onegrid-reference-gallery.html) is for local browsing.
+
+| Configuration / view | Design focus | OneGrid guidance |
 | --- | --- | --- |
-| **Baseline** | Single-region application, data, geospatial, weather, and AI flows | [Baseline architecture](docs/architecture/baseline.md) |
-| **Enterprise landing zone** | Integration with existing identity, security, networking, governance, and management | [Enterprise implementation](docs/architecture/enterprise-landing-zone.md) |
-| **Regulated workload** | Data boundaries, controlled administration, audit evidence, AI oversight, and operational approvals | [Regulated architecture](docs/architecture/regulated-workload.md) |
-| **Multiregion** | Application recovery, Fabric item/data recovery, inference capacity, and controlled failover | [Multiregion architecture](docs/architecture/multiregion.md) |
+| **Baseline** | Single-region application, data, geospatial, weather, and AI flows | [Baseline architecture](docs/architecture/baseline.md)<br>[Light](docs/diagrams/onegrid-reference-baseline.png) / [Dark](docs/diagrams/onegrid-reference-baseline-dark.png) |
+| **Enterprise landing zone** | Integration with existing identity, security, networking, governance, and management | [Enterprise implementation](docs/architecture/enterprise-landing-zone.md)<br>[Light](docs/diagrams/onegrid-reference-enterprise.png) / [Dark](docs/diagrams/onegrid-reference-enterprise-dark.png) |
+| **Regulated workload** | Data boundaries, controlled administration, audit evidence, AI oversight, and operational approvals | [Regulated architecture](docs/architecture/regulated-workload.md)<br>[Light](docs/diagrams/onegrid-reference-regulated.png) / [Dark](docs/diagrams/onegrid-reference-regulated-dark.png) |
+| **Multiregion** | Application recovery, Fabric item/data recovery, inference capacity, and controlled failover | [Multiregion architecture](docs/architecture/multiregion.md)<br>[Light](docs/diagrams/onegrid-reference-multiregion.png) / [Dark](docs/diagrams/onegrid-reference-multiregion-dark.png) |
+| **Fabric** | Streaming and historical ingestion, Eventhouse/Lakehouse storage, asset analytics, ontology, and governed DAX/KQL access; Import refresh is separate from runtime queries | [Fabric architecture](docs/architecture/fabric.md)<br>[Light](docs/diagrams/onegrid-reference-fabric.png) / [Dark](docs/diagrams/onegrid-reference-fabric-dark.png) |
+| **DNS and private endpoints** | Corporate and workload name resolution through the hub resolver, private DNS zones, and forwarding rules for customer domains | [Name resolution flow](docs/architecture/enterprise-landing-zone.md#name-resolution-flow)<br>[Light](docs/diagrams/onegrid-reference-dns.png) / [Dark](docs/diagrams/onegrid-reference-dns-dark.png) |
+| **Weather orchestration** | Scheduled or on-demand CPU job preparation, Aurora GPU inference, Blob payload exchange, and published storm events; weather prediction is separate from asset-health scoring | [Weather run](docs/architecture/traffic-and-security.md#weather-run)<br>[Light](docs/diagrams/onegrid-reference-weather.png) / [Dark](docs/diagrams/onegrid-reference-weather-dark.png) |
+| **Identity and authorization** | User sign-in and separate application, ingestion, forecast, refresh, workspace, and deployment credentials; scoped data grants are distinct from network access | [Identity and authorization](docs/architecture/traffic-and-security.md#identity-and-authorization)<br>[Light](docs/diagrams/onegrid-reference-identity.png) / [Dark](docs/diagrams/onegrid-reference-identity-dark.png) |
+| **Logging and monitoring** | Baseline telemetry versus enterprise additions, signal collection, log destinations, freshness checks, and actionable alerts; monitoring is out of band | [Logging and monitoring](docs/architecture/traffic-and-security.md#logging-and-monitoring)<br>[Light](docs/diagrams/onegrid-reference-monitoring.png) / [Dark](docs/diagrams/onegrid-reference-monitoring-dark.png) |
 
 Use the workload template for OneGrid resources and Fabric provisioning. Apply
 environment-specific networking, enterprise controls, and recovery configuration through
 the platform and workload delivery pipelines.
-
-## Architecture diagram sheets
-
-The four configurations above describe deployment choices. The complete diagram set has
-nine sheets. Use these direct image links on GitHub; the
-[HTML gallery](docs/diagrams/onegrid-reference-gallery.html) is for local browsing.
-
-| Sheet | Design focus and notes | Diagrams | OneGrid guidance |
-| --- | --- | --- | --- |
-| **Baseline (logical view)** | Single-region operational, business, weather, and geospatial sources flow through Fabric and Azure to the web app. Shared platform services support the application and AI flows. | [Light](docs/diagrams/onegrid-reference-baseline.png) / [Dark](docs/diagrams/onegrid-reference-baseline-dark.png) | [Baseline architecture](docs/architecture/baseline.md) |
-| **Fabric** | Streaming and historical ingestion feed Eventhouse and Lakehouse analytics. Notebooks, the asset ontology, and the Import semantic model provide operational and business context; model refresh is separate from runtime queries. | [Light](docs/diagrams/onegrid-reference-fabric.png) / [Dark](docs/diagrams/onegrid-reference-fabric-dark.png) | [Fabric architecture](docs/architecture/fabric.md) |
-| **Enterprise networking** | Hub and workload VNets provide private ingress, service endpoints, and controlled egress. App Service inbound private access and outbound VNet integration are separate paths; address ranges are illustrative design allocations. | [Light](docs/diagrams/onegrid-reference-enterprise.png) / [Dark](docs/diagrams/onegrid-reference-enterprise-dark.png) | [Enterprise implementation](docs/architecture/enterprise-landing-zone.md) |
-| **DNS and private endpoints** | Corporate and workload clients resolve original service hostnames through the hub resolver. Private DNS zones resolve Azure service names; the forwarding ruleset sends customer-domain queries to corporate DNS. | [Light](docs/diagrams/onegrid-reference-dns.png) / [Dark](docs/diagrams/onegrid-reference-dns-dark.png) | [Name resolution flow](docs/architecture/enterprise-landing-zone.md#name-resolution-flow) |
-| **Weather orchestration** | A scheduled or on-demand CPU job prepares weather inputs, invokes Aurora GPU inference through a Blob exchange, and publishes storm events for the app. Forecast generation is separate from asset-health scoring. | [Light](docs/diagrams/onegrid-reference-weather.png) / [Dark](docs/diagrams/onegrid-reference-weather-dark.png) | [Weather run](docs/architecture/traffic-and-security.md#weather-run) |
-| **Identity and authorization** | Trace user, application, ingestion, forecast, refresh, workspace, and deployment principals through Entra ID to their permitted resources. User sign-in, workload credentials, and data grants are distinct; network access does not grant data permission. | [Light](docs/diagrams/onegrid-reference-identity.png) / [Dark](docs/diagrams/onegrid-reference-identity-dark.png) | [Identity and authorization](docs/architecture/traffic-and-security.md#identity-and-authorization) |
-| **Logging and monitoring** | Separate baseline-wired telemetry from collection that requires enterprise configuration. Follow job, model, Fabric, app, Azure, and identity signals to monitoring destinations; freshness checks and alerts identify failures beyond resource availability. | [Light](docs/diagrams/onegrid-reference-monitoring.png) / [Dark](docs/diagrams/onegrid-reference-monitoring-dark.png) | [Logging and monitoring](docs/architecture/traffic-and-security.md#logging-and-monitoring) |
-| **Regulated workload** | Four trust zones separate OT transfer, classified Fabric data, the application, and model/geospatial services. Controlled administration, AI oversight, audit evidence, and operational approvals define the design; the drawing alone does not establish compliance. | [Light](docs/diagrams/onegrid-reference-regulated.png) / [Dark](docs/diagrams/onegrid-reference-regulated-dark.png) | [Regulated architecture](docs/architecture/regulated-workload.md) |
-| **Multiregion recovery** | Coordinate application recovery with Fabric item/data recovery and inference capacity. Regional targets and release gates support controlled failover; Front Door routing alone does not recover the complete workload. | [Light](docs/diagrams/onegrid-reference-multiregion.png) / [Dark](docs/diagrams/onegrid-reference-multiregion-dark.png) | [Multiregion architecture](docs/architecture/multiregion.md) |
 
 ## Considerations
 
