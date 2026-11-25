@@ -7,6 +7,8 @@ ms.topic: conceptual
 
 # OneGrid regulated workload architecture
 
+Part of the [OneGrid landing zone design guide](design-guide.md).
+
 [Solution overview](../../README.md) | [Enterprise implementation](enterprise-landing-zone.md)
 
 A regulated OneGrid workload combines operational intelligence with explicit control of
@@ -16,7 +18,7 @@ assigning controls and evidence to each boundary.
 
 ## Architecture
 
-<a href="../diagrams/onegrid-reference-regulated.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-regulated-dark.png"><img alt="Regulated architecture: an OT transfer boundary publishes outward to a classified Fabric workspace; approved users sign in with Microsoft Entra ID and reach the app through Application Gateway WAF and a private endpoint; the app calls Fabric, Azure OpenAI, GeoCatalog, and forecast output; each boundary sends evidence to Log Analytics and release approvals." src="../diagrams/onegrid-reference-regulated.png"></picture></a>
+<a href="../diagrams/onegrid-reference-regulated.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-regulated-dark.png"><img alt="Regulated architecture: an OT transfer boundary publishes outward to a classified Fabric workspace; approved users sign in with Microsoft Entra ID and reach the app through Application Gateway WAF and a private endpoint; the app calls Fabric, Microsoft Foundry, GeoCatalog, and forecast output; each boundary sends evidence to Log Analytics and release approvals." src="../diagrams/onegrid-reference-regulated.png"></picture></a>
 
 [Download SVG](../diagrams/onegrid-reference-regulated.svg) |
 [Diagram source](../diagrams/sheets/regulated.py) |
@@ -30,8 +32,10 @@ boundaries, including weather-output reads.
 
 ### Workflow
 
-1. An approved connector reads operational sources in the transfer zone and publishes
-   outward to Eventstream; it doesn't expose an application-to-plant control path.
+1. An approved connector from the data-plane add-on reads operational sources in the
+   transfer zone and publishes outward to Eventstream; it doesn't expose an
+   application-to-plant control path. The provisioner doesn't create the Eventstream; see
+   the [known gap](design-guide.md#known-gap-live-ingestion-eventstream).
 2. Fabric ingests telemetry and curates asset history under the configured workspace,
    source-connection, table, and semantic permissions.
 3. Users sign in with Microsoft Entra ID and reach the published application host through
@@ -77,8 +81,8 @@ equipment manuals, prompts, answers, and derived predictions. Apply minimization
 approved retention to both primary data and diagnostic copies.
 
 Record regions and processing scope for Fabric capacities, storage, GeoCatalog, Azure ML,
-Azure OpenAI, and recovery copies. The ARM default Azure OpenAI deployment type is
-`GlobalStandard`; choose and verify model processing geography against actual requirements.
+Microsoft Foundry, and recovery copies. The ARM default Microsoft Foundry deployment type
+is `GlobalStandard`; choose and verify model processing geography against actual requirements.
 Evaluate encryption/key-management needs per service and test the selected configuration.
 
 Separate generated/seeding data from observed production measurements in ingestion,
@@ -125,7 +129,7 @@ identity, destination, enforcement point, and evidence owner. In particular:
   processed Eventstream ingestion, and independently authorized storage connections.
 - The app's KQL, DAX, model, STAC, and weather-output Blob calls use HTTPS on TCP 443.
   Shared workload identity needs explicit data and tool checks on every call path.
-- Reach Azure OpenAI through its private account endpoint with explicit authentication,
+- Reach Microsoft Foundry through its private account endpoint with explicit authentication,
   and minimize sensitive data in prompts and tool results.
 - Grant GeoCatalog roles and its source-Blob ingestion identity separately, restrict
   classified imagery and render permissions, approve any public API egress, and accept
@@ -154,7 +158,7 @@ relying on inventory views.
 | --- | --- | --- |
 | Source separation | Connector permissions, buffer, endpoint, certificate | Approved network path; source access test; outage/replay exercise |
 | Data authorization | App APIs, Fabric/SQL/KQL permissions, model filters, exports | Permitted/denied test results for actual query identities |
-| Restricted model use | Azure OpenAI/Aurora configuration and agent tools | Model/geography approval, tool policy, evaluation results |
+| Restricted model use | Microsoft Foundry/Aurora configuration and agent tools | Model/geography approval, tool policy, evaluation results |
 | Credential protection | Refresh identity, deployment identity, connector certificates | Inventory, rotation drill, redacted logs/artifacts |
 | Administrative control | Platform/workload privileged roles, deployment approvals | Access reviews, elevation records, change approvals |
 | Auditability | Identity, app, Fabric, job, model, deployment events | Searchable correlated events; retention/access test |

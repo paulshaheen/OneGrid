@@ -79,7 +79,7 @@ def build():
     s.zone("hosted", ZONE_X, TOP, ZONE_W, BOTTOM - TOP, "Azure and Fabric services", icon="resource-group")
     services = (
         ("app", "App Service", "OneGrid web app", "app-service", "sites"),
-        ("openai", "Azure OpenAI", "language model", "azure-openai", "account"),
+        ("openai", "Microsoft Foundry", "language models", "ai-foundry", "account"),
         ("fabric", "Microsoft Fabric", "KQL, DAX, agent", "fabric", "tenant"),
         ("blob", "Blob storage", "package and data", "blob-storage", "blob"),
         ("ml", "Azure Machine Learning", "Aurora endpoint", "machine-learning", "amlworkspace"),

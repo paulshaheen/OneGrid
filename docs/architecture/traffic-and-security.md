@@ -7,9 +7,11 @@ ms.topic: conceptual
 
 # OneGrid traffic, identity, security, and monitoring
 
+Part of the [OneGrid landing zone design guide](design-guide.md).
+
 [Solution overview](../../README.md) | [Detailed diagram gallery](../diagrams/onegrid-reference-gallery.html)
 
-The nine technical sheets separate the deployed OneGrid resource/runtime contract from
+The architecture sheets separate the deployed OneGrid resource/runtime contract from
 enterprise network, monitoring, regulated-workload, and recovery additions. They use actual
 service boundaries rather than placing SaaS or App Service compute inside customer subnets.
 Example addresses are design allocations, not an inventory obtained from an Azure subscription.
@@ -18,7 +20,10 @@ Example addresses are design allocations, not an inventory obtained from an Azur
 
 | Sheet | Light drawing | Dark drawing | Principal decision |
 | --- | --- | --- | --- |
-| Baseline | [PNG](../diagrams/onegrid-reference-baseline.png) | [PNG](../diagrams/onegrid-reference-baseline-dark.png) | Complete enabled resource and runtime paths; authenticated public endpoints |
+| Landing zone | [PNG](../diagrams/onegrid-reference-landing-zone.png) | [PNG](../diagrams/onegrid-reference-landing-zone-dark.png) | OneGrid subscriptions in the management group hierarchy beside the platform subscriptions; design areas A–H |
+| Deployment | [PNG](../diagrams/onegrid-reference-deployment.png) | [PNG](../diagrams/onegrid-reference-deployment-dark.png) | What the template deploys into one resource group, what the provisioner creates in Fabric, and the repeatable stamp |
+| Resource naming | [PNG](../diagrams/onegrid-reference-naming.png) | [PNG](../diagrams/onegrid-reference-naming-dark.png) | Name patterns resolved from `main.bicep` and a recommended resource group split by lifecycle |
+| Logical view | [PNG](../diagrams/onegrid-reference-baseline.png) | [PNG](../diagrams/onegrid-reference-baseline-dark.png) | Complete enabled resource and runtime paths; authenticated public endpoints |
 | Fabric | [PNG](../diagrams/onegrid-reference-fabric.png) | [PNG](../diagrams/onegrid-reference-fabric-dark.png) | Ingestion, SQL/Import refresh, KQL/DAX, source connections, and data permissions |
 | Enterprise | [PNG](../diagrams/onegrid-reference-enterprise.png) | [PNG](../diagrams/onegrid-reference-enterprise-dark.png) | Actual subnet responsibilities and separate service private endpoints |
 | DNS | [PNG](../diagrams/onegrid-reference-dns.png) | [PNG](../diagrams/onegrid-reference-dns-dark.png) | Inbound resolution, linked zones, outbound forwarding, and caller tests |
@@ -32,7 +37,9 @@ The gallery links SVGs and PNGs for every sheet. Each sheet is defined in
 [docs/diagrams/sheets](../diagrams/sheets/) and written as static SVG by the standard-library
 [builder](../diagrams/build_diagrams.py), which validates text fit, routing and label
 placement first. PNGs are rendered locally by Edge or Chrome. No solution content is
-submitted to a hosted rendering service.
+submitted to a hosted rendering service. The same build writes
+[onegrid-architecture.drawio](../diagrams/onegrid-architecture.drawio), which holds every
+sheet as an editable page.
 
 ## What the resource template creates
 
@@ -45,7 +52,7 @@ Component parameters select the enabled planes.
 | --- | --- | --- |
 | Application | Linux App Service, Node 22, HTTPS-only, TLS 1.2 minimum, WebSocket, system-assigned identity | WAF, private origin, custom host/certificate, outbound integration, DNS, access tests |
 | Storage | Standard LRS, HTTPS-only, TLS 1.2, anonymous Blob access disabled; private containers | Network rules, private endpoints, private DNS, source-service access, protection/recovery |
-| OpenAI | Account/model deployment; explicit public network access enabled in baseline Bicep | Approved processing geography/model; private endpoint, identity policy, public denial |
+| Microsoft Foundry | Account/model deployment; explicit public network access enabled in baseline Bicep | Approved processing geography/model; private endpoint, identity policy, public denial |
 | Aurora | Workspace/backing storage/Key Vault/Application Insights; AADToken online endpoint; conditional GPU deployment | Quota/model readiness, inbound workspace PE, managed outbound network and backing-resource grants |
 | Forecast job | CPU job, own identity, schedule, registry access, Blob/ML grants, environment Log Analytics | Dedicated VNet-integrated workload profiles environment, source egress, private registry/scoring/channel access |
 | Fabric | Capacity/workspace/items, semantic refresh and configured identity/item grants | Tenant Private Link/public block, supported source connections, retention and monitoring |
@@ -103,7 +110,7 @@ Do not replace an HTTPS endpoint with a private IP literal.
 | Browser | App host, HTTPS/WSS 443 | Approved ingress, valid user session, application authorization |
 | Gateway | App Service origin, HTTPS 443 | Private DNS, origin host/certificate/SNI/probe; deny public bypass |
 | App | KQL / DAX / Data Agent, HTTPS 443 | Actual item IDs, separate data permissions, tenant Fabric private access |
-| App | OpenAI account, HTTPS 443 | Configured Entra or API-key path, approved model; private account endpoint |
+| App | Microsoft Foundry account, HTTPS 443 | Configured Entra or API-key path, approved model; private account endpoint |
 | App | Blob package/assets/output, HTTPS 443 | App storage grant plus tested startup and runtime network access |
 | App | GeoCatalog API, HTTPS 443 | Catalog role and explicit approved API egress |
 | App | ARM start/status API, HTTPS 443 | Token for management API; Jobs Operator scoped to the job |
@@ -125,7 +132,7 @@ Do not replace an HTTPS endpoint with a private IP literal.
 | App Service | `privatelink.azurewebsites.net`; include SCM if used; public access must be explicitly tested/disabled |
 | Blob | `privatelink.blob.core.windows.net`; private container authorization is not private networking |
 | ADLS source, when selected | `privatelink.dfs.core.windows.net` and required Blob path; confirm compatible source configuration |
-| OpenAI | `privatelink.openai.azure.com` for the deployed account host |
+| Microsoft Foundry | `privatelink.openai.azure.com` for the deployed account host |
 | ACR | `privatelink.azurecr.io`, including registry and service-generated image-data records |
 | ML | Workspace-supplied records under `privatelink.api.azureml.ms`; notebook zone only when used; resolve actual scoring hostname |
 | Fabric | Use the tenant PE's generated DNS configuration for actual KQL, Power BI and Fabric API targets |
@@ -162,8 +169,8 @@ never substitutes for data permission.
    over HTTPS 443 through the app's own network configuration. The template grants Storage
    Blob Data Contributor on the sample account, GeoCatalog Administrator on the catalog, and
    Jobs Operator scoped to the one forecast job. The provisioner applies the Fabric (KQL, DAX,
-   Data Agent), model and configured OpenAI grants separately; OpenAI also supports an
-   explicitly configured API-key path. Verify actual scope and every application data and
+   Data Agent), model and configured Microsoft Foundry grants separately; Microsoft Foundry
+   also supports an explicitly configured API-key path. Verify actual scope and every application data and
    tool path.
 3. **GeoCatalog ingestion identity (user-assigned):** associated with the GeoCatalog resource;
    its managed-identity ingestion source uses the container URL. The template grants Storage
@@ -237,7 +244,7 @@ is out-of-band evidence; no monitoring service proxies user requests.
 4. **Web app, Azure resources, and Entra (enterprise addition):** configure supported App Service
    logs or diagnostic settings plus actual application instrumentation (HTTP, console, request
    failures, tool latency), and correlate each UI, API, or WebSocket request with its KQL, DAX, or
-   model call. Configure resource diagnostic settings (Blob, Key Vault, ACR, OpenAI, gateway),
+   model call. Configure resource diagnostic settings (Blob, Key Vault, ACR, Microsoft Foundry, gateway),
    subscription Activity Log export, and Entra sign-in and audit export independently, choosing
    supported categories, destinations, retention, and region or tenant policy; no universal
    switch covers all services. Do not log bearer tokens, sensitive prompts, or connection secrets.

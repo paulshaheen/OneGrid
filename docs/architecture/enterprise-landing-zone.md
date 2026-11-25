@@ -7,6 +7,8 @@ ms.topic: conceptual
 
 # OneGrid in an enterprise landing zone
 
+Part of the [OneGrid landing zone design guide](design-guide.md).
+
 [Solution overview](../../README.md) | [Baseline architecture](baseline.md)
 
 An enterprise deployment places OneGrid's workload resources inside an organization's
@@ -50,7 +52,7 @@ firewall. Each dependency has its own service connection and access policy.
 4. The workload VNet uses the hub resolver's inbound endpoint (example `10.10.1.4`) as its
    DNS server. Private service hostnames resolve to private endpoint addresses, as
    described in the [name resolution flow](#name-resolution-flow).
-5. App Service reaches Azure OpenAI, Fabric, and Blob Storage through their private
+5. App Service reaches Microsoft Foundry, Fabric, and Blob Storage through their private
    endpoints over TCP 443. Fabric executes KQL, DAX, and configured Data Agent requests;
    refresh, notebooks, and shortcuts use their own source connections rather than the
    application's subnet.
@@ -84,18 +86,26 @@ Central diagnostics collect out-of-band signals from the enabled services; see
 ## Landing zone design decisions
 
 Resolve the eight platform design areas for the OneGrid environment before deployment.
-The output is an integration contract, not a second platform foundation.
+The output is an integration contract, not a second platform foundation. The legend letters
+match the lettered markers on the landing zone drawing and the
+[design areas](design-guide.md#design-areas) in the design guide.
 
-| Design area | OneGrid decision | Required outcome |
-| --- | --- | --- |
-| Billing and Microsoft Entra tenant | Select the Azure subscription, Fabric tenant/capacity, and accountable cost owner | Approved tenant relationship, billing scope, and budget |
-| Identity and access management | Reuse enterprise sign-in groups; separate deployment, runtime, refresh, ingestion, and job identities | Identity inventory, consent, least-privilege grants, and credential owners |
-| Resource organization | Place environment subscriptions/resource groups under the existing management hierarchy | Naming, tags, ownership, retention, and shared-resource deletion boundaries |
-| Network topology and connectivity | Select ingress, subnet allocations, private endpoints, DNS, hybrid access, and egress | Reviewed traffic matrix and deployment/operator network paths |
-| Security | Protect data, model inputs, tools, administrative access, and supply-chain artifacts | Threat model, approved controls, and permitted/denied access evidence |
-| Management | Integrate workload telemetry, alerting, source freshness, backups, and incident response | Service objectives, on-call ownership, retention, and tested recovery |
-| Governance | Apply Azure Policy and Fabric/data-governance decisions to the correct control planes | Policy assignments, data classifications, access reviews, and owned exceptions |
-| Platform automation and DevOps | Promote versioned infrastructure, app, data/model configuration, and network changes | Approved pipelines, connected runners, release record, and rollback evidence |
+<a href="../diagrams/onegrid-reference-landing-zone.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-landing-zone-dark.png"><img alt="OneGrid in an Azure landing zone with lettered design areas A to H: billing and the Microsoft Entra tenant, identity and access management, the management group tree with OneGrid production and non-production subscriptions under Corp or Online, the connectivity hub peered to the OneGrid workload VNet, Defender for Cloud, the management subscription, a governance strip on every subscription, and the automation that deploys the OneGrid resource group and the OneGrid workspace in Microsoft Fabric." src="../diagrams/onegrid-reference-landing-zone.png"></picture></a>
+
+[Download SVG](../diagrams/onegrid-reference-landing-zone.svg) |
+[Download the draw.io file](../diagrams/onegrid-architecture.drawio) |
+[Diagram source](../diagrams/sheets/landing_zone.py)
+
+| Legend | Design area | OneGrid decision | Required outcome |
+| --- | --- | --- | --- |
+| A | Billing and Microsoft Entra tenant | Select the Azure subscription, Fabric tenant/capacity, and accountable cost owner | Approved tenant relationship, billing scope, and budget |
+| B | Identity and access management | Reuse enterprise sign-in groups; separate deployment, runtime, refresh, ingestion, and job identities | Identity inventory, consent, least-privilege grants, and credential owners |
+| C | Resource organization | Place environment subscriptions/resource groups under the existing management hierarchy | Naming, tags, ownership, retention, and shared-resource deletion boundaries |
+| D | Network topology and connectivity | Select ingress, subnet allocations, private endpoints, DNS, hybrid access, and egress | Reviewed traffic matrix and deployment/operator network paths |
+| E | Security | Protect data, model inputs, tools, administrative access, and supply-chain artifacts | Threat model, approved controls, and permitted/denied access evidence |
+| F | Management | Integrate workload telemetry, alerting, source freshness, backups, and incident response | Service objectives, on-call ownership, retention, and tested recovery |
+| G | Governance | Apply Azure Policy and Fabric/data-governance decisions to the correct control planes | Policy assignments, data classifications, access reviews, and owned exceptions |
+| H | Platform automation and DevOps | Promote versioned infrastructure, app, data/model configuration, and network changes | Approved pipelines, connected runners, release record, and rollback evidence |
 
 ## Subscription setup
 
@@ -121,7 +131,7 @@ Select the App Service tier and instance configuration for the required networki
 availability, and concurrency. The app package contains the report BFF, React SSR, and Node
 AI agent; preserve its startup command, port 8080, WebSocket support, and package access.
 
-Use the configured Azure OpenAI account/deployment consistently across model settings and
+Use the configured Microsoft Foundry account and deployment consistently across model settings and
 application configuration. Record deployment name, catalog model, version, processing
 geography, quota, allowed tools, and evaluation results. When the enterprise supplies an
 AI gateway, integrate its endpoint, identity, authorization, and routing with the agent.
@@ -136,7 +146,7 @@ in the same reviewed configuration.
 
 Allocate supported App Service integration, private endpoint, ingress, and management/runner
 subnets through the platform address plan. Configure supported private service connections
-and resource access rules for storage, Azure OpenAI, Azure ML, and Key Vault.
+and resource access rules for storage, Microsoft Foundry, Azure ML, and Key Vault.
 
 The drawings use this example plan. The ranges are design allocations, not discovered
 Azure addresses; replace them with the platform's allocations.
@@ -149,7 +159,7 @@ Azure addresses; replace them with the platform's allocations.
 | DNS outbound | `10.10.1.16/28` | `Microsoft.Network/dnsResolvers`; separate subnet, no client-facing inbound IP |
 | Workload VNet | `10.20.0.0/16` | Custom DNS server `10.10.1.4` |
 | Ingress | `10.20.0.0/24` | Dedicated Application Gateway subnet |
-| Private endpoints | `10.20.1.0/24` | One private endpoint per target: App Service `sites`, Blob `blob`, Azure OpenAI `account`, Fabric `tenant`, Azure ML `amlworkspace`, Container Registry `registry` |
+| Private endpoints | `10.20.1.0/24` | One private endpoint per target: App Service `sites`, Blob `blob`, Microsoft Foundry `account`, Fabric `tenant`, Azure ML `amlworkspace`, Container Registry `registry` |
 | App integration | `10.20.2.0/26` | `Microsoft.Web/serverFarms`; outbound only |
 | Job environment | `10.20.4.0/23` | `Microsoft.App/environments`; workload profiles environment |
 
@@ -269,7 +279,7 @@ or `AcrPull`, and they don't disable a service's public network access.
 | --- | --- | --- |
 | App Service origin | Link `privatelink.azurewebsites.net` and register the app record; add the SCM record when used | Gateway backend, probe, and connected deployment runner |
 | Blob Storage | Link `privatelink.blob.core.windows.net`; add other storage subresources only when used, such as `privatelink.dfs.core.windows.net` for an ADLS source path | App package bootstrap, imagery access, job channel/output, and each service-source connection; test Blob and DFS separately when a source uses both |
-| Azure OpenAI | Link `privatelink.openai.azure.com` for the deployed account endpoint | Actual App Service model client |
+| Microsoft Foundry | Link `privatelink.openai.azure.com` for the deployed account endpoint | Actual App Service model client |
 | Azure ML workspace/scoring | Use the workspace private endpoint's supplied records under `privatelink.api.azureml.ms`, including inference resolution; add the notebook zone only when used | Container Apps job network and model administration path |
 | Container Registry | Link `privatelink.azurecr.io`, including the registry and service-generated image-data records | Job image pull and the connected build runner |
 | Fabric | Use the tenant private endpoint's DNS configuration and actual KQL, Power BI, and API connection targets | App runtime, connected operators/runners, and the selected Fabric experiences |
@@ -284,7 +294,7 @@ Maintain an endpoint matrix for:
 
 - Entra, Azure control plane, Fabric/Power BI APIs, KQL, and SQL analytics.
 - Blob package mounting, assets, forecast output, and Aurora transfer channels.
-- Azure OpenAI and Azure ML scoring.
+- Microsoft Foundry and Azure ML scoring.
 - NOAA GFS, approved weather/static-data sources, and imagery ingestion sources.
 - Container image pulls, source/package distribution, and diagnostic ingestion.
 - Browser-loaded basemap tiles and glyphs: the configured Azure Maps path, selected Esri
@@ -328,7 +338,7 @@ service tags, and regional endpoints also need the service-specific rules record
 | User browser | Published application host | HTTPS and WSS / TCP 443 | Approved user network -> Application Gateway WAF | Sign-in, API authorization, and WebSocket reconnect |
 | Application Gateway | App Service origin | HTTPS / TCP 443 | Gateway subnet -> app private endpoint | Private DNS result, valid host/SNI, healthy custom probe |
 | App Service | Fabric DAX, KQL, and Data Agent endpoints | HTTPS / TCP 443 | App integration -> tenant Fabric private connectivity for the verified endpoints | Real query/answer against intended workspace/item IDs |
-| App Service | Azure OpenAI account endpoint | HTTPS / TCP 443 | App integration -> account private endpoint | Authorized grounded model/tool response |
+| App Service | Microsoft Foundry account endpoint | HTTPS / TCP 443 | App integration -> account private endpoint | Authorized grounded model/tool response |
 | App Service | GeoCatalog account endpoint | HTTPS / TCP 443 | App integration -> approved platform egress | Authorized STAC/search, catalog operations, and imagery retrieval |
 | App Service | Blob package and runtime data | HTTPS / TCP 443 | App integration -> Blob private endpoint | Package loads after restart; authorized read/write operations succeed |
 | App Service | Azure Resource Manager job API | HTTPS / TCP 443 | App integration -> approved platform egress | Job-scoped start/status request; no app-to-scoring dependency |
@@ -409,9 +419,9 @@ compatibility before rollout into a policy-controlled environment.
    evidence before promoting to production.
 
 Keep enterprise network settings in the promoted resource definitions, not only in
-post-deployment portal changes. The baseline `openAi` resource explicitly sets public
-network access to `Enabled`; the enterprise deployment must change that setting with
-its private connectivity configuration. Review what-if output and enforce policy on
+post-deployment portal changes. The baseline `openAi` resource, the Microsoft Foundry
+account, explicitly sets public network access to `Enabled`; the enterprise deployment must
+change that setting with its private connectivity configuration. Review what-if output and enforce policy on
 every release so a baseline redeployment can't reopen an approved private dependency.
 Stage and validate private access before enforcing denial during the initial migration.
 

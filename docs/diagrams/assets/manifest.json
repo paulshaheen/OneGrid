@@ -19,6 +19,16 @@
     }
   },
   "icons": {
+    "ai-foundry.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/ai + machine learning/035746832-icon-service-AI-Foundry.svg",
+      "sha256": "fab039a771f72780ae34e59065d61c66a02d3c347d50923ef2956f34912ea02c"
+    },
+    "ai-search.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/ai + machine learning/10044-icon-service-Cognitive-Search.svg",
+      "sha256": "f7af1213ce089236593835cb5564d6d3f01358cba6488fe562aa8bbc8adc3b38"
+    },
     "app-service.svg": {
       "source": "azure",
       "archive_path": "Azure_Public_Service_Icons/Icons/app services/10035-icon-service-App-Services.svg",
@@ -33,6 +43,11 @@
       "source": "azure",
       "archive_path": "Azure_Public_Service_Icons/Icons/devops/00012-icon-service-Application-Insights.svg",
       "sha256": "36c73dea8b1598fbfff84890a2b409600f1339eec8c1bf1a896439e9da8f9dca"
+    },
+    "automation.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/management + governance/00022-icon-service-Automation-Accounts.svg",
+      "sha256": "4ad2825c024842fa6ea8875cf4098a8574b33b329301163282a7c6df43d6d7b4"
     },
     "azure-maps.svg": {
       "source": "azure",
@@ -49,6 +64,16 @@
       "archive_path": "Azure_Public_Service_Icons/Icons/storage/10086-icon-service-Storage-Accounts.svg",
       "sha256": "7190d3bb14ce30ce74bd0af873915830fe821e8c5f6ef6f3149e6f7cfb2aa4f7"
     },
+    "bot-service.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/ai + machine learning/10165-icon-service-Bot-Services.svg",
+      "sha256": "df1d3d5d84d2f1fa27ccbbd5198cec7e67834b3cd1d7a58d7e4343f128a55ea8"
+    },
+    "container-apps-env.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/other/02989-icon-service-Container-Apps-Environments.svg",
+      "sha256": "3cf4ba9242e31496f778a27e92c9c2b2a09664f105c58325d5e2dcb142d3c3b9"
+    },
     "container-apps-job.svg": {
       "source": "azure",
       "archive_path": "Azure_Public_Service_Icons/Icons/other/02884-icon-service-Worker-Container-App.svg",
@@ -59,15 +84,30 @@
       "archive_path": "Azure_Public_Service_Icons/Icons/containers/10105-icon-service-Container-Registries.svg",
       "sha256": "c134b0a442f203a7eeeb6f99a1f02ed34e51373d7fca59f96c9f125874c9d7d4"
     },
+    "cost-management.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/general/10019-icon-service-Cost-Management.svg",
+      "sha256": "2eea56741367379e70fd785e1dba255bcf634ca9ca0bfaca70466ca74b76da51"
+    },
     "data-agent.svg": {
       "source": "fabric",
       "archive_path": "v6.1.0/package/dist/svg/data_agent_48_item.svg",
       "sha256": "cc263e20fdb76f6bcde3a941f926e1cee6a07cee4407ed6374857b3354e60ab6"
     },
+    "defender-for-cloud.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/security/10241-icon-service-Microsoft-Defender-for-Cloud.svg",
+      "sha256": "23ab6fbba1cd0ac5ffdc6ee7084e7cac3029c402dc18b8896331626f135c9513"
+    },
     "dns-private-resolver.svg": {
       "source": "azure",
       "archive_path": "Azure_Public_Service_Icons/Icons/networking/02882-icon-service-DNS-Private-Resolver.svg",
       "sha256": "990d109df8bac6312c886afdf0b521145baa88df78701afca51d7c8f8eaba9ce"
+    },
+    "dns-zones.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10064-icon-service-DNS-Zones.svg",
+      "sha256": "e6aaa1380e974af7d0aba1bb8380ecfab3f95182a595a28692aa3f963bcf9fac"
     },
     "entra-id.svg": {
       "source": "entra",
@@ -84,6 +124,11 @@
       "archive_path": "v6.1.0/package/dist/svg/eventstream_48_item.svg",
       "sha256": "8c7bbef9bd2f2ecd1d00db305d7705a81855253f64b0c0615e8b74816c0febc0"
     },
+    "expressroute.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10079-icon-service-ExpressRoute-Circuits.svg",
+      "sha256": "0087cb8e3027b750c18249915b620e67348d12cb6d147f10c6a701976c948696"
+    },
     "fabric.svg": {
       "source": "fabric",
       "archive_path": "v6.1.0/package/dist/svg/fabric_48_color.svg",
@@ -93,6 +138,11 @@
       "source": "azure",
       "archive_path": "Azure_Public_Service_Icons/Icons/networking/10084-icon-service-Firewalls.svg",
       "sha256": "154c416cc15b95b7c6c1ab61a5ecb33f14845197b7d163bd9dc6f1968c14be1e"
+    },
+    "foundry-iq.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/ai + machine learning/038470497-icon-service-Azure-AI-Foundry-IQ.svg",
+      "sha256": "245e33416ecc1c745bfff6f72ebf1ffa04cfee1cdd0c1b1b8970d0844409c9c7"
     },
     "front-door.svg": {
       "source": "azure",
@@ -139,6 +189,21 @@
       "archive_path": "Azure_Public_Service_Icons/Icons/identity/10227-icon-service-Managed-Identities.svg",
       "sha256": "fa2e0fb863e81d7923b5708bed196e19310867a194d23bea96dddc42e302693c"
     },
+    "management-groups.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/general/10011-icon-service-Management-Groups.svg",
+      "sha256": "d8371735319fa4971c01e682810d0b67207c2c901f4fd19c2374a80c3e328829"
+    },
+    "monitor.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/monitor/00001-icon-service-Monitor.svg",
+      "sha256": "1396f59a7d8fd7505a423842b987c9b343a092263d1ab5c7b0d94d58d8b17448"
+    },
+    "network-watcher.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10066-icon-service-Network-Watcher.svg",
+      "sha256": "1e4b0ae5284577e33bbbc05b9e38e58acfa9b7947041e4768e8c82d4fff43413"
+    },
     "notebook.svg": {
       "source": "fabric",
       "archive_path": "v6.1.0/package/dist/svg/notebook_48_item.svg",
@@ -179,6 +244,16 @@
       "archive_path": "v6.1.0/package/dist/svg/semantic_model_48_item.svg",
       "sha256": "c0317bc92fea437d374b71788b037705f61983cd59573808ce933f3d03e14abb"
     },
+    "subscriptions.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/general/10002-icon-service-Subscriptions.svg",
+      "sha256": "d69843a70bd38eefa5b70a4d0b803502f95cdf061c59aed48b435170a15919b4"
+    },
+    "tenant.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/identity/02679-icon-service-Tenant-Properties.svg",
+      "sha256": "2ed1a99b5c3025bf4865c77fcc6b3edd1dfe9e1b068be2b8e0d8a0f8fb1133e2"
+    },
     "users.svg": {
       "source": "azure",
       "archive_path": "Azure_Public_Service_Icons/Icons/identity/10230-icon-service-Users.svg",
@@ -188,6 +263,11 @@
       "source": "azure",
       "archive_path": "Azure_Public_Service_Icons/Icons/networking/10061-icon-service-Virtual-Networks.svg",
       "sha256": "64a5e75ecef2f9f69067faa2eb131266cb8f2858706f8ab74bfea5ad0d98b14d"
+    },
+    "vnet-gateway.svg": {
+      "source": "azure",
+      "archive_path": "Azure_Public_Service_Icons/Icons/networking/10063-icon-service-Virtual-Network-Gateways.svg",
+      "sha256": "5ed14416dafff4e946fae5b68b9c86e8c9a9bbaa37ab94324a5d94c5cfbcb106"
     }
   }
 }

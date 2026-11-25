@@ -35,6 +35,7 @@ THEMES = {
         "data": "#2C7A57", "request": "#2A63A6", "control": "#B0600A",
         "identity": "#6550C9", "audit": "#687684",
         "blue": "#0F6CBD", "stage_fill": "#F3F4F6", "arrow": "#242424", "bar_fill": "#F7F8F9",
+        "sub_fill": "#EEF5FC", "unit": "#C4314B", "pill_sub": "#FFE7A3", "pill_rg": "#CDEFFC", "pill_res": "#E8EBEE",
     },
     "dark": {
         "bg": "#0F161C", "lane": "#17222B", "ink": "#E4EBF0", "muted": "#A6B4BF",
@@ -47,6 +48,7 @@ THEMES = {
         "data": "#5FCB92", "request": "#74AAEE", "control": "#F1A242",
         "identity": "#A99AFF", "audit": "#8E9CA8",
         "blue": "#62AEF2", "stage_fill": "#18222B", "arrow": "#CBD4DC", "bar_fill": "#141D25",
+        "sub_fill": "#122334", "unit": "#F2727E", "pill_sub": "#4A3C12", "pill_rg": "#12384A", "pill_res": "#26313A",
     },
 }
 
@@ -66,7 +68,7 @@ PLATFORMS = {
     "ext": "Customer, OT or third party",
     "neutral": "Shared rule or concept",
 }
-GLYPHS = ("database", "globe", "document", "gauge", "network", "shield", "clock")
+GLYPHS = ("database", "globe", "document", "gauge", "network", "shield", "clock", "window", "api", "chat")
 
 # Card typography and rhythm (SVG user units).
 TITLE, BODY, SERVICE, LABEL = 15, 13, 12, 12
@@ -112,9 +114,10 @@ class Group:
     h: float
     title: str
     note: str = ""
-    style: str = "band"          # band | boundary | app
+    style: str = "band"          # band | boundary | app | stage | zone | bar | subscription
     icon: str | None = None
     dashed: bool = False
+    accent: bool = False         # scale-unit boundary drawn in the accent colour
 
 
 @dataclass
@@ -131,9 +134,11 @@ class Card:
     platform: str = "azure"
     optional: bool = False
     parent: str | None = None
-    role: str = "card"           # card | view | note | node
+    role: str = "card"           # card | view | note | node | row
     icon_size: int = 44
     caption: str | None = None
+    font: float = 13
+    meta: dict = field(default_factory=dict)
 
     def icon_rect(self):
         """For icon-first nodes: the icon square, which flows attach to."""
@@ -182,9 +187,28 @@ class Sheet:
         """A filled lane: one data domain or responsibility read left to right."""
         return self._add_group(Group(id, x, y, w, h, title, note, "band"))
 
-    def boundary(self, id, x, y, w, h, title, note="", icon=None, dashed=False):
-        """An outlined service, network or trust boundary."""
-        return self._add_group(Group(id, x, y, w, h, title, note, "boundary", icon, dashed))
+    def boundary(self, id, x, y, w, h, title, note="", icon=None, dashed=False, accent=False):
+        """An outlined service, network or trust boundary. accent=True marks a scale unit."""
+        return self._add_group(Group(id, x, y, w, h, title, note, "boundary", icon, dashed or accent, accent))
+
+    def subscription(self, id, x, y, w, h, title, note=""):
+        """A filled subscription container with the subscription (key) icon, as in landing zone drawings."""
+        return self._add_group(Group(id, x, y, w, h, title, note, "subscription", "subscriptions"))
+
+    def strip(self, prefix, x, y, items, gap=84):
+        """A row of small icons with one-line names, e.g. the governance controls on a subscription."""
+        for i, (name, icon) in enumerate(items):
+            self.node(f"{prefix}-{i}", x + i * gap, y, name, None, icon, w=gap - 6, size=24, font=11)
+
+    def row(self, id, x, y, kind, name, purpose, icon=None, name_w=300, purpose_w=420):
+        """Resource-organization row: icon, resource name and a shaded purpose label.
+        kind is 'sub', 'rg' or 'res'."""
+        icon = icon or {"sub": "subscriptions", "rg": "resource-group"}.get(kind)
+        card = Card(id, x, y, 34 + name_w + purpose_w, 28, name, (purpose,), None, icon, "neutral",
+                    False, None, "row", 22 if kind == "res" else 26, None, 12.5,
+                    {"kind": kind, "name_w": name_w, "purpose_w": purpose_w})
+        self.cards.append(card)
+        return card
 
     def app(self, id, x, y, w, h, title, note="", icon=None):
         """A filled application container that holds view cards."""
@@ -202,12 +226,13 @@ class Sheet:
         """Cross-cutting bar such as OneLake or the Platform row."""
         return self._add_group(Group(id, x, y, w, h, title, align, "bar", icon))
 
-    def node(self, id, cx, y, name, caption=None, icon=None, w=130, size=44, optional=False):
-        """Icon-first node: official icon on top, short name (and one caption line) below."""
+    def node(self, id, cx, y, name, caption=None, icon=None, w=130, size=44, optional=False, font=13):
+        """Icon-first node: official icon on top, short name (and one caption line) below.
+        optional=True draws a dashed outline, the convention for optional components and add-ons."""
         lines = tuple(name) if isinstance(name, (list, tuple)) else (name,)
-        h = size + 21 + 16 * (len(lines) - 1) + (15 if caption else 0)
+        h = size + font + 8 + (font + 3) * (len(lines) - 1) + (15 if caption else 0)
         card = Card(id, cx - w / 2, y, w, h, lines[0], lines, None, icon, "neutral",
-                    optional, None, "node", size, caption)
+                    optional, None, "node", size, caption, font)
         self.cards.append(card)
         return card
 
@@ -336,7 +361,8 @@ class Sheet:
     def container_fill(self, x, y, theme):
         """Fill behind a point: the innermost band/app containing it, else the page."""
         fill, area = theme["bg"], None
-        fills = {"band": "lane", "app": "app_fill", "stage": "stage_fill", "bar": "bar_fill"}
+        fills = {"band": "lane", "app": "app_fill", "stage": "stage_fill", "bar": "bar_fill",
+                 "subscription": "sub_fill"}
         for g in self.groups:
             if g.style in fills and g.x <= x <= g.x + g.w and g.y <= y <= g.y + g.h:
                 if area is None or g.w * g.h < area:
@@ -354,10 +380,15 @@ class Sheet:
             avail = c.w - 2 * 16
             return [(c.title, 14, 600, False, avail), *[(l, BODY, 400, False, avail) for l in c.lines]]
         if c.role == "node":
-            rows = [(l, 13, 400, False, c.w) for l in c.lines]
+            rows = [(l, c.font, 400, False, c.w) for l in c.lines]
             if c.caption:
                 rows.append((c.caption, 11.5, 400, False, c.w))
             return rows
+        if c.role == "row":
+            mono = c.meta["kind"] == "res"
+            weight = 400 if mono else 600
+            return [(c.title, 12.5, weight, mono, c.meta["name_w"] - 8),
+                    (c.lines[0], 12, 400, False, c.meta["purpose_w"] - 16)]
         left = PAD + ICON + ICON_GAP if c.icon else 16
         avail = c.w - left - PAD
         rows = [(c.title, TITLE, 600, False, avail), *[(l, BODY, 400, False, avail) for l in c.lines]]
@@ -472,11 +503,88 @@ class Sheet:
             kinds.append("dashed-data")
         return kinds
 
+    # ----- learn-style legend (drawn under the sheet) -------------------------
+    def learn_legend(self):
+        """Legend entries actually used by this sheet, laid out in rows under the drawing."""
+        items = []
+        flows = self.flows
+        if any(f.kind in ("data", "request") and not f.dashed and not f.both for f in flows):
+            items.append(("arrow", "solid", "Data or call"))
+        if any(f.both for f in flows):
+            items.append(("arrow", "both", "Two-way exchange"))
+        if any(f.dashed or f.kind in ("control", "audit") for f in flows):
+            items.append(("arrow", "dashed", "Optional, gated, binding or diagnostic path"))
+        if any(f.kind == "identity" for f in flows):
+            items.append(("arrow", "dotted", "Identity or grant"))
+        if any(isinstance(n, int) for n, _, _ in self.steps):
+            items.append(("step", "step", "Workflow step; numbers match the article"))
+        if any(isinstance(n, str) for n, _, _ in self.steps):
+            items.append(("step", "area", "Design area; letters match the design guide"))
+        if any(c.optional for c in self.cards):
+            items.append(("box", "optional", "Optional component or add-on"))
+        styles = {g.style for g in self.groups}
+        if "stage" in styles:
+            items.append(("box", "stage", "Stage"))
+        if "zone" in styles:
+            items.append(("box", "zone", "Platform, tenant or region"))
+        if "subscription" in styles:
+            items.append(("box", "subscription", "Subscription"))
+        if any(g.style == "boundary" and not g.accent for g in self.groups):
+            items.append(("box", "boundary", "Network, resource group or trust boundary"))
+        if any(g.accent for g in self.groups):
+            items.append(("box", "unit", "Scale unit (deployment stamp)"))
+        placed, x, y = [], 40, self.height + 26
+        for kind, key, label in items:
+            w = (44 if kind == "arrow" else 32) + text_width(label, 12.5)
+            if x > 40 and x + w > self.width - 40:
+                x, y = 40, y + 26
+            placed.append((kind, key, label, x, y))
+            x += w + 30
+        return placed
+
+    def canvas_height(self):
+        if self.style != "learn":
+            return self.height
+        placed = self.learn_legend()
+        return (placed[-1][4] + 26) if placed else self.height
+
+    def _render_learn_legend(self, t):
+        out = []
+        placed = self.learn_legend()
+        if not placed:
+            return out
+        out.append(f'<path d="M40,{self.height + 4} H{self.width - 40}" stroke="{t["rule"]}" stroke-width="1"/>')
+        for kind, key, label, x, y in placed:
+            if kind == "arrow":
+                dash = {"dashed": ' stroke-dasharray="6 4"', "dotted": ' stroke-dasharray="2 4" stroke-linecap="round"'}.get(key, "")
+                start = ' marker-start="url(#arrow-ink)"' if key == "both" else ""
+                out.append(f'<path d="M{x:g},{y:g} H{x + 34:g}" stroke="{t["arrow"]}" stroke-width="1.5" fill="none"'
+                           f'{dash} marker-end="url(#arrow-ink)"{start}/>')
+                tx = x + 44
+            elif kind == "step":
+                out.append(f'<circle cx="{x + 11:g}" cy="{y:g}" r="9" fill="{t["blue"]}"/>')
+                out.append(_text(x + 11, y + 4, "A" if key == "area" else "1", 11, t["bg"], 700, "middle"))
+                tx = x + 32
+            else:
+                style = {
+                    "optional": f'fill="none" stroke="{t["neutral"]}" stroke-dasharray="4 3"',
+                    "stage": f'fill="{t["stage_fill"]}" stroke="{t["blue"]}" stroke-dasharray="4 3"',
+                    "zone": f'fill="none" stroke="{t["blue"]}" stroke-dasharray="1.5 3" stroke-linecap="round"',
+                    "subscription": f'fill="{t["sub_fill"]}" stroke="{t["blue"]}"',
+                    "boundary": f'fill="none" stroke="{t["boundary"]}"',
+                    "unit": f'fill="none" stroke="{t["unit"]}" stroke-dasharray="6 3"',
+                }[key]
+                out.append(f'<rect x="{x:g}" y="{y - 8:g}" width="22" height="16" rx="3" stroke-width="1.3" {style}/>')
+                tx = x + 32
+            out.append(_text(tx, y + 4, label, 12.5, t["muted"]))
+        return out
+
     def render(self, theme_name="light"):
         t = THEMES[theme_name]
+        height = self.canvas_height()
         out = [
             f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-            f'viewBox="0 0 {self.width} {self.height}" width="{self.width}" height="{self.height}" '
+            f'viewBox="0 0 {self.width} {height}" width="{self.width}" height="{height}" '
             f'role="img" aria-labelledby="{self.name}-title {self.name}-desc">',
             f'<title id="{self.name}-title">{escape(self.title)}</title>',
             f'<desc id="{self.name}-desc">{escape(self.subtitle)}</desc>',
@@ -501,14 +609,15 @@ class Sheet:
                 f'href="{icon_uri(name)}" xlink:href="{icon_uri(name)}"/></symbol>'
             )
         out.append("</defs>")
-        out.append(f'<rect width="{self.width}" height="{self.height}" fill="{t["bg"]}"/>')
+        out.append(f'<rect width="{self.width}" height="{height}" fill="{t["bg"]}"/>')
         out.append(f'<g font-family="{SANS}">')
         if self.style == "learn":
             out += [_text(40, 46, self.title, 24, t["ink"], 600), _text(40, 72, self.subtitle, 14, t["muted"])]
+            out += self._render_learn_legend(t)
         else:
             out += self._render_header(t)
             out += self._render_legend(t)
-        for style in ("band", "stage", "zone", "bar", "app", "boundary"):
+        for style in ("band", "subscription", "stage", "zone", "bar", "app", "boundary"):
             for g in self.groups:
                 if g.style == style:
                     out += self._render_group(g, t)
@@ -588,14 +697,21 @@ class Sheet:
             if g.title:
                 out.append(_text(g.x + g.w / 2, g.y - 12, g.title, 16, t["blue"], 400, "middle"))
             return out
-        if g.style == "zone":
-            out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="6" fill="none" '
-                       f'stroke="{t["blue"]}" stroke-width="1.5" stroke-dasharray="1.5 4" stroke-linecap="round"/>')
+        if g.style in ("zone", "subscription"):
+            if g.style == "zone":
+                out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="6" fill="none" '
+                           f'stroke="{t["blue"]}" stroke-width="1.5" stroke-dasharray="1.5 4" stroke-linecap="round"/>')
+            else:
+                out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="6" fill="{t["sub_fill"]}" '
+                           f'stroke="{t["blue"]}" stroke-width="1.2"/>')
             tx = g.x + 16
             if g.icon:
                 out.append(_use(g.icon, g.x + 14, g.y + 10, 26))
                 tx = g.x + 48
-            out.append(_text(tx, g.y + 29, g.title, 15, t["ink"], 600))
+            title = escape(g.title)
+            note = (f'<tspan font-size="13" font-weight="400" fill="{t["muted"]}" dx="10">{escape(g.note)}</tspan>'
+                    if g.note and g.style == "subscription" else "")
+            out.append(f'<text x="{tx:g}" y="{g.y + 29:g}" font-size="15" font-weight="600" fill="{t["ink"]}">{title}{note}</text>')
             return out
         if g.style == "bar":
             out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="4" fill="{t["bar_fill"]}" '
@@ -615,7 +731,13 @@ class Sheet:
             out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="14" fill="{t["app_fill"]}" stroke="{t["azure"]}" stroke-width="1.5"/>')
         else:
             dash = ' stroke-dasharray="8 6"' if g.dashed else ""
-            out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="12" fill="none" stroke="{t["boundary"]}" stroke-width="1.5"{dash}/>')
+            stroke = t["unit"] if g.accent else t["boundary"]
+            out.append(f'<rect x="{g.x}" y="{g.y}" width="{g.w}" height="{g.h}" rx="12" fill="none" stroke="{stroke}" stroke-width="1.5"{dash}/>')
+            if g.accent:  # scale unit: title in the accent colour, no icon
+                out.append(_text(g.x + 16, g.y + 26, g.title, 15, t["unit"], 600))
+                if g.note:
+                    out.append(_text(g.x + 16 + text_width(g.title, 15, 600) + 10, g.y + 26, g.note, 13, t["muted"]))
+                return out
         tx = g.x + 16
         if g.icon:
             out.append(_use(g.icon, g.x + 14, g.y + 10, ICON - 6))
@@ -664,17 +786,35 @@ class Sheet:
         out = []
         if c.role == "node":
             ix, iy, s, _ = c.icon_rect()
+            if c.optional:
+                out.append(f'<rect x="{c.x - 6:g}" y="{c.y - 8:g}" width="{c.w + 12:g}" height="{c.h + 14:g}" rx="8" '
+                           f'fill="none" stroke="{t["neutral"]}" stroke-width="1.2" stroke-dasharray="5 4"/>')
             if c.icon and c.icon.startswith("glyph:"):
                 out.append(_glyph(c.icon[6:], ix, iy, s, t["ink"]))
             elif c.icon:
                 out.append(_use(c.icon, ix, iy, s))
             cx = c.x + c.w / 2
-            base = iy + s + 17
+            base = iy + s + c.font + 4
             for i, line in enumerate(c.lines):
-                base = iy + s + 17 + i * 16
-                out.append(_text(cx, base, line, 13, t["ink"], 400, "middle"))
+                base = iy + s + c.font + 4 + i * (c.font + 3)
+                out.append(_text(cx, base, line, c.font, t["ink"], 400, "middle"))
             if c.caption:
                 out.append(_text(cx, base + 15, c.caption, 11.5, t["muted"], 400, "middle"))
+            return out
+        if c.role == "row":
+            kind, nw, pw = c.meta["kind"], c.meta["name_w"], c.meta["purpose_w"]
+            s = c.icon_size
+            if c.icon:
+                out.append(_use(c.icon, c.x + (26 - s) / 2, c.y + (c.h - s) / 2, s))
+            nx = c.x + 34
+            if kind == "res":
+                out.append(_text(nx, c.y + 18, c.title, 12.5, t["ink"], mono=True))
+            else:
+                out.append(_text(nx, c.y + 18, c.title, 13, t["ink"], 600))
+            px = nx + nw
+            pill = {"sub": "pill_sub", "rg": "pill_rg", "res": "pill_res"}[kind]
+            out.append(f'<rect x="{px:g}" y="{c.y + 3:g}" width="{pw - 4:g}" height="{c.h - 6:g}" rx="3" fill="{t[pill]}"/>')
+            out.append(_text(px + 8, c.y + 18, c.lines[0], 12, t["ink"]))
             return out
         if c.role == "view":
             out.append(f'<rect x="{c.x}" y="{c.y}" width="{c.w}" height="{c.h}" rx="8" fill="{t["neutral_fill"]}" stroke="{t["rule"]}" stroke-width="1.2"/>')
@@ -711,7 +851,7 @@ class Sheet:
 
 # ----- module helpers -------------------------------------------------------
 def _text(x, y, text, size, fill, weight=400, anchor="start", mono=False, spacing=None):
-    family = f' font-family="{MONO}"' if mono else ""
+    family = f' font-family="{MONO}" font-variant-ligatures="none"' if mono else ""
     weight_attr = f' font-weight="{weight}"' if weight != 400 else ""
     anchor_attr = f' text-anchor="{anchor}"' if anchor != "start" else ""
     spacing_attr = f' letter-spacing="{spacing}"' if spacing else ""
@@ -735,6 +875,9 @@ def _glyph(name, x, y, size, color):
         "network": "M15,5 V11 M7,19 V15 H23 V19 M15,11 V15 M11,5 H19 V11 H11 Z M3,19 H11 V25 H3 Z M19,19 H27 V25 H19 Z",
         "shield": "M15,4 L25,8 V15 C25,21 20,25 15,27 C10,25 5,21 5,15 V8 Z M10,15 L14,19 L20,12",
         "clock": "M15,4 A11,11 0 1 0 15.01,4 Z M15,9 V15 L20,18",
+        "window": "M4,6 H26 V24 H4 Z M4,11 H26 M7,8.5 H8 M10,8.5 H11 M8,15 H18 M8,19 H22",
+        "api": "M11,6 C7,6 9,15 5,15 C9,15 7,24 11,24 M19,6 C23,6 21,15 25,15 C21,15 23,24 19,24",
+        "chat": "M5,7 H25 V20 H14 L9,25 V20 H5 Z M10,12 H20 M10,16 H17",
     }[name]
     return (f'<g transform="translate({x:g},{y:g}) scale({s:g})" fill="none" stroke="{color}" '
             f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{p}"/></g>')
@@ -765,6 +908,164 @@ def verify_icons():
         if digest != meta["sha256"]:
             raise ValueError(f"Official icon changed: {name}")
     return manifest
+
+
+def _icon_style_uri(sheet_icon, theme):
+    """draw.io wants image=data:image/svg+xml,<base64> (no ';base64', since ';' separates styles)."""
+    if sheet_icon.startswith("glyph:"):
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" width="30" height="30">'
+               f'{_glyph(sheet_icon[6:], 0, 0, 30, theme["ink"])}</svg>')
+        data = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    else:
+        data = icon_uri(sheet_icon).split(",", 1)[1]
+    return "data:image/svg+xml," + data
+
+
+def drawio_document(sheets, theme_name="light"):
+    """One editable draw.io page per sheet: containers, official icons with labels, connected
+    edges with the same waypoints, numbered steps and text. Built from the same sheet data."""
+    import xml.etree.ElementTree as ET
+
+    t = THEMES[theme_name]
+    root = ET.Element("mxfile", {"host": "OneGrid diagram builder", "type": "device", "compressed": "false"})
+    for s in sheets:
+        diagram = ET.SubElement(root, "diagram", {"id": s.name, "name": s.title})
+        model = ET.SubElement(diagram, "mxGraphModel", {
+            "grid": "0", "gridSize": "10", "guides": "1", "tooltips": "1", "connect": "1", "arrows": "1",
+            "fold": "1", "page": "1", "pageScale": "1", "pageWidth": str(s.width),
+            "pageHeight": str(s.canvas_height()), "math": "0", "shadow": "0", "background": t["bg"]})
+        cells = ET.SubElement(model, "root")
+        ET.SubElement(cells, "mxCell", {"id": "0"})
+        ET.SubElement(cells, "mxCell", {"id": "1", "parent": "0"})
+        ids = set()
+
+        def cid(name):
+            value = f"{s.name}:{name}"
+            while value in ids:
+                value += "+"
+            ids.add(value)
+            return value
+
+        def vertex(name, value, style, x, y, w, h):
+            cell = ET.SubElement(cells, "mxCell", {"id": cid(name), "value": value, "style": style,
+                                                   "vertex": "1", "parent": "1"})
+            ET.SubElement(cell, "mxGeometry", {"x": f"{x:g}", "y": f"{y:g}", "width": f"{w:g}",
+                                               "height": f"{h:g}", "as": "geometry"})
+            return cell.get("id")
+
+        def text(name, value, x, y, w, h, size, color, bold=False, align="left"):
+            style = (f"text;html=1;strokeColor=none;fillColor=none;align={align};verticalAlign=middle;"
+                     f"whiteSpace=nowrap;fontSize={size:g};fontColor={color};fontStyle={1 if bold else 0};")
+            return vertex(name, value, style, x, y, w, h)
+
+        def image(name, icon, x, y, size, value="", extra=""):
+            style = (f"shape=image;html=1;imageAspect=1;aspect=fixed;verticalLabelPosition=bottom;"
+                     f"verticalAlign=top;labelPosition=center;align=center;{extra}"
+                     f"image={_icon_style_uri(icon, t)};")
+            return vertex(name, value, style, x, y, size, size)
+
+        text("title", escape(s.title), 40, 26, s.width - 80, 30, 24, t["ink"], True)
+        text("subtitle", escape(s.subtitle), 40, 58, s.width - 80, 22, 14, t["muted"])
+        cell_of = {}
+        for g in s.groups:
+            if g.style == "stage":
+                style = (f"rounded=1;arcSize=2;html=1;fillColor={t['stage_fill']};strokeColor={t['blue']};"
+                         f"dashed=1;dashPattern=7 4;verticalLabelPosition=top;verticalAlign=bottom;"
+                         f"labelPosition=center;align=center;fontSize=16;fontColor={t['blue']};")
+                cell_of[g.id] = vertex(g.id, escape(g.title), style, g.x, g.y, g.w, g.h)
+                continue
+            if g.style == "bar":
+                align = "left" if g.note == "left" else "center"
+                style = (f"rounded=1;arcSize=6;html=1;fillColor={t['bar_fill']};strokeColor={t['arrow']};"
+                         f"align={align};verticalAlign=middle;spacingLeft=16;fontSize=14;fontColor={t['ink']};"
+                         f"fontStyle={1 if align == 'left' else 0};")
+                cell_of[g.id] = vertex(g.id, escape(g.title), style, g.x, g.y, g.w, g.h)
+                continue
+            if g.style == "zone":
+                look = f"fillColor=none;strokeColor={t['blue']};dashed=1;dashPattern=1 4;"
+            elif g.style == "subscription":
+                look = f"fillColor={t['sub_fill']};strokeColor={t['blue']};"
+            elif g.style == "band":
+                look = f"fillColor={t['lane']};strokeColor=none;"
+            elif g.style == "app":
+                look = f"fillColor={t['app_fill']};strokeColor={t['azure']};"
+            else:
+                look = (f"fillColor=none;strokeColor={t['unit'] if g.accent else t['boundary']};"
+                        + ("dashed=1;dashPattern=8 6;" if g.dashed else ""))
+            pad = 48 if g.icon and not g.accent else 16
+            value = f"<b>{escape(g.title)}</b>"
+            if g.note and g.style not in ("bar",):
+                value += f"&nbsp;&nbsp;<span style=\"font-weight:normal;color:{t['muted']};font-size:13px\">{escape(g.note)}</span>"
+            style = (f"rounded=1;arcSize=2;html=1;{look}align=left;verticalAlign=top;spacingLeft={pad};"
+                     f"spacingTop=8;fontSize=15;fontColor={t['unit'] if g.accent else t['ink']};strokeWidth=1.5;")
+            cell_of[g.id] = vertex(g.id, value, style, g.x, g.y, g.w, g.h)
+            if g.icon and not g.accent:
+                image(g.id + "-icon", g.icon, g.x + 14, g.y + 10, 26)
+        for x, y, label, anchor in s.headers:
+            text(f"header-{label}", escape(label), x - 150, y - 16, 300, 22, 16, t["blue"], align="center")
+        for c in s.cards:
+            if c.role == "node":
+                ix, iy, size, _ = c.icon_rect()
+                if c.optional:
+                    vertex(c.id + "-optional", "", f"rounded=1;html=1;fillColor=none;strokeColor={t['neutral']};"
+                           f"dashed=1;dashPattern=5 4;", c.x - 6, c.y - 8, c.w + 12, c.h + 14)
+                value = "<br>".join(escape(l) for l in c.lines)
+                if c.caption:
+                    value += f"<br><span style=\"font-size:11px;color:{t['muted']}\">{escape(c.caption)}</span>"
+                if c.icon:
+                    cell_of[c.id] = image(c.id, c.icon, ix, iy, size, value,
+                                          f"fontSize={c.font:g};fontColor={t['ink']};spacingTop=-2;")
+                else:
+                    cell_of[c.id] = text(c.id, value, c.x, c.y, c.w, c.h, c.font, t["ink"], align="center")
+            elif c.role == "row":
+                if c.icon:
+                    image(c.id + "-icon", c.icon, c.x + (26 - c.icon_size) / 2, c.y + (c.h - c.icon_size) / 2, c.icon_size)
+                text(c.id + "-name", escape(c.title), c.x + 34, c.y, c.meta["name_w"], c.h, 12.5, t["ink"],
+                     c.meta["kind"] != "res")
+                pill = {"sub": "pill_sub", "rg": "pill_rg", "res": "pill_res"}[c.meta["kind"]]
+                vertex(c.id + "-purpose", escape(c.lines[0]),
+                       f"rounded=1;arcSize=10;html=1;fillColor={t[pill]};strokeColor=none;align=left;spacingLeft=8;"
+                       f"fontSize=12;fontColor={t['ink']};", c.x + 34 + c.meta["name_w"], c.y + 3, c.meta["purpose_w"] - 4, c.h - 6)
+            else:
+                body = "<br>".join(escape(l) for l in c.lines)
+                value = f"<b>{escape(c.title)}</b>" + (f"<br>{body}" if body else "")
+                cell_of[c.id] = vertex(c.id, value, f"rounded=1;html=1;whiteSpace=wrap;align=left;verticalAlign=top;"
+                                       f"spacing=12;fillColor={t['neutral_fill']};strokeColor={t['rule']};fontSize=13;",
+                                       c.x, c.y, c.w, c.h)
+        for f in s.flows:
+            dash = {"control": "dashed=1;dashPattern=6 4;", "audit": "dashed=1;dashPattern=6 4;",
+                    "identity": "dashed=1;dashPattern=2 4;"}.get(f.kind, "dashed=1;dashPattern=6 4;" if f.dashed else "")
+            start = "startArrow=block;startFill=1;" if f.both else "startArrow=none;"
+            style = (f"edgeStyle=none;html=1;rounded=0;endArrow=block;endFill=1;{start}{dash}"
+                     f"strokeColor={t['arrow']};strokeWidth=1.5;")
+            attrs = {"id": cid("flow-" + f.id), "style": style, "edge": "1", "parent": "1"}
+            if f.src in cell_of:
+                attrs["source"] = cell_of[f.src]
+            if f.dst in cell_of:
+                attrs["target"] = cell_of[f.dst]
+            edge = ET.SubElement(cells, "mxCell", attrs)
+            geometry = ET.SubElement(edge, "mxGeometry", {"relative": "1", "as": "geometry"})
+            (x1, y1), (x2, y2) = f.points[0], f.points[-1]
+            ET.SubElement(geometry, "mxPoint", {"x": f"{x1:g}", "y": f"{y1:g}", "as": "sourcePoint"})
+            ET.SubElement(geometry, "mxPoint", {"x": f"{x2:g}", "y": f"{y2:g}", "as": "targetPoint"})
+            if len(f.points) > 2:
+                points = ET.SubElement(geometry, "Array", {"as": "points"})
+                for x, y in f.points[1:-1]:
+                    ET.SubElement(points, "mxPoint", {"x": f"{x:g}", "y": f"{y:g}"})
+            if f.label is not None:
+                x, y = f.at
+                for i, line in enumerate(s.label_lines(f)):
+                    w = text_width(line, LABEL) + 8
+                    left = {"middle": x - w / 2, "start": x, "end": x - w}[f.anchor]
+                    text(f"label-{f.id}-{i}", escape(line), left, y + i * 15 - 12, w, 16, LABEL, t["muted"],
+                         align={"middle": "center", "start": "left", "end": "right"}[f.anchor])
+        for number, x, y in s.steps:
+            vertex(f"step-{number}", str(number), f"ellipse;html=1;fillColor={t['blue']};strokeColor=#FFFFFF;"
+                   f"strokeWidth=2;fontColor=#FFFFFF;fontStyle=1;fontSize=12;", x - 11, y - 11, 22, 22)
+        if s.footnote:
+            text("footnote", escape(s.footnote), 40, s.height - 34, s.width - 80, 18, 12.5, t["muted"])
+    ET.indent(root)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
 
 
 def _on_edge(point, rect):

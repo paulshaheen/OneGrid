@@ -7,16 +7,19 @@ ms.topic: conceptual
 
 # OneGrid data and analytics in Microsoft Fabric
 
+Part of the [OneGrid landing zone design guide](design-guide.md).
+
 [Solution overview](../../README.md) | [Baseline architecture](baseline.md)
 
-Fabric supplies OneGrid's real-time and historical data plane. Eventstream and Eventhouse
-serve current operations; OneLake, notebooks, and semantic models serve curated history,
+Fabric supplies OneGrid's real-time and historical data plane. Eventhouse serves current
+operations, with Eventstream as the live ingestion path when you add the data-plane add-on;
+OneLake, notebooks, and semantic models serve curated history,
 reliability analytics, and business measures. A conformed asset hierarchy connects these
 paths to weather exposure and the digital twin.
 
 ## Architecture
 
-<a href="../diagrams/onegrid-reference-fabric.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-fabric-dark.png"><img alt="Fabric architecture: source connectors, business systems, weather outputs, and operators feed a Fabric workspace in ingest, store, process, and serve stages over OneLake (Eventstream, Eventhouse, update policy, Lakehouse, notebooks, ontology, SQL analytics endpoint, Import semantic model, and data agent), which the OneGrid web app queries." src="../diagrams/onegrid-reference-fabric.png"></picture></a>
+<a href="../diagrams/onegrid-reference-fabric.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="../diagrams/onegrid-reference-fabric-dark.png"><img alt="Fabric architecture: source connectors, business systems, weather outputs, and operators feed a Fabric workspace in ingest, store, process, and serve stages over OneLake (the optional Eventstream live data add-on, Eventhouse, update policy, Lakehouse, notebooks, ontology, SQL analytics endpoint, Import semantic model, and data agent), which the OneGrid web app queries." src="../diagrams/onegrid-reference-fabric.png"></picture></a>
 
 [Download SVG](../diagrams/onegrid-reference-fabric.svg) |
 [Diagram source](../diagrams/sheets/fabric.py) |
@@ -31,7 +34,9 @@ checks.
 
 ### Workflow
 
-1. Source connectors publish canonical events to the resolved Eventstream custom endpoint.
+1. With the data-plane add-on, source connectors publish canonical events to the resolved
+   Eventstream custom endpoint. Without it, the deployment seeds Eventhouse from the bundled
+   historical data.
 2. The processed Eventhouse destination writes `PiEventsRaw`; its update policy creates
    the curated `PiEvents` serving table.
 3. Notebooks load and transform historical sources, calculate reliability results, and
@@ -55,7 +60,9 @@ keeps events until they're acknowledged. The connection-string option is for tes
 
 Publish/rebind the supplied
 [`pi-events-stream` artifact](../../planetary-computer-pro-poc/infra/fabric/eventstream/pi-events-stream/)
-to the target Eventhouse before enabling source producers. Confirm destination, table
+to the target Eventhouse before enabling source producers. The provisioner doesn't create
+this Eventstream, so a deployed workspace has none until you publish it; see the
+[known gap](design-guide.md#known-gap-live-ingestion-eventstream). Confirm destination, table
 mapping, source connection, the actual broker namespace, and source authentication in the
 deployed workspace.
 

@@ -57,7 +57,7 @@ def gallery(loaded):
             f'<p><a href="{name}.svg">Light SVG</a> | <a href="{name}.png">Light PNG</a> | '
             f'<a href="{name}-dark.svg">Dark SVG</a> | <a href="{name}-dark.png">Dark PNG</a></p>'
             f'<a href="{name}.svg"><picture><source media="(prefers-color-scheme: dark)" srcset="{name}-dark.svg">'
-            f'<img src="{name}.svg" width="{sheet.width}" height="{sheet.height}" alt="{escape(sheet.title)}. '
+            f'<img src="{name}.svg" width="{sheet.width}" height="{sheet.canvas_height()}" alt="{escape(sheet.title)}. '
             f'{escape(sheet.subtitle)}"></picture></a><p><a href="#top">Back to sheets</a></p></section>'
         )
     return (
@@ -77,7 +77,8 @@ def gallery(loaded):
         'zones, and numbered steps that match the Workflow lists in the articles. The baseline is the logical view; '
         'the other sheets cover Fabric, enterprise networking, DNS, weather execution, identity, monitoring, '
         'regulated controls and recovery. Example network addresses are design allocations, not live inventory.</p>'
-        '<p><a href="README.md">Diagram guide</a> | <a href="../architecture/traffic-and-security.md">Routing, identity and evidence guide</a></p>'
+        '<p><a href="README.md">Diagram guide</a> | <a href="onegrid-architecture.drawio">Editable draw.io file (all sheets)</a> | '
+        '<a href="../architecture/design-guide.md">Design guide</a></p>'
         '<nav aria-label="Architecture sheets"><ul>' + "".join(nav) + '</ul></nav>'
         + "".join(sections) + '</main></body></html>\n'
     ).encode("utf-8")
@@ -93,7 +94,7 @@ def find_browser(explicit=None):
 
 
 def render_png(browser, svg_path, png_path, sheet, theme):
-    height = round(sheet.height * PNG_WIDTH / sheet.width)
+    height = round(sheet.canvas_height() * PNG_WIDTH / sheet.width)
     background = engine.THEMES[theme]["bg"]
     png_path.unlink(missing_ok=True)  # never mistake an old export for a new one
     # Browser helper processes can hold the profile briefly after exit.
@@ -137,6 +138,7 @@ def main():
         generated[HERE / f"{sheet.name}-dark.svg"] = sheet.render("dark").encode("utf-8")
     if not args.only:
         generated[HERE / "onegrid-reference-gallery.html"] = gallery(loaded)
+        generated[HERE / "onegrid-architecture.drawio"] = engine.drawio_document([s for _, _, s in loaded])
 
     if args.check:
         stale = [p.name for p, content in generated.items() if not p.is_file() or p.read_bytes() != content]

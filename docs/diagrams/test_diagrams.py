@@ -11,7 +11,7 @@ sys.path.insert(0, str(HERE))
 
 import build_diagrams  # noqa: E402
 import diagram_engine as engine  # noqa: E402
-from sheets import ORDER  # noqa: E402
+from sheets import ORDER, UNNUMBERED  # noqa: E402
 
 
 class SheetTests(unittest.TestCase):
@@ -24,7 +24,7 @@ class SheetTests(unittest.TestCase):
     def test_every_sheet_builds_validates_and_is_named(self):
         self.assertEqual([key for key, _, _ in self.loaded], list(ORDER))
         for key, module, sheet in self.loaded:
-            self.assertEqual(sheet.name, f"onegrid-reference-{key}")
+            self.assertEqual(sheet.name, "onegrid-reference-" + key.replace("_", "-"))
             self.assertTrue(module.LABEL and module.SUMMARY, key)
             self.assertTrue(sheet.cards and sheet.flows, key)
 
@@ -55,6 +55,8 @@ class SheetTests(unittest.TestCase):
 
     def test_steps_are_numbered_from_one(self):
         for key, sheet in self.sheets.items():
+            if key in UNNUMBERED:
+                continue
             # A number may repeat when one step happens on parallel paths (e.g. two DNS clients).
             numbers = sorted({n for n, _, _ in sheet.steps})
             self.assertTrue(numbers, f"{key} has no numbered steps")
@@ -64,16 +66,39 @@ class SheetTests(unittest.TestCase):
         sheet = self.sheets["baseline"]
         flows = {f.id: f for f in sheet.flows}
         self.assertEqual(sheet.style, "learn")
-        # Both serving stages feed the web app; it calls Azure OpenAI but never the weather model.
+        # Both serving stages feed the web app; its agent calls Azure OpenAI, and the app only
+        # starts forecast runs (control) - it never calls the weather model.
         self.assertEqual({(flows[i].src, flows[i].dst) for i in ("e1", "e2")},
-                         {("f-serve", "app"), ("a-serve", "app")})
-        self.assertFalse(any(f.src == "app" and f.dst in {"aurora", "channel"} for f in sheet.flows))
-        self.assertEqual((flows["e5"].src, flows["e5"].dst), ("app", "openai"))
+                         {("f-serve", "webapp"), ("a-serve", "webapp")})
+        app_side = {"webapp", "webui", "api", "agent"}
+        self.assertFalse(any(f.src in app_side and f.dst in {"aurora", "channel"} for f in sheet.flows))
+        self.assertEqual((flows["e5"].src, flows["e5"].dst), ("agent", "openai"))
+        self.assertEqual((flows["e6"].dst, flows["e6"].kind), ("job", "control"))
+        # Add-ons are drawn as optional.
+        self.assertTrue(all(sheet.item(i).optional for i in ("teams", "search", "agent-fabric")))
         # Basemaps reach the browser directly; the ontology binding is control, not data.
         self.assertEqual((flows["e4"].src, flows["e4"].dst), ("basemap", "users"))
         self.assertEqual(flows["f8"].kind, "control")
         # Steps 1-8 match the README workflow.
         self.assertEqual(sorted(n for n, _, _ in sheet.steps), list(range(1, 9)))
+
+    def test_drawio_export_is_current_and_complete(self):
+        import xml.etree.ElementTree as ET
+        path = HERE / "onegrid-architecture.drawio"
+        sheets = [sheet for _, _, sheet in self.loaded]
+        self.assertEqual(path.read_bytes(), engine.drawio_document(sheets), "draw.io file is stale")
+        root = ET.fromstring(path.read_bytes())
+        pages = root.findall("diagram")
+        self.assertEqual([p.get("id") for p in pages], [s.name for s in sheets])
+        for page, sheet in zip(pages, sheets):
+            ids = [c.get("id") for c in page.iter("mxCell")]
+            self.assertEqual(len(ids), len(set(ids)), sheet.name)
+            edges = [c for c in page.iter("mxCell") if c.get("edge") == "1"]
+            self.assertEqual(len(edges), len(sheet.flows), sheet.name)
+
+    def test_landing_zone_letters_match_design_areas(self):
+        letters = sorted({str(n) for n, _, _ in self.sheets["landing_zone"].steps})
+        self.assertEqual(letters, list("ABCDEFGH"))
 
     def test_validator_rejects_bad_layouts(self):
         sheet = engine.Sheet("t", "e", "t", "s", width=700, height=500)

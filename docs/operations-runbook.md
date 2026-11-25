@@ -7,6 +7,8 @@ ms.topic: how-to
 
 # OneGrid operational runbook
 
+Part of the [OneGrid landing zone design guide](architecture/design-guide.md).
+
 [Operations guide](operations.md) | [Deployment procedure](deployment-and-data-guide.md)
 
 Use these procedures with the environment inventory and approved operational access.

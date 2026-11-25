@@ -47,7 +47,7 @@ def build():
     s.node("ops", SRC, D, "Operators", "SQL client", "users", w=180)
 
     # Ingest
-    s.node("es", ING, A, "Eventstream", "custom endpoint", "eventstream", w=150)
+    s.node("es", ING, A, "Eventstream", "live data add-on", "eventstream", w=150, optional=True)
     s.node("sc", ING, C, "OneLake shortcut", "optional", "one-lake", w=150)
 
     # Store

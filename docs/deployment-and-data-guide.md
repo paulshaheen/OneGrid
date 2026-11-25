@@ -7,6 +7,8 @@ ms.topic: how-to
 
 # Deploy and configure OneGrid
 
+Part of the [OneGrid landing zone design guide](architecture/design-guide.md).
+
 [Solution overview](../README.md) | [Implementation reference](implementations.md)
 
 Deploy OneGrid into the selected subscription and Fabric tenant, then configure its sources,
@@ -41,7 +43,7 @@ explicitly for command-line deployments.
 | `deploySampleStorage` | `true` | Asset, package, output, and transfer containers |
 | `deployFabricPlane` | `false` | Set `true` for the Fabric workspace/data plane |
 | `deployOneGridApp` | `false` | Set `true` for the unified application |
-| `deployAiAgent` | `true` | Declare/reuse the Azure OpenAI deployment |
+| `deployAiAgent` | `true` | Declare the Microsoft Foundry account and model deployment that the app reuses |
 | `deployGeoCatalog` | `true` | Include STAC, imagery, and catalog-backed asset workflows |
 | `createFabricCapacity` | `false` | Set `true` to create capacity, otherwise supply `fabricCapacityId` |
 | `fabricCapacitySku` | `F2` | Size a new capacity for expected load |
@@ -99,7 +101,9 @@ the corresponding public paths. Record results with the
 
 Use the portal button in the [solution overview](../README.md#deploy-this-solution), or
 prepare a complete ARM parameter file outside the repository. Include selected components,
-capacity, sign-in, refresh identity, and any weather choices.
+capacity, sign-in, refresh identity, and any weather choices. The design guide compares all
+[deployment options](architecture/design-guide.md#deployment-options), including the GitHub
+Copilot runbook and the deploy wizard.
 
 The following PowerShell sequence validates and deploys a prepared parameter file:
 
@@ -188,11 +192,14 @@ It is a separate path from customer imagery and from weather outputs.
 
 ### Telemetry and business history
 
-Publish or rebind the supplied
+The deployment creates the Eventhouse and KQL database and, when historical seeding is
+selected, loads `PiEvents` from the bundled data; it doesn't create an Eventstream. For live
+telemetry, publish or rebind the supplied
 [`pi-events-stream` definition](../planetary-computer-pro-poc/infra/fabric/eventstream/pi-events-stream/)
-in the target workspace. Connect its destination to the intended Eventhouse database and
-`PiEventsRaw` mapping, then confirm the `PIForwarderEndpoint` source connection before
-starting producers.
+in the target workspace yourself; see the
+[known gap](architecture/design-guide.md#known-gap-live-ingestion-eventstream). Connect its
+destination to the intended Eventhouse database and `PiEventsRaw` mapping, then confirm the
+`PIForwarderEndpoint` source connection before starting producers.
 
 Use the [operational connectors](../planetary-computer-pro-poc/infra/bolt-ons/data-plane/)
 for PI/relational source ingestion. Validate canonical event fields, source quality,

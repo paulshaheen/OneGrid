@@ -73,7 +73,7 @@ def build():
     s.node("job", CLIENT_CX, OUT_Y + 48, "Forecast job", "Container Apps", "container-apps-job", w=130)
     s.boundary("snet-pe", WSUB_X, PE_Y, WSUB_W, PE_H, "Private endpoints", "10.20.1.0/24")
     step = WSUB_W / 6
-    for i, (key, name) in enumerate((("pe-app", "App Service"), ("pe-blob", "Blob"), ("pe-openai", "OpenAI"),
+    for i, (key, name) in enumerate((("pe-app", "App Service"), ("pe-blob", "Blob"), ("pe-openai", "Foundry"),
                                      ("pe-fabric", "Fabric"), ("pe-ml", "Azure ML"), ("pe-acr", "ACR"))):
         s.node(key, WSUB_X + step * (i + 0.5), PE_Y + 48, name, None, "private-endpoint", w=76)
 

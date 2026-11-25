@@ -56,10 +56,10 @@ def build():
 
         s.node("app-" + k, m(CB), APP_Y, "OneGrid web app", "App Service", "app-service", w=130)
         s.node("vnetint-" + k, m(CB), R2, "VNet integration", "app outbound", "virtual-network", w=130)
-        s.node("pe-" + k, m(CC), R2, "Private endpoints", "Blob · OpenAI · Fabric", "private-endpoint", w=150)
+        s.node("pe-" + k, m(CC), R2, "Private endpoints", "Blob · Foundry · Fabric", "private-endpoint", w=150)
         s.node("job-" + k, m(CA), R2, "Forecast job", job_caption, "container-apps-job", w=150)
         s.node("aurora-" + k, m(CA), R3, "Aurora", "Azure Machine Learning", "machine-learning", w=150)
-        s.node("openai-" + k, m(CB), R3, "Azure OpenAI", "regional model quota", "azure-openai", w=140)
+        s.node("openai-" + k, m(CB), R3, "Microsoft Foundry", "regional model quota", "ai-foundry", w=140)
         s.node("blob-" + k, m(CC), R3, "Blob storage", "assets and outputs", "blob-storage", w=130)
         s.node("geo-" + k, m(CA), R4, "GeoCatalog", "STAC and tiles", "geocatalog", w=140)
         s.node("ops-" + k, m(CB), R4, "Operations", "logs and alerts", "log-analytics", w=140)

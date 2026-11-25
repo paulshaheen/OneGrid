@@ -7,6 +7,8 @@ ms.topic: conceptual
 
 # OneGrid Day 2 operations
 
+Part of the [OneGrid landing zone design guide](architecture/design-guide.md).
+
 [Solution overview](../README.md) | [Operational procedures](operations-runbook.md)
 
 Day 2 operations maintain the user journeys established by deployment: asset investigation,
@@ -42,7 +44,7 @@ Assign an incident owner even when investigation crosses service boundaries.
 | Journey | Signals | Required response |
 | --- | --- | --- |
 | App and user access | Requests/errors/latency, restarts, sign-in, API denials, WebSocket connectivity | Restore the intended host/version and authorized user path |
-| Streaming operations | Connector queue/heartbeat, Eventstream delivery, `PiEventsRaw`/`PiEvents` lag, KQL | Repair source/transport/ingestion and replay buffered data |
+| Streaming operations (data-plane add-on) | Connector queue/heartbeat, Eventstream delivery, `PiEventsRaw`/`PiEvents` lag, KQL | Repair source/transport/ingestion and replay buffered data |
 | Business and reliability | Notebook/pipeline result, source quality, model binding/refresh, DAX | Restore processing and prove expected counts/timestamps |
 | Geospatial | Source permissions, ingestion status, STAC search, tile rendering | Restore authorized source/catalog/render path |
 | AI answers | Model errors/throttling, tool success, grounded-answer evaluations, token cost | Restore correct model/tools and prevent unauthorized grounding |

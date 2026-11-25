@@ -7,6 +7,8 @@ ms.topic: reference
 
 # OneGrid implementation reference
 
+Part of the [OneGrid landing zone design guide](architecture/design-guide.md).
+
 [Solution overview](../README.md) | [Deployment procedure](deployment-and-data-guide.md)
 
 The implementation has three coordinated layers: Azure resources declared in ARM/Bicep,
@@ -17,14 +19,16 @@ This reference maps the logical diagram to those artifacts.
 
 | Artifact | Responsibility |
 | --- | --- |
+| [OneGrid landing zone design guide](architecture/design-guide.md) | Landing zone placement, design areas, reference implementation, deployment options, and naming |
 | [Logical architecture](diagrams/onegrid-reference-baseline.png) | End-to-end data, geospatial, weather, AI, application, and control planes |
+| [Editable diagrams (draw.io)](diagrams/onegrid-architecture.drawio) | Every architecture sheet as an editable page for customer adaptations |
 | [Bicep source](../planetary-computer-pro-poc/deploy/azure/main.bicep) | Azure resource definitions, conditions, role assignments, outputs |
 | [Compiled ARM](../planetary-computer-pro-poc/deploy/azure/azuredeploy.json) | Deployment payload |
 | [Portal form](../planetary-computer-pro-poc/deploy/azure/createUiDefinition.json) | Component, model, app, capacity, and module choices |
 | [In-template wrapper](../planetary-computer-pro-poc/deploy/azure/scripts/onegrid-solution-provision.ps1) | Compose provisioner config from deployed resources and run selected phases |
 | [Provisioner](../planetary-computer-pro-poc/infra/deploy.ps1) | Fabric items, data/model binding, identity/configuration, app wiring |
 | [Configuration shape](../planetary-computer-pro-poc/infra/config.sample.json) | Environment and governance settings |
-| [Fabric artifacts](../planetary-computer-pro-poc/infra/fabric/) | Eventstream, schemas, notebooks, pipeline, models, dashboards, ontology |
+| [Fabric artifacts](../planetary-computer-pro-poc/infra/fabric/) | Eventstream definition (published separately), schemas, notebooks, pipeline, models, dashboards, ontology |
 | [Application source](../OGE-OneGrid/) | BFF, SSR web app, Node AI agent |
 | [Weather pipeline](../planetary-computer-pro-poc/aurora/) | Inputs, inference client, tracking, normalization, publication |
 | [Operational connectors](../planetary-computer-pro-poc/infra/bolt-ons/data-plane/) | Durable source ingestion into Eventstream |
@@ -50,7 +54,7 @@ Conditions select resources according to the chosen components and dependencies.
 | Application host | `chatAgentPlan`, `chatAgentSite` | Linux App Service plan/site and system-assigned identity |
 | App data-plane grants | `chatAgentStorageContributor`, `chatAgentGeoCatalogAdmin`, `chatAgentAuroraJobOperator` | Storage/catalog operations and job-scoped forecast start/stop |
 | Provisioning | `appProvisionScript`, `fabricPlaneScript` | Independent app and Fabric configuration paths |
-| AI inference | `openAi`, `openAiDeployment`, `openAiDeployerRole` | Azure OpenAI account/model and interactive deployer access |
+| AI inference | `openAi`, `openAiDeployment`, `openAiDeployerRole` | Microsoft Foundry account/model and interactive deployer access |
 | Aurora support | `amlStorage`, `amlKeyVault`, `amlApplicationInsights` | Workspace backing storage, secrets infrastructure, telemetry |
 | Aurora compute | `amlWorkspace`, `auroraEndpoint`, `auroraDeployment` | Managed workspace, Entra-token endpoint, optional GPU model deployment |
 | Job telemetry/runtime | `logAnalytics`, `containerAppsEnv`, `auroraJobIdentity` | Log destination, job environment, user-assigned identity |
@@ -71,11 +75,11 @@ Conditions select resources according to the chosen components and dependencies.
 | `oge` | Additional semantic model and `OneGridOntology` Digital Twin Builder item |
 | `unified` | HURDAT reference, `og.*` generator, SQL metadata sync, `OneGridModelImport` binding/refresh |
 | `governance` | Configured OneLake data roles and access-review manifest |
-| `foundry` | Reuse the template's OpenAI deployment or provision the configured model account |
+| `foundry` | Reuse the template's Microsoft Foundry deployment or provision the configured model account |
 | `dataagent` | Configure/publish the Fabric Data Agent |
 | `chatagent` | Package mounting, runtime settings, sign-in, dependency configuration |
 | `permissions` | App Eventhouse and Power BI permissions |
-| `dataplane` | Connector integration/configuration, selected separately |
+| `dataplane` | Connector integration/configuration, selected separately; resolves the endpoint of an existing `pi-events-stream` Eventstream, which no phase creates |
 
 The phase runner preserves its declared order even when a subset is selected. The ARM wrapper
 adds `unified` when requested. It initializes governance disabled; approved governance

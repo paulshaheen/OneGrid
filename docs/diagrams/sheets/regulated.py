@@ -52,7 +52,7 @@ def build():
     s.node("conn", OT, B, "Source connector", "durable outbox", "glyph:network", w=180)
 
     # Classified Fabric workspace
-    s.node("es", F1, A, "Eventstream", "custom endpoint", "eventstream", w=150)
+    s.node("es", F1, A, "Eventstream", "live data add-on", "eventstream", w=150, optional=True)
     s.node("eh", F2, A, "Eventhouse", "KQL database", "event-house", w=150)
     s.node("nb", F1, B, "Notebooks", "approved transforms", "notebook", w=150)
     s.node("lake", F2, B, "Lakehouse", "classified tables", "lakehouse", w=150)
@@ -64,7 +64,7 @@ def build():
     s.node("app", A1, B, "OneGrid web app", "App Service", "app-service", w=150)
 
     # Model and geospatial boundary
-    s.node("openai", M1, A, "Azure OpenAI", "approved models", "azure-openai", w=150)
+    s.node("openai", M1, A, "Microsoft Foundry", "approved models", "ai-foundry", w=150)
     s.node("geo", M1, B, "GeoCatalog", "Planetary Computer Pro", "geocatalog", w=160)
     s.node("aurora", M2, B, "Aurora", "Azure Machine Learning", "machine-learning", w=150)
     s.node("weather", M1, C, "Weather output", "Blob Storage", "blob-storage", w=150)

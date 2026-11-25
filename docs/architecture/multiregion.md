@@ -1,11 +1,13 @@
 ---
 title: Multiregion architecture for OneGrid
-description: Design coordinated regional recovery for OneGrid App Service, Fabric data products, geospatial assets, Azure OpenAI, and Aurora weather inference.
+description: Design coordinated regional recovery for OneGrid App Service, Fabric data products, geospatial assets, Microsoft Foundry, and Aurora weather inference.
 ms.date: 11/24/2026
 ms.topic: conceptual
 ---
 
 # OneGrid multiregion architecture
+
+Part of the [OneGrid landing zone design guide](design-guide.md).
 
 [Solution overview](../../README.md) | [Enterprise implementation](enterprise-landing-zone.md)
 
@@ -20,7 +22,7 @@ journey rather than assigning one untested objective to the whole workload.
 
 [Download SVG](../diagrams/onegrid-reference-multiregion.svg) |
 [Diagram source](../diagrams/sheets/multiregion.py) |
-[All nine technical sheets](../diagrams/onegrid-reference-gallery.html) |
+[All 12 sheets](../diagrams/onegrid-reference-gallery.html) |
 [Traffic and security contracts](traffic-and-security.md)
 
 Azure Front Door Premium sits above two mirrored regions that use the same components. The
@@ -67,7 +69,7 @@ alongside the regional deployments in the workload delivery pipeline.
 | Eventhouse | Retention/recovery design, source replay/checkpoints | Latest events, outage data, duplicates/late data behavior |
 | Storage | Chosen redundancy/copy and retained versions for assets, outputs, packages | Required blobs, authorization, endpoint/configuration changes |
 | GeoCatalog | Source imagery, STAC metadata, ingestion identity/configuration | Search, item completeness, ingestion, rendered tiles |
-| Azure OpenAI | Approved secondary model/version, quota, data-processing geography | Model call, grounded answer, tool authorization |
+| Microsoft Foundry | Approved secondary model/version, quota, data-processing geography | Model call, grounded answer, tool authorization |
 | Aurora | Model asset, image/environment, accepted terms, regional GPU quota | Actual inference and output normalization |
 | Forecast job | Pipeline image, input access, job identity, publication ownership | Single active publisher, current cycle, valid normalized output |
 | Identity/network/monitoring | Entra access, DNS, ingress/egress, certificates, operational visibility | Administration and alerts remain available during region loss |
@@ -109,9 +111,9 @@ Exercise the service recovery or catalog reconstruction path with representative
 
 ## Forecast and model continuity
 
-Reserve recovery-region Azure OpenAI quota and validate model/version compatibility.
+Reserve recovery-region Microsoft Foundry quota and validate model/version compatibility.
 Test endpoint/deployment switching with the application's actual identity and data tools.
-Azure OpenAI, Aurora, and GeoCatalog use region-specific endpoints and quota; don't assume
+Microsoft Foundry, Aurora, and GeoCatalog use region-specific endpoints and quota; don't assume
 any global model or catalog replication. Review keys, identities, and data-processing
 geography for each recovery deployment.
 
@@ -159,7 +161,7 @@ the failed region for package loading or critical configuration.
 
 Give each region its own hub and workload network. App Service compute stays outside the
 workload subnet: regional VNet integration routes all app outbound traffic (`allTraffic`)
-through the app integration subnet to private endpoints for Blob storage, Azure OpenAI, and
+through the app integration subnet to private endpoints for Blob storage, Microsoft Foundry, and
 the tenant Fabric endpoint, under the regional hub's DNS and firewall policy. The forecast
 job runs in a dedicated subnet with its own identity, DNS, registry, and Blob channel access,
 and reaches Aurora through the Machine Learning workspace private endpoint and managed model

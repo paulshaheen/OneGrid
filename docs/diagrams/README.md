@@ -3,7 +3,7 @@
 These diagrams describe the OneGrid solution and its enterprise, regulated, and recovery
 implementations. They use official Azure, Microsoft Entra, and Microsoft Fabric icons.
 
-Open the [sheet gallery](onegrid-reference-gallery.html) to browse all nine sheets in light
+Open the [sheet gallery](onegrid-reference-gallery.html) to browse all twelve sheets in light
 and dark. GitHub doesn't render HTML pages, so download the gallery with its adjacent images
 for local browsing; the SVG and PNG links below work on their own.
 
@@ -21,9 +21,16 @@ use the same grammar for one concern each. Network sheets draw VNets and subnets
 with their example address ranges, which are design allocations, not live Azure inventory.
 Enterprise additions are labeled separately from what the baseline template creates.
 
+The first four sheets form the reference set, in the same order as the
+[design guide](../architecture/design-guide.md): where OneGrid sits in an Azure landing zone,
+what it does, what the template deploys, and how resources are organized and named.
+
 | Sheet | Light | Dark | Source |
 | --- | --- | --- | --- |
-| Baseline (logical view) | [SVG](onegrid-reference-baseline.svg) / [PNG](onegrid-reference-baseline.png) | [SVG](onegrid-reference-baseline-dark.svg) / [PNG](onegrid-reference-baseline-dark.png) | [baseline.py](sheets/baseline.py) |
+| Landing zone (design areas A–H) | [SVG](onegrid-reference-landing-zone.svg) / [PNG](onegrid-reference-landing-zone.png) | [SVG](onegrid-reference-landing-zone-dark.svg) / [PNG](onegrid-reference-landing-zone-dark.png) | [landing_zone.py](sheets/landing_zone.py) |
+| Logical view | [SVG](onegrid-reference-baseline.svg) / [PNG](onegrid-reference-baseline.png) | [SVG](onegrid-reference-baseline-dark.svg) / [PNG](onegrid-reference-baseline-dark.png) | [baseline.py](sheets/baseline.py) |
+| Deployment | [SVG](onegrid-reference-deployment.svg) / [PNG](onegrid-reference-deployment.png) | [SVG](onegrid-reference-deployment-dark.svg) / [PNG](onegrid-reference-deployment-dark.png) | [deployment.py](sheets/deployment.py) |
+| Resource organization and naming | [SVG](onegrid-reference-naming.svg) / [PNG](onegrid-reference-naming.png) | [SVG](onegrid-reference-naming-dark.svg) / [PNG](onegrid-reference-naming-dark.png) | [naming.py](sheets/naming.py) |
 | Fabric | [SVG](onegrid-reference-fabric.svg) / [PNG](onegrid-reference-fabric.png) | [SVG](onegrid-reference-fabric-dark.svg) / [PNG](onegrid-reference-fabric-dark.png) | [fabric.py](sheets/fabric.py) |
 | Enterprise networking | [SVG](onegrid-reference-enterprise.svg) / [PNG](onegrid-reference-enterprise.png) | [SVG](onegrid-reference-enterprise-dark.svg) / [PNG](onegrid-reference-enterprise-dark.png) | [enterprise.py](sheets/enterprise.py) |
 | DNS and private endpoints | [SVG](onegrid-reference-dns.svg) / [PNG](onegrid-reference-dns.png) | [SVG](onegrid-reference-dns-dark.svg) / [PNG](onegrid-reference-dns-dark.png) | [dns.py](sheets/dns.py) |
@@ -35,6 +42,19 @@ Enterprise additions are labeled separately from what the baseline template crea
 
 To show the right theme automatically in Markdown, wrap the PNGs in a `<picture>` element
 with a `(prefers-color-scheme: dark)` source, as the [README](../../README.md) does.
+
+### Edit in draw.io
+
+[onegrid-architecture.drawio](onegrid-architecture.drawio) holds every sheet as an editable
+page, generated from the same sheet data: containers, official icons with their labels,
+connected arrows with the same routes, numbered steps, and text. Open it in
+[diagrams.net](https://app.diagrams.net/) or draw.io Desktop to adapt a drawing for a customer
+deck or a proposal. The repository's published images stay generated from `sheets/`, so make
+lasting changes there and rebuild; the build regenerates the draw.io file too.
+
+The resource organization and naming sheet is read from
+[main.bicep](../../planetary-computer-pro-poc/deploy/azure/main.bicep) at build time, so it
+always lists what the template actually declares.
 
 ## Generate and validate
 
@@ -58,7 +78,9 @@ python -m unittest discover -s .\docs\diagrams -p "test_*.py"
   diagonal segments, flow endpoints off their node, flows crossing unrelated nodes,
   overlapping labels or step markers, and flows drawn on top of each other. A failed check
   stops the build.
-- `--check` fails if any committed SVG or the gallery is out of date.
+- `--check` fails if any committed SVG, the gallery, or the draw.io file is out of date.
+- Each learn-style sheet gets a legend strip underneath, listing only the line and box
+  types that sheet uses.
 - `--png` renders 2,400-pixel-wide PNGs with a local Microsoft Edge or Google Chrome in
   headless mode (`--browser` selects the executable). Use Segoe UI on the publishing machine;
   PNG text rasterization depends on installed fonts, while SVG output is deterministic.
@@ -75,6 +97,10 @@ local; no diagram content is submitted to a hosted renderer.
 | Dashed arrow | Optional, gated, binding, trigger, or evidence path, as the article describes |
 | Dotted arrow | Identity, token context, or grant; not an inline network proxy |
 | Numbered circle | Step in the article's Workflow or dataflow list |
+| Lettered circle | Landing zone design area (A–H) in the design guide |
+| Dashed outline around a node | Optional component or add-on |
+| Light-blue box with a key icon | Subscription |
+| Dashed red box | Scale unit: the deployment stamp you repeat per environment or region |
 | Dashed grey box with a blue title | Stage, such as Ingest, Store, Process, or Serve |
 | Dotted box with an icon | Platform, tenant, or region, such as Microsoft Fabric or Azure |
 | Outlined box | Network or trust boundary, such as a VNet or subnet, with its example range |
@@ -114,7 +140,7 @@ requirements when changing a service feature, network policy, region, or release
 | Fabric SaaS | Use tenant-level private connectivity for the combined Import-model workspace; configure source access independently | [Fabric Private Link](https://learn.microsoft.com/fabric/security/security-private-links-overview), [Workspace-level item compatibility](https://learn.microsoft.com/fabric/security/security-workspace-level-private-links-support) |
 | Eventstream | Preserve `ProcessedIngestion`; bind the Eventhouse destination/mapping before producers; default connector transport is AMQP over WebSockets | [Eventhouse destination](https://learn.microsoft.com/fabric/real-time-intelligence/event-streams/add-destination-kql-database), [Event Hubs protocol/ports](https://learn.microsoft.com/azure/event-hubs/event-hubs-faq#what-ports-do-i-need-to-open-on-the-firewall) |
 | SQL analytics | SQL clients use encrypted TDS on TCP 1433, not HTTPS; Fabric refresh has its own connection | [Fabric SQL connectivity](https://learn.microsoft.com/fabric/data-warehouse/connectivity) |
-| Azure OpenAI | Resolve the account hostname through its private endpoint and authorize the actual app client | [Azure OpenAI networking](https://learn.microsoft.com/azure/foundry-classic/openai/how-to/network?view=foundry-classic) |
+| Microsoft Foundry | Resolve the account hostname through its private endpoint and authorize the actual app client | [Microsoft Foundry model networking](https://learn.microsoft.com/azure/foundry-classic/openai/how-to/network?view=foundry-classic) |
 | Aurora inference | Workspace private endpoint handles managed-endpoint inbound; managed network handles deployment outbound | [Secure managed online endpoints](https://learn.microsoft.com/azure/machine-learning/how-to-secure-online-endpoint?view=azureml-api-2) |
 | GeoCatalog | Associate ingestion identity, grant Blob read access, and configure the container ingestion source | [Managed identity ingestion](https://learn.microsoft.com/azure/planetary-computer/set-up-ingestion-credentials-managed-identity) |
 | Forecast job | Job inference uses its own environment network; select VNet-integrated workload profiles at creation for UDR egress and retain platform dependencies | [Container Apps jobs](https://learn.microsoft.com/azure/container-apps/jobs), [Environment networking](https://learn.microsoft.com/azure/container-apps/networking), [Firewall dependencies](https://learn.microsoft.com/azure/container-apps/firewall-integration) |
